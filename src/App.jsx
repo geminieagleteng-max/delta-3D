@@ -638,6 +638,130 @@ const COVERS = [
   new THREE.Vector3(-12.8, 0, -46.8),
 ];
 
+const AMMO_STATION_POS = new THREE.Vector3(0, 0, -0.8);
+const MED_STATION_POS = new THREE.Vector3(3.0, 0, 22.0);
+
+const STATIC_COLLIDERS = [
+  // 1. Guard Towers (4 corners)
+  { x: -95, z: -95, hx: 1.6, hz: 1.6 },
+  { x: 95, z: 95, hx: 1.6, hz: 1.6 },
+  { x: -95, z: 95, hx: 1.6, hz: 1.6 },
+  { x: 95, z: -95, hx: 1.6, hz: 1.6 },
+
+  // 2. Core Center Obstacles
+  // MilitaryCrates
+  { x: 0, z: 0, hx: 0.72, hz: 0.72 },
+  { x: 1.4, z: 0, hx: 0.65, hz: 0.65 },
+  { x: -0.6, z: 1.4, hx: 0.7, hz: 0.7 },
+  { x: 0.4, z: 0.4, hx: 0.54, hz: 0.54 },
+  // SandbagWalls
+  { x: 0, z: -3, hx: 2.0, hz: 0.225 },
+  { x: 0, z: 3, hx: 2.0, hz: 0.225 },
+  { x: -3, z: 0, hx: 0.225, hz: 1.6 },
+  { x: 3, z: 0, hx: 0.225, hz: 1.6 },
+  // ConcreteBarriers
+  { x: -12, z: 0, hx: 0.6, hz: 1.8 },
+  { x: 12, z: 0, hx: 0.6, hz: 1.8 },
+
+  // 3. Middle-ground Sandbags and Crates
+  { x: -28, z: -28, hx: 1.6, hz: 1.6 },
+  { x: -31, z: -26, hx: 0.65, hz: 0.65 },
+  { x: 28, z: 28, hx: 1.6, hz: 1.6 },
+  { x: 31, z: 26, hx: 0.65, hz: 0.65 },
+  { x: -28, z: 28, hx: 1.6, hz: 1.6 },
+  { x: -31, z: 26, hx: 0.65, hz: 0.65 },
+  { x: 28, z: -28, hx: 1.6, hz: 1.6 },
+  { x: 31, z: -26, hx: 0.65, hz: 0.65 },
+
+  { x: -15, z: -15, hx: 1.7, hz: 0.6 },
+  { x: -18, z: -15, hx: 0.6, hz: 0.6 },
+  { x: 15, z: -15, hx: 1.7, hz: 0.6 },
+  { x: 18, z: -15, hx: 0.6, hz: 0.6 },
+  { x: -15, z: 15, hx: 0.6, hz: 1.7 },
+  { x: -15, z: 18, hx: 0.6, hz: 0.6 },
+  { x: 15, z: 15, hx: 0.6, hz: 1.7 },
+  { x: 15, z: 18, hx: 0.6, hz: 0.6 },
+
+  // 4. Player Spawn security area (Z = 85 ~ 92)
+  { x: 0, z: 85, hx: 3.0, hz: 1.2 }, // CargoContainer
+  { x: 0, z: 88, hx: 2.4, hz: 0.225 }, // SandbagWall
+  { x: -1.5, z: 89.5, hx: 0.6, hz: 0.6 },
+  { x: 1.5, z: 89.5, hx: 0.6, hz: 0.6 },
+  { x: -3.5, z: 89.5, hx: 1.8, hz: 0.5 }, // ConcreteBarrier
+  { x: 3.5, z: 89.5, hx: 1.8, hz: 0.5 }, // ConcreteBarrier
+  { x: -4.5, z: 90, hx: 1.6, hz: 0.9 }, // SandbagWall
+  { x: -5.5, z: 91.5, hx: 0.6, hz: 0.6 },
+  { x: 4.5, z: 90, hx: 1.6, hz: 0.9 }, // SandbagWall
+  { x: 5.5, z: 91.5, hx: 0.6, hz: 0.6 },
+
+  // 5. Southern mid-field Z = 50 ~ 80
+  { x: -30, z: 60, hx: 1.2, hz: 3.0 }, // CargoContainer
+  { x: 30, z: 60, hx: 1.2, hz: 3.0 }, // CargoContainer
+  { x: -33, z: 59, hx: 0.6, hz: 0.6 },
+  { x: 33, z: 59, hx: 0.6, hz: 0.6 },
+  // TacticalRuins (precalculated centers and bounds)
+  { x: -14.2, z: 71.97, hx: 2.1, hz: 2.1 },
+  { x: 17.13, z: 69.97, hx: 2.3, hz: 2.3 },
+  { x: -15, z: 72, hx: 0.6, hz: 0.6 },
+  { x: 15, z: 72, hx: 0.6, hz: 0.6 },
+  { x: 0, z: 55, hx: 2.0, hz: 0.225 },
+  { x: 0, z: 56.5, hx: 0.6, hz: 0.6 },
+
+  // 6. Northern mid-field Z = -50 ~ -80
+  { x: -30, z: -60, hx: 1.2, hz: 3.0 }, // CargoContainer
+  { x: 30, z: -60, hx: 1.2, hz: 3.0 }, // CargoContainer
+  { x: -33, z: -61, hx: 0.6, hz: 0.6 },
+  { x: 33, z: -61, hx: 0.6, hz: 0.6 },
+  // TacticalRuins (precalculated centers and bounds)
+  { x: -17.09, z: -69.67, hx: 2.3, hz: 2.3 },
+  { x: 16.61, z: -71.39, hx: 1.8, hz: 1.8 },
+  { x: -15, z: -72, hx: 0.6, hz: 0.6 },
+  { x: 15, z: -72, hx: 0.6, hz: 0.6 },
+  { x: 0, z: -55, hx: 2.0, hz: 0.225 },
+  { x: 0, z: -56.5, hx: 0.6, hz: 0.6 },
+
+  // 7. East/West flanks
+  { x: -60, z: -30, hx: 3.0, hz: 1.2 }, // CargoContainer
+  { x: 60, z: -30, hx: 3.0, hz: 1.2 }, // CargoContainer
+  { x: -60, z: 30, hx: 3.0, hz: 1.2 }, // CargoContainer
+  { x: 60, z: 30, hx: 3.0, hz: 1.2 }, // CargoContainer
+  { x: -80, z: 0, hx: 2.2, hz: 1.4 }, // SandbagWall
+  { x: -80, z: 1.5, hx: 0.6, hz: 0.6 },
+  { x: 80, z: 0, hx: 2.2, hz: 1.4 }, // SandbagWall
+  { x: 80, z: 1.5, hx: 0.6, hz: 0.6 },
+
+  // 8. Supply Stations
+  { x: 0, z: -0.8, hx: 0.7, hz: 0.5 }, // Ammo Supply Station
+  { x: 3.0, z: 22.0, hx: 0.45, hz: 0.35 }, // Medical Supply Station
+
+  // 9. Military Bunker A Walls & Interior Crates (Center: -45, -20)
+  { x: -49, z: -20, hx: 0.15, hz: 3.0 }, // Left Wall
+  { x: -41, z: -20, hx: 0.15, hz: 3.0 }, // Right Wall
+  { x: -45, z: -23, hx: 4.0, hz: 0.15 }, // Back Wall
+  { x: -47.75, z: -17, hx: 1.25, hz: 0.15 }, // Front Left Wall
+  { x: -42.25, z: -17, hx: 1.25, hz: 0.15 }, // Front Right Wall
+  { x: -47.2, z: -21.8, hx: 0.6, hz: 0.6 }, // Left Interior Crate
+  { x: -42.8, z: -21.8, hx: 0.6, hz: 0.6 }, // Right Interior Crate
+
+  // 10. Military Bunker B Walls & Interior Crates (Center: 45, 20)
+  { x: 41, z: 20, hx: 0.15, hz: 3.0 }, // Left Wall
+  { x: 49, z: 20, hx: 0.15, hz: 3.0 }, // Right Wall
+  { x: 45, z: 17, hx: 4.0, hz: 0.15 }, // Back Wall
+  { x: 42.25, z: 23, hx: 1.25, hz: 0.15 }, // Front Left Wall
+  { x: 47.75, z: 23, hx: 1.25, hz: 0.15 }, // Front Right Wall
+  { x: 42.8, z: 18.2, hx: 0.6, hz: 0.6 }, // Left Interior Crate
+  { x: 47.2, z: 18.2, hx: 0.6, hz: 0.6 }, // Right Interior Crate
+
+  // 11. Military Bunker C Walls & Interior Crates (Center: -15, -45)
+  { x: -19, z: -45, hx: 0.15, hz: 3.0 }, // Left Wall
+  { x: -11, z: -45, hx: 0.15, hz: 3.0 }, // Right Wall
+  { x: -15, z: -48, hx: 4.0, hz: 0.15 }, // Back Wall
+  { x: -17.75, z: -42, hx: 1.25, hz: 0.15 }, // Front Left Wall
+  { x: -12.25, z: -42, hx: 1.25, hz: 0.15 }, // Front Right Wall
+  { x: -17.2, z: -46.8, hx: 0.6, hz: 0.6 }, // Left Interior Crate
+  { x: -12.8, z: -46.8, hx: 0.6, hz: 0.6 }, // Right Interior Crate
+];
+
 const spawnEnemies = (isTutorial = false) => {
   if (isTutorial) {
     return [
@@ -658,7 +782,7 @@ const spawnEnemies = (isTutorial = false) => {
     ];
   }
 
-  const count = 8;
+  const count = 12;
   const spawned = [];
   
   for (let i = 0; i < count; i++) {
@@ -968,6 +1092,35 @@ function Enemy({ data, onShootPlayer, onKilled }) {
       // 限制敵軍在圍牆邊界內
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
+
+      // 敵軍碰撞檢測 (避免穿牆)
+      const enemyRadius = 0.35;
+      for (let i = 0; i < STATIC_COLLIDERS.length; i++) {
+        const c = STATIC_COLLIDERS[i];
+        const minX = c.x - c.hx - enemyRadius;
+        const maxX = c.x + c.hx + enemyRadius;
+        const minZ = c.z - c.hz - enemyRadius;
+        const maxZ = c.z + c.hz + enemyRadius;
+
+        if (enemyPos.x > minX && enemyPos.x < maxX &&
+            enemyPos.z > minZ && enemyPos.z < maxZ) {
+          const distLeft = enemyPos.x - minX;
+          const distRight = maxX - enemyPos.x;
+          const distBottom = enemyPos.z - minZ;
+          const distTop = maxZ - enemyPos.z;
+
+          const minDist = Math.min(distLeft, distRight, distBottom, distTop);
+          if (minDist === distLeft) {
+            enemyPos.x = minX;
+          } else if (minDist === distRight) {
+            enemyPos.x = maxX;
+          } else if (minDist === distBottom) {
+            enemyPos.z = minZ;
+          } else {
+            enemyPos.z = maxZ;
+          }
+        }
+      }
     }
   });
 
@@ -2054,130 +2207,6 @@ function Grenade({ position, velocity, onExplode }) {
 // ==========================================
 // 6. 玩家控制與射擊 Raycaster 控制器
 // ==========================================
-const AMMO_STATION_POS = new THREE.Vector3(0, 0, -0.8);
-const MED_STATION_POS = new THREE.Vector3(3.0, 0, 22.0);
-
-const STATIC_COLLIDERS = [
-  // 1. Guard Towers (4 corners)
-  { x: -95, z: -95, hx: 1.6, hz: 1.6 },
-  { x: 95, z: 95, hx: 1.6, hz: 1.6 },
-  { x: -95, z: 95, hx: 1.6, hz: 1.6 },
-  { x: 95, z: -95, hx: 1.6, hz: 1.6 },
-
-  // 2. Core Center Obstacles
-  // MilitaryCrates
-  { x: 0, z: 0, hx: 0.72, hz: 0.72 },
-  { x: 1.4, z: 0, hx: 0.65, hz: 0.65 },
-  { x: -0.6, z: 1.4, hx: 0.7, hz: 0.7 },
-  { x: 0.4, z: 0.4, hx: 0.54, hz: 0.54 },
-  // SandbagWalls
-  { x: 0, z: -3, hx: 2.0, hz: 0.225 },
-  { x: 0, z: 3, hx: 2.0, hz: 0.225 },
-  { x: -3, z: 0, hx: 0.225, hz: 1.6 },
-  { x: 3, z: 0, hx: 0.225, hz: 1.6 },
-  // ConcreteBarriers
-  { x: -12, z: 0, hx: 0.6, hz: 1.8 },
-  { x: 12, z: 0, hx: 0.6, hz: 1.8 },
-
-  // 3. Middle-ground Sandbags and Crates
-  { x: -28, z: -28, hx: 1.6, hz: 1.6 },
-  { x: -31, z: -26, hx: 0.65, hz: 0.65 },
-  { x: 28, z: 28, hx: 1.6, hz: 1.6 },
-  { x: 31, z: 26, hx: 0.65, hz: 0.65 },
-  { x: -28, z: 28, hx: 1.6, hz: 1.6 },
-  { x: -31, z: 26, hx: 0.65, hz: 0.65 },
-  { x: 28, z: -28, hx: 1.6, hz: 1.6 },
-  { x: 31, z: -26, hx: 0.65, hz: 0.65 },
-
-  { x: -15, z: -15, hx: 1.7, hz: 0.6 },
-  { x: -18, z: -15, hx: 0.6, hz: 0.6 },
-  { x: 15, z: -15, hx: 1.7, hz: 0.6 },
-  { x: 18, z: -15, hx: 0.6, hz: 0.6 },
-  { x: -15, z: 15, hx: 0.6, hz: 1.7 },
-  { x: -15, z: 18, hx: 0.6, hz: 0.6 },
-  { x: 15, z: 15, hx: 0.6, hz: 1.7 },
-  { x: 15, z: 18, hx: 0.6, hz: 0.6 },
-
-  // 4. Player Spawn security area (Z = 85 ~ 92)
-  { x: 0, z: 85, hx: 3.0, hz: 1.2 }, // CargoContainer
-  { x: 0, z: 88, hx: 2.4, hz: 0.225 }, // SandbagWall
-  { x: -1.5, z: 89.5, hx: 0.6, hz: 0.6 },
-  { x: 1.5, z: 89.5, hx: 0.6, hz: 0.6 },
-  { x: -3.5, z: 89.5, hx: 1.8, hz: 0.5 }, // ConcreteBarrier
-  { x: 3.5, z: 89.5, hx: 1.8, hz: 0.5 }, // ConcreteBarrier
-  { x: -4.5, z: 90, hx: 1.6, hz: 0.9 }, // SandbagWall
-  { x: -5.5, z: 91.5, hx: 0.6, hz: 0.6 },
-  { x: 4.5, z: 90, hx: 1.6, hz: 0.9 }, // SandbagWall
-  { x: 5.5, z: 91.5, hx: 0.6, hz: 0.6 },
-
-  // 5. Southern mid-field Z = 50 ~ 80
-  { x: -30, z: 60, hx: 1.2, hz: 3.0 }, // CargoContainer
-  { x: 30, z: 60, hx: 1.2, hz: 3.0 }, // CargoContainer
-  { x: -33, z: 59, hx: 0.6, hz: 0.6 },
-  { x: 33, z: 59, hx: 0.6, hz: 0.6 },
-  // TacticalRuins (precalculated centers and bounds)
-  { x: -14.2, z: 71.97, hx: 2.1, hz: 2.1 },
-  { x: 17.13, z: 69.97, hx: 2.3, hz: 2.3 },
-  { x: -15, z: 72, hx: 0.6, hz: 0.6 },
-  { x: 15, z: 72, hx: 0.6, hz: 0.6 },
-  { x: 0, z: 55, hx: 2.0, hz: 0.225 },
-  { x: 0, z: 56.5, hx: 0.6, hz: 0.6 },
-
-  // 6. Northern mid-field Z = -50 ~ -80
-  { x: -30, z: -60, hx: 1.2, hz: 3.0 }, // CargoContainer
-  { x: 30, z: -60, hx: 1.2, hz: 3.0 }, // CargoContainer
-  { x: -33, z: -61, hx: 0.6, hz: 0.6 },
-  { x: 33, z: -61, hx: 0.6, hz: 0.6 },
-  // TacticalRuins (precalculated centers and bounds)
-  { x: -17.09, z: -69.67, hx: 2.3, hz: 2.3 },
-  { x: 16.61, z: -71.39, hx: 1.8, hz: 1.8 },
-  { x: -15, z: -72, hx: 0.6, hz: 0.6 },
-  { x: 15, z: -72, hx: 0.6, hz: 0.6 },
-  { x: 0, z: -55, hx: 2.0, hz: 0.225 },
-  { x: 0, z: -56.5, hx: 0.6, hz: 0.6 },
-
-  // 7. East/West flanks
-  { x: -60, z: -30, hx: 3.0, hz: 1.2 }, // CargoContainer
-  { x: 60, z: -30, hx: 3.0, hz: 1.2 }, // CargoContainer
-  { x: -60, z: 30, hx: 3.0, hz: 1.2 }, // CargoContainer
-  { x: 60, z: 30, hx: 3.0, hz: 1.2 }, // CargoContainer
-  { x: -80, z: 0, hx: 2.2, hz: 1.4 }, // SandbagWall
-  { x: -80, z: 1.5, hx: 0.6, hz: 0.6 },
-  { x: 80, z: 0, hx: 2.2, hz: 1.4 }, // SandbagWall
-  { x: 80, z: 1.5, hx: 0.6, hz: 0.6 },
-
-  // 8. Supply Stations
-  { x: 0, z: -0.8, hx: 0.7, hz: 0.5 }, // Ammo Supply Station
-  { x: 3.0, z: 22.0, hx: 0.45, hz: 0.35 }, // Medical Supply Station
-
-  // 9. Military Bunker A Walls & Interior Crates (Center: -45, -20)
-  { x: -49, z: -20, hx: 0.15, hz: 3.0 }, // Left Wall
-  { x: -41, z: -20, hx: 0.15, hz: 3.0 }, // Right Wall
-  { x: -45, z: -23, hx: 4.0, hz: 0.15 }, // Back Wall
-  { x: -47.75, z: -17, hx: 1.25, hz: 0.15 }, // Front Left Wall
-  { x: -42.25, z: -17, hx: 1.25, hz: 0.15 }, // Front Right Wall
-  { x: -47.2, z: -21.8, hx: 0.6, hz: 0.6 }, // Left Interior Crate
-  { x: -42.8, z: -21.8, hx: 0.6, hz: 0.6 }, // Right Interior Crate
-
-  // 10. Military Bunker B Walls & Interior Crates (Center: 45, 20)
-  { x: 41, z: 20, hx: 0.15, hz: 3.0 }, // Left Wall
-  { x: 49, z: 20, hx: 0.15, hz: 3.0 }, // Right Wall
-  { x: 45, z: 17, hx: 4.0, hz: 0.15 }, // Back Wall
-  { x: 42.25, z: 23, hx: 1.25, hz: 0.15 }, // Front Left Wall
-  { x: 47.75, z: 23, hx: 1.25, hz: 0.15 }, // Front Right Wall
-  { x: 42.8, z: 18.2, hx: 0.6, hz: 0.6 }, // Left Interior Crate
-  { x: 47.2, z: 18.2, hx: 0.6, hz: 0.6 }, // Right Interior Crate
-
-  // 11. Military Bunker C Walls & Interior Crates (Center: -15, -45)
-  { x: -19, z: -45, hx: 0.15, hz: 3.0 }, // Left Wall
-  { x: -11, z: -45, hx: 0.15, hz: 3.0 }, // Right Wall
-  { x: -15, z: -48, hx: 4.0, hz: 0.15 }, // Back Wall
-  { x: -17.75, z: -42, hx: 1.25, hz: 0.15 }, // Front Left Wall
-  { x: -12.25, z: -42, hx: 1.25, hz: 0.15 }, // Front Right Wall
-  { x: -17.2, z: -46.8, hx: 0.6, hz: 0.6 }, // Left Interior Crate
-  { x: -12.8, z: -46.8, hx: 0.6, hz: 0.6 }, // Right Interior Crate
-];
-
 function PlayerController({
   weaponRef,
   muzzleFlashRef,
@@ -3355,7 +3384,7 @@ export default function App() {
     setEliminated((prev) => {
       const newCount = prev + 1;
       
-      if (newCount >= 4) {
+      if (newCount >= 12) {
         setGameState('victory');
         soundManager.stopAmbient(); // 勝利時關閉背景環境音
         if (controlsRef.current) {
@@ -3772,7 +3801,7 @@ export default function App() {
             <div className="hud-compass">N 024°</div>
             <div className="hud-mission-info">
               <h3>TRAINING OP</h3>
-              <div>HOSTILES ELIMINATED: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{eliminated} / 4</span></div>
+              <div>HOSTILES ELIMINATED: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{eliminated} / 12</span></div>
             </div>
           </div>
 
