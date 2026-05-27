@@ -1625,10 +1625,38 @@ function TacticalAssets() {
 // ==========================================
 // 4. 第一人稱突擊步槍組件 (採用中空反射式紅點瞄準鏡，完全防遮擋)
 // ==========================================
-function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon }) {
+function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHealing }) {
+  const medkitRef = useRef();
+  const medkitLerp = useRef(0);
+
+  useFrame((state, delta) => {
+    const safeDelta = Math.min(delta, 0.1);
+    medkitLerp.current = THREE.MathUtils.lerp(medkitLerp.current, isHealing ? 1.0 : 0.0, 10.0 * safeDelta);
+    
+    if (medkitRef.current) {
+      const time = state.clock.getElapsedTime();
+      const bobY = Math.sin(time * 5.0) * 0.02 * medkitLerp.current;
+      const bobRotZ = Math.cos(time * 3.0) * 0.03 * medkitLerp.current;
+      
+      // 當 medkitLerp 為 1.0 時，醫療包將移至中心可見位置
+      medkitRef.current.position.x = 0.05;
+      medkitRef.current.position.y = THREE.MathUtils.lerp(-1.2, -0.28, medkitLerp.current) + bobY;
+      medkitRef.current.position.z = THREE.MathUtils.lerp(-0.2, -0.65, medkitLerp.current);
+      medkitRef.current.rotation.x = THREE.MathUtils.lerp(0.8, 0.25, medkitLerp.current);
+      medkitRef.current.rotation.y = THREE.MathUtils.lerp(-0.5, 0.1, medkitLerp.current);
+      medkitRef.current.rotation.z = bobRotZ;
+      medkitRef.current.visible = medkitLerp.current > 0.01;
+    }
+  });
+
   return (
     <group ref={gunRef} name="weapon">
-      <group rotation={[0, Math.PI, 0]} scale={[0.13, 0.13, 0.13]} position={[0, 0, 0]}>
+      {/* 槍支本體群組，補血時往下滑出螢幕 */}
+      <group 
+        rotation={[0, Math.PI, 0]} 
+        scale={[0.13, 0.13, 0.13]} 
+        position={[0, -1.5 * medkitLerp.current, 0]}
+      >
         
         {/* 槍口閃光 (Muzzle Flash) - 共用以維持 ref 綁定與光源定位 */}
         <mesh 
@@ -1775,6 +1803,45 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon }) {
             )}
           </>
         )}
+      </group>
+
+      {/* 獨立的 3D 醫療包模型，只有在 isHealing 時顯示，並由 useFrame 動態動畫控制 */}
+      <group ref={medkitRef} scale={[0.15, 0.15, 0.15]} visible={false}>
+        {/* 醫療包本體 (白色外殼) */}
+        <mesh castShadow>
+          <boxGeometry args={[1.5, 1.0, 0.5]} />
+          <meshStandardMaterial color="#eeeeee" roughness={0.5} metalness={0.2} />
+        </mesh>
+        
+        {/* 醫療包中央的綠色十字圖案 (橫) */}
+        <mesh position={[0, 0, 0.26]}>
+          <boxGeometry args={[0.7, 0.2, 0.05]} />
+          <meshBasicMaterial color="#00ff66" />
+        </mesh>
+        {/* 醫療包中央的綠色十字圖案 (直) */}
+        <mesh position={[0, 0, 0.26]}>
+          <boxGeometry args={[0.2, 0.7, 0.05]} />
+          <meshBasicMaterial color="#00ff66" />
+        </mesh>
+
+        {/* 醫療包側邊鎖扣 (金屬質感) */}
+        <mesh position={[-0.6, 0.51, 0]} castShadow>
+          <boxGeometry args={[0.2, 0.05, 0.2]} />
+          <meshStandardMaterial color="#888888" roughness={0.3} metalness={0.9} />
+        </mesh>
+        <mesh position={[0.6, 0.51, 0]} castShadow>
+          <boxGeometry args={[0.2, 0.05, 0.2]} />
+          <meshStandardMaterial color="#888888" roughness={0.3} metalness={0.9} />
+        </mesh>
+
+        {/* 頂部把手 */}
+        <mesh position={[0, 0.6, 0]} castShadow>
+          <boxGeometry args={[0.5, 0.15, 0.1]} />
+          <meshStandardMaterial color="#222222" roughness={0.8} />
+        </mesh>
+
+        {/* 醫療包散發的綠色治癒光芒 */}
+        <pointLight color="#00ff66" intensity={2.5} distance={3} />
       </group>
     </group>
   );
@@ -2117,6 +2184,7 @@ function PlayerController({
   ammo,
   setAmmo,
   isReloading,
+  isHealing,
   gameState,
   onHitEnemy,
   addImpactEffect,
@@ -2166,6 +2234,7 @@ function PlayerController({
   const lastFireTime = useRef(0);
   const ammoRef = useRef(ammo);
   const isReloadingRef = useRef(isReloading);
+  const isHealingRef = useRef(isHealing);
   const fireModeRef = useRef(fireMode);
   const gameStateRef = useRef(gameState);
   const activeWeaponRef = useRef(activeWeapon);
@@ -2194,6 +2263,10 @@ function PlayerController({
   useEffect(() => {
     isReloadingRef.current = isReloading;
   }, [isReloading]);
+
+  useEffect(() => {
+    isHealingRef.current = isHealing;
+  }, [isHealing]);
 
   useEffect(() => {
     fireModeRef.current = fireMode;
@@ -2316,7 +2389,7 @@ function PlayerController({
   useEffect(() => {
     const handleMouseDown = (e) => {
       if (e.button === 2) {
-        if (gameStateRef.current === 'active' && document.pointerLockElement) {
+        if (gameStateRef.current === 'active' && document.pointerLockElement && !isHealingRef.current) {
           setIsAds(true);
         }
       }
@@ -2338,7 +2411,7 @@ function PlayerController({
 
   // 核心單發開火函式
   const fireOneBullet = () => {
-    if (gameStateRef.current !== 'active' || isReloadingRef.current || ammoRef.current <= 0) return;
+    if (gameStateRef.current !== 'active' || isReloadingRef.current || isHealingRef.current || ammoRef.current <= 0) return;
 
     // 播放合成槍聲
     if (activeWeaponRef.current === 'primary') {
@@ -2448,7 +2521,7 @@ function PlayerController({
   useEffect(() => {
     const handleMouseDown = (e) => {
       if (e.button !== 0) return;
-      if (gameStateRef.current !== 'active' || isReloadingRef.current || ammoRef.current <= 0) return;
+      if (gameStateRef.current !== 'active' || isReloadingRef.current || isHealingRef.current || ammoRef.current <= 0) return;
       if (!document.pointerLockElement) return;
 
       isMouseDown.current = true;
@@ -2528,6 +2601,7 @@ function PlayerController({
       const now = performance.now() / 1000;
       const fireInterval = activeWeaponRef.current === 'primary' ? 0.11 : 0.2;
       if (now - lastFireTime.current >= fireInterval) {
+        if (isHealingRef.current) return;
         lastFireTime.current = now;
         fireOneBullet();
       }
@@ -2767,6 +2841,10 @@ export default function App() {
   // 玩家戰術數據
   const [health, setHealth] = useState(100);
   const [isReloading, setIsReloading] = useState(false);
+  const [isHealing, setIsHealing] = useState(false);
+  const [healProgress, setHealProgress] = useState(0);
+  const healTimeoutRef = useRef(null);
+  const healIntervalRef = useRef(null);
   const [eliminated, setEliminated] = useState(0);
 
   // 畫面閃紅受傷特效狀態
@@ -2853,7 +2931,7 @@ export default function App() {
   // 監聽 1 鍵與 2 鍵切換主副武器
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (gameState !== 'active' || !isLocked) return;
+      if (gameState !== 'active' || !isLocked || isHealing) return;
       if (e.code === 'Digit1') {
         if (activeWeapon !== 'primary') {
           // 如果正在裝彈，取消裝彈
@@ -2878,12 +2956,12 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, isLocked, activeWeapon, isReloading]);
+  }, [gameState, isLocked, activeWeapon, isReloading, isHealing]);
 
   // 監聽 R 鍵重新裝彈，播放合成重新裝彈聲
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (gameState !== 'active' || !isLocked || isReloading) return;
+      if (gameState !== 'active' || !isLocked || isReloading || isHealing) return;
       
       const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
       const maxAmmo = activeWeapon === 'primary' ? 30 : 15;
@@ -2910,14 +2988,76 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [gameState, isLocked, isReloading, activeWeapon, primaryAmmo, secondaryAmmo]);
+  }, [gameState, isLocked, isReloading, isHealing, activeWeapon, primaryAmmo, secondaryAmmo]);
 
-  // 單獨的 useEffect 確保 App 元件卸載時清除 reload timeout
+  // 單獨的 useEffect 確保 App 元件卸載時清除 reload/heal timeout
   useEffect(() => {
     return () => {
       if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
+      if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+      if (healIntervalRef.current) clearInterval(healIntervalRef.current);
     };
   }, []);
+
+  // 監聽遊戲狀態，非 active 時重置並清除所有補血定時器
+  useEffect(() => {
+    if (gameState !== 'active') {
+      if (healIntervalRef.current) {
+        clearInterval(healIntervalRef.current);
+        healIntervalRef.current = null;
+      }
+      if (healTimeoutRef.current) {
+        clearTimeout(healTimeoutRef.current);
+        healTimeoutRef.current = null;
+      }
+      setIsHealing(false);
+      setHealProgress(0);
+    }
+  }, [gameState]);
+
+  // 監聽 5 鍵使用醫療包補血
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'active' || !isLocked || isHealing || isReloading) return;
+      if (e.code === 'Digit5' || e.code === 'Numpad5') {
+        if (health >= 100) return;
+        
+        setIsAds(false); // 補血時強迫解除開鏡
+        setIsHealing(true);
+        setHealProgress(0);
+        soundManager.playHeal();
+        
+        if (healIntervalRef.current) clearInterval(healIntervalRef.current);
+        if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+        
+        let progress = 0;
+        const duration = 2000; // 2秒補血動作
+        const intervalTime = 50;
+        const step = (intervalTime / duration) * 100;
+        
+        healIntervalRef.current = setInterval(() => {
+          progress += step;
+          if (progress >= 100) {
+            clearInterval(healIntervalRef.current);
+            setHealProgress(100);
+          } else {
+            setHealProgress(progress);
+          }
+        }, intervalTime);
+
+        healTimeoutRef.current = setTimeout(() => {
+          setHealth(100);
+          setIsHealing(false);
+          setHealProgress(0);
+          soundManager.playSuccessChime();
+        }, duration);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [gameState, isLocked, isHealing, isReloading, health]);
 
   // 監聽 B 鍵切換射擊模式 (連發/單發)
   useEffect(() => {
@@ -3255,6 +3395,10 @@ export default function App() {
     setActiveWeapon('primary');
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
+    if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+    if (healIntervalRef.current) clearInterval(healIntervalRef.current);
+    setIsHealing(false);
+    setHealProgress(0);
     setEliminated(0);
     setEnemies(spawnEnemies(isTutorial)); // 依照當前是否為教學模式生成對應敵軍或標靶
     setHoles([]);
@@ -3414,6 +3558,20 @@ export default function App() {
       {/* 受傷閃紅疊加層 */}
       <div className={`hurt-overlay ${hurtActive ? 'active' : ''}`} />
 
+      {/* 補血閃綠疊加層 */}
+      <div className={`heal-overlay ${isHealing ? 'active' : ''}`} />
+
+      {/* 補血進度條 HUD */}
+      {isHealing && (
+        <div className="hud-healing-overlay">
+          <div className="hud-healing-label">HEALING...</div>
+          <div className="hud-healing-bar-container">
+            <div className="hud-healing-bar" style={{ width: `${healProgress}%` }} />
+          </div>
+          <div className="hud-healing-pct">{Math.round(healProgress)}%</div>
+        </div>
+      )}
+
       {/* 左側教學進度清單面板 */}
       {isTutorial && gameState !== 'deploying' && (
         <div className="tutorial-panel">
@@ -3560,6 +3718,7 @@ export default function App() {
                   <div><span className="key-cap">B</span> 切換單發 / 連發射擊模式</div>
                   <div><span className="key-cap">G</span> 拋擲戰術手榴彈 (引信 2.5 秒)</div>
                   <div><span className="key-cap">R</span> 重新裝彈 (1.5 秒)</div>
+                  <div><span className="key-cap">5</span> 使用醫療包 (2.0 秒，回滿血量)</div>
                   <div><span className="key-cap">Esc</span> 暫停遊戲</div>
                   <div style={{ marginTop: '10px', color: '#ffaa00' }}>※ 點擊按鈕或畫面開始以進行第一人稱視角控制。</div>
                 </div>
@@ -3744,7 +3903,7 @@ export default function App() {
           ))}
 
           {/* 突擊步槍與手槍模型 */}
-          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} />
+          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} isHealing={isHealing} />
 
           {/* 玩家與開火 Raycaster 控制器 */}
           <PlayerController
@@ -3753,6 +3912,7 @@ export default function App() {
             ammo={ammo}
             setAmmo={setAmmo}
             isReloading={isReloading}
+            isHealing={isHealing}
             gameState={gameState}
             onHitEnemy={handleHitEnemy}
             addImpactEffect={addImpactEffect}
