@@ -1,0 +1,649 @@
+/* 戰術軍事設計系統與全螢幕重設 */
+:root {
+  --hud-primary: #00ff66; /* 戰術綠 */
+  --hud-glow: rgba(0, 255, 102, 0.4);
+  --hud-amber: #ffaa00; /* 警示黃 */
+  --hud-amber-glow: rgba(255, 170, 0, 0.4);
+  --hud-bg: rgba(8, 16, 10, 0.85); /* 半透明軍事綠黑背景 */
+  --hud-bg-border: rgba(0, 255, 102, 0.25);
+  
+  font-family: 'Courier New', Courier, monospace, system-ui, sans-serif;
+  color-scheme: dark;
+  user-select: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #050805;
+  color: #e0eee0;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  border: none;
+  max-width: 100%;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 準星樣式 */
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.crosshair::before,
+.crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--hud-primary);
+  box-shadow: 0 0 4px var(--hud-primary);
+}
+
+.crosshair::before {
+  width: 2px;
+  height: 12px;
+}
+
+.crosshair::after {
+  width: 12px;
+  height: 2px;
+}
+
+.crosshair-center {
+  width: 4px;
+  height: 4px;
+  background: var(--hud-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--hud-primary);
+}
+
+/* 戰術 CRT 掃描線效果 */
+.crt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+  z-index: 99;
+}
+
+/* 部署/開始畫面 */
+.menu-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle, rgba(16, 28, 18, 0.95) 0%, rgba(5, 8, 5, 0.98) 100%);
+  z-index: 20;
+  color: var(--hud-primary);
+  text-shadow: 0 0 8px var(--hud-glow);
+  transition: opacity 0.5s ease;
+}
+
+.hud-panel {
+  border: 1px solid var(--hud-bg-border);
+  background: var(--hud-bg);
+  padding: 30px 50px;
+  border-radius: 4px;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(0, 255, 102, 0.1);
+  max-width: 500px;
+  position: relative;
+  clip-path: polygon(
+    0 10px, 10px 0, 
+    calc(100% - 10px) 0, 100% 10px, 
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 
+    10px 100%, 0 calc(100% - 10px)
+  );
+}
+
+.hud-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(0, 255, 102, 0.05);
+  pointer-events: none;
+}
+
+.hud-title {
+  font-size: 2.5rem;
+  letter-spacing: 6px;
+  margin: 0 0 10px 0;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.hud-subtitle {
+  font-size: 0.9rem;
+  color: #88a888;
+  margin-bottom: 30px;
+  letter-spacing: 2px;
+}
+
+.deploy-button {
+  background: transparent;
+  border: 2px solid var(--hud-primary);
+  color: var(--hud-primary);
+  font-family: inherit;
+  font-size: 1.2rem;
+  font-weight: bold;
+  padding: 15px 40px;
+  cursor: pointer;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+}
+
+.deploy-button:hover {
+  background: var(--hud-primary);
+  color: #050805;
+  box-shadow: 0 0 25px var(--hud-primary);
+  text-shadow: none;
+}
+
+.controls-guide {
+  margin-top: 30px;
+  border-top: 1px dashed var(--hud-bg-border);
+  padding-top: 20px;
+  font-size: 0.85rem;
+  color: #88a888;
+  text-align: left;
+  line-height: 1.6;
+}
+
+.controls-guide div {
+  margin-bottom: 5px;
+}
+
+.key-cap {
+  display: inline-block;
+  background: rgba(0, 255, 102, 0.15);
+  border: 1px solid var(--hud-primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--hud-primary);
+  font-weight: bold;
+  margin-right: 5px;
+  font-size: 0.8rem;
+  min-width: 15px;
+  text-align: center;
+}
+
+/* 遊戲中 HUD 疊加層 */
+.game-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  box-sizing: border-box;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--hud-primary);
+  text-shadow: 0 0 4px var(--hud-glow);
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hud-radar-scanner {
+  width: 120px;
+  height: 120px;
+  border: 1px solid var(--hud-bg-border);
+  border-radius: 50%;
+  background: rgba(0, 40, 10, 0.3);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.05);
+}
+
+.hud-radar-scanner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: conic-gradient(from 0deg, var(--hud-primary) 0deg, rgba(0, 255, 102, 0) 90deg);
+  border-radius: 50%;
+  opacity: 0.15;
+  animation: radar-sweep 4s linear infinite;
+}
+
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.hud-compass {
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+  padding: 8px 16px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  border-radius: 4px;
+}
+
+.hud-mission-info {
+  text-align: right;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  padding: 10px 15px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.hud-mission-info h3 {
+  margin: 0 0 5px 0;
+  font-size: 1rem;
+  letter-spacing: 2px;
+  color: var(--hud-primary);
+}
+
+.hud-mission-info div {
+  color: #88a888;
+}
+
+.hud-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.hud-status-card {
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  border-radius: 4px;
+  padding: 15px 20px;
+  width: 250px;
+}
+
+.hud-label {
+  font-size: 0.8rem;
+  color: #88a888;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.hud-value-bar-container {
+  width: 100%;
+  height: 10px;
+  background: rgba(0, 255, 102, 0.1);
+  border: 1px solid var(--hud-bg-border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.hud-value-bar {
+  height: 100%;
+  background: var(--hud-primary);
+  box-shadow: 0 0 10px var(--hud-primary);
+  transition: width 0.2s ease-out;
+}
+
+.hud-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.hud-large-num {
+  font-size: 1.8rem;
+  font-weight: 900;
+}
+
+.hud-small-label {
+  font-size: 0.9rem;
+  color: #88a888;
+}
+
+/* 遊戲狀態指示燈 */
+.hud-sys-status {
+  text-align: right;
+  color: #88a888;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.sys-active {
+  color: var(--hud-primary);
+  font-weight: bold;
+}
+
+/* 動態受傷效果 */
+.hurt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  box-shadow: inset 0 0 0px rgba(255, 0, 0, 0);
+  z-index: 8;
+  transition: box-shadow 0.1s ease-out;
+}
+
+.hurt-overlay.active {
+  box-shadow: inset 0 0 50px rgba(255, 0, 0, 0.7);
+  animation: flash-hurt 0.15s ease-out;
+}
+
+@keyframes flash-hurt {
+  0% { box-shadow: inset 0 0 0px rgba(255, 0, 0, 0); }
+  50% { box-shadow: inset 0 0 60px rgba(255, 0, 0, 0.8); }
+  100% { box-shadow: inset 0 0 0px rgba(255, 0, 0, 0); }
+}
+
+/* 戰術網格掃描點特效 */
+.canvas-container {
+  width: 100vw;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+/* 勝利與失敗面板樣式 */
+.menu-overlay.failed {
+  color: var(--hud-amber);
+  text-shadow: 0 0 8px var(--hud-amber-glow);
+  background: radial-gradient(circle, rgba(28, 16, 8, 0.95) 0%, rgba(8, 5, 3, 0.98) 100%);
+}
+
+.menu-overlay.failed .hud-panel {
+  border-color: var(--hud-amber-glow);
+  box-shadow: 0 0 30px rgba(255, 170, 0, 0.1);
+}
+
+.menu-overlay.failed .deploy-button {
+  border-color: var(--hud-amber);
+  color: var(--hud-amber);
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.2);
+}
+
+.menu-overlay.failed .deploy-button:hover {
+  background: var(--hud-amber);
+  color: #050503;
+  box-shadow: 0 0 25px var(--hud-amber);
+}
+
+.menu-overlay.victory {
+  color: var(--hud-primary);
+  text-shadow: 0 0 8px var(--hud-glow);
+  background: radial-gradient(circle, rgba(8, 28, 16, 0.95) 0%, rgba(3, 8, 5, 0.98) 100%);
+}
+
+/* 命中反饋 Hit Marker */
+.hit-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.hit-marker-line {
+  position: absolute;
+  background: #ffffff;
+  box-shadow: 0 0 3px #ffffff;
+}
+
+.hit-marker-line.headshot {
+  background: #ff1111;
+  box-shadow: 0 0 4px #ff1111;
+}
+
+/* 45度斜角四條引導線 */
+.hit-marker-line:nth-child(1) { top: 0; left: 11px; width: 2px; height: 6px; }
+.hit-marker-line:nth-child(2) { right: 0; top: 11px; width: 6px; height: 2px; }
+.hit-marker-line:nth-child(3) { bottom: 0; left: 11px; width: 2px; height: 6px; }
+.hit-marker-line:nth-child(4) { left: 0; top: 11px; width: 6px; height: 2px; }
+
+.hit-marker-text {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg); /* 抵消容器的45度旋轉使其水平顯示 */
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: #ff1111;
+  text-shadow: 0 0 5px rgba(255, 17, 17, 0.8);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* 戰術擊殺訊息欄 Kill Feed */
+.kill-feed {
+  position: absolute;
+  top: 155px;
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+  align-items: flex-end;
+}
+
+.kill-feed-item {
+  background: rgba(8, 16, 10, 0.78);
+  border: 1px solid rgba(0, 255, 102, 0.18);
+  border-right: 3px solid var(--hud-primary);
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  animation: slide-in-feed 0.22s ease-out;
+}
+
+.kill-feed-item.headshot {
+  border-right: 3px solid #ff1111;
+  border-color: rgba(255, 17, 17, 0.28);
+  background: rgba(22, 8, 8, 0.82);
+  color: #ff3b3b;
+}
+
+.kill-feed-item.grenade {
+  border-right: 3px solid var(--hud-amber);
+  border-color: rgba(255, 170, 0, 0.28);
+  background: rgba(22, 15, 8, 0.82);
+  color: var(--hud-amber);
+}
+
+@keyframes slide-in-feed {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* 物資互動提示 Interaction Prompt */
+.interaction-prompt {
+  position: absolute;
+  bottom: 175px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(6, 12, 8, 0.92);
+  border: 1px solid var(--hud-primary);
+  border-radius: 3px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 1.2px;
+  text-align: center;
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.15);
+  animation: pulse-border 1.5s infinite alternate;
+}
+
+.interaction-prompt.cooldown {
+  border-color: var(--hud-amber);
+  color: var(--hud-amber);
+  box-shadow: 0 0 15px rgba(255, 170, 0, 0.15);
+}
+
+@keyframes pulse-border {
+  from { box-shadow: 0 0 8px rgba(0, 255, 102, 0.08); }
+  to { box-shadow: 0 0 16px rgba(0, 255, 102, 0.25); }
+}
+
+/* 教學進度清單面板 Tutorial progress panel */
+.tutorial-panel {
+  position: absolute;
+  top: 155px;
+  left: 30px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  border-left: 3px solid var(--hud-primary);
+  border-radius: 4px;
+  padding: 18px 24px;
+  width: 280px;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.tutorial-panel h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  letter-spacing: 2px;
+  color: var(--hud-primary);
+  border-bottom: 1px dashed var(--hud-bg-border);
+  padding-bottom: 8px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 0.8rem;
+  color: #88a888;
+  transition: all 0.3s ease;
+}
+
+.checklist-item.completed {
+  color: var(--hud-primary);
+  text-shadow: 0 0 6px var(--hud-glow);
+}
+
+.checklist-checkbox {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--hud-bg-border);
+  border-radius: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 0.7rem;
+  background: rgba(0, 255, 102, 0.05);
+  transition: all 0.2s ease;
+}
+
+.checklist-item.completed .checklist-checkbox {
+  border-color: var(--hud-primary);
+  background: rgba(0, 255, 102, 0.25);
+  color: var(--hud-primary);
+  box-shadow: 0 0 6px var(--hud-primary);
+}
+
+/* 訓練完成結算面板 */
+.tutorial-complete-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(8, 20, 14, 0.96) 0%, rgba(3, 8, 4, 0.98) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 25;
+  color: var(--hud-primary);
+  text-shadow: 0 0 10px var(--hud-glow);
+}
+
+.tutorial-complete-overlay .hud-panel {
+  border-color: var(--hud-primary);
+  box-shadow: 0 0 40px rgba(0, 255, 102, 0.15);
+}
+
+.tutorial-complete-button {
+  background: var(--hud-primary);
+  border: 2px solid var(--hud-primary);
+  color: #050805;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 12px 30px;
+  margin-top: 15px;
+  cursor: pointer;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px var(--hud-primary);
+}
+
+.tutorial-complete-button:hover {
+  background: transparent;
+  color: var(--hud-primary);
+  box-shadow: 0 0 25px var(--hud-primary);
+  text-shadow: 0 0 6px var(--hud-glow);
+}
+
+
