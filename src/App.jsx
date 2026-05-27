@@ -2234,6 +2234,10 @@ function PlayerController({
   isTutorial,
   onTriggerTutorial,
   activeWeapon,
+  device,
+  mobileKeysRef,
+  mobileFiring,
+  mobileGrenadeTrigger,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -2276,6 +2280,10 @@ function PlayerController({
   const onHitEnemyRef = useRef(onHitEnemy);
   const addImpactEffectRef = useRef(addImpactEffect);
   const addCasingRef = useRef(addCasing);
+
+  // 行動端滑動看視角 Refs
+  const lookTouchId = useRef(null);
+  const lastLookPos = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     isTutorialRef.current = isTutorial;
@@ -2329,6 +2337,86 @@ function PlayerController({
     addCasingRef.current = addCasing;
   }, [addCasing]);
 
+  // 同步行動端開火狀態到 isMouseDown
+  useEffect(() => {
+    isMouseDown.current = mobileFiring;
+    if (mobileFiring && fireModeRef.current === 'semi') {
+      const now = performance.now() / 1000;
+      const fireInterval = activeWeaponRef.current === 'primary' ? 0.11 : 0.2;
+      if (now - lastFireTime.current >= fireInterval) {
+        lastFireTime.current = now;
+        fireOneBullet();
+      }
+    }
+  }, [mobileFiring]);
+
+  // 行動端滑動旋轉視角觸控監聽
+  useEffect(() => {
+    if (device !== 'mobile' || gameState !== 'active') return;
+
+    const handleTouchStart = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        
+        // 避開左側搖桿區與右側的所有按鈕、互動框
+        const isJoystickArea = touch.clientX < window.innerWidth * 0.45 && touch.clientY > window.innerHeight * 0.45;
+        const isButton = e.target.closest('button') || e.target.closest('.mobile-btn') || e.target.closest('.mobile-pause-btn') || e.target.closest('.interaction-prompt');
+        
+        if (!isJoystickArea && !isButton && lookTouchId.current === null) {
+          lookTouchId.current = touch.identifier;
+          lastLookPos.current = { x: touch.clientX, y: touch.clientY };
+          break;
+        }
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (lookTouchId.current === null) return;
+      
+      let lookTouch = null;
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === lookTouchId.current) {
+          lookTouch = e.touches[i];
+          break;
+        }
+      }
+      
+      if (!lookTouch) return;
+
+      const deltaX = lookTouch.clientX - lastLookPos.current.x;
+      const deltaY = lookTouch.clientY - lastLookPos.current.y;
+      
+      lastLookPos.current = { x: lookTouch.clientX, y: lookTouch.clientY };
+
+      const sensitivity = 0.0035;
+      camera.rotation.y -= deltaX * sensitivity;
+      camera.rotation.x -= deltaY * sensitivity;
+      camera.rotation.x = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, camera.rotation.x));
+    };
+
+    const handleTouchEnd = (e) => {
+      if (lookTouchId.current === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === lookTouchId.current) {
+          lookTouchId.current = null;
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [device, gameState, camera]);
+
   // 監聽爆炸產生的鏡頭抖動
   useEffect(() => {
     if (shakeTrigger > 0) {
@@ -2359,7 +2447,7 @@ function PlayerController({
   // 監聽 G 鍵拋擲手榴彈
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'KeyG' && gameStateRef.current === 'active' && document.pointerLockElement) {
+      if (e.code === 'KeyG' && gameStateRef.current === 'active' && (device === 'mobile' || document.pointerLockElement)) {
         if (grenades > 0) {
           setGrenades((prev) => prev - 1);
           
@@ -2382,12 +2470,35 @@ function PlayerController({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [grenades, camera, addGrenade, setGrenades]);
+  }, [grenades, camera, addGrenade, setGrenades, device]);
+
+  // 監聽行動端按鈕拋擲手榴彈
+  useEffect(() => {
+    if (mobileGrenadeTrigger > 0 && gameStateRef.current === 'active') {
+      if (grenades > 0) {
+        setGrenades((prev) => prev - 1);
+        
+        const pos = camera.position.clone();
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        
+        const startPos = pos.clone().add(dir.clone().multiplyScalar(0.4));
+        const velocity = dir.clone().multiplyScalar(13.0);
+        velocity.y += 4.5;
+        
+        addGrenade(startPos, velocity);
+
+        if (isTutorialRef.current) {
+          onTriggerTutorialRef.current('grenade');
+        }
+      }
+    }
+  }, [mobileGrenadeTrigger]);
 
   // 監聽 E 鍵進行補給站互動
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'KeyE' && gameStateRef.current === 'active' && document.pointerLockElement) {
+      if (e.code === 'KeyE' && gameStateRef.current === 'active' && (device === 'mobile' || document.pointerLockElement)) {
         if (prevNearStation.current === 'ammo') {
           onInteractAmmo();
         } else if (prevNearStation.current === 'med') {
@@ -2397,7 +2508,7 @@ function PlayerController({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onInteractAmmo, onInteractMed]);
+  }, [onInteractAmmo, onInteractMed, device]);
 
   // 監聽重置訊號
   useEffect(() => {
@@ -2418,7 +2529,7 @@ function PlayerController({
   useEffect(() => {
     const handleMouseDown = (e) => {
       if (e.button === 2) {
-        if (gameStateRef.current === 'active' && document.pointerLockElement && !isHealingRef.current) {
+        if (gameStateRef.current === 'active' && (device === 'mobile' || document.pointerLockElement) && !isHealingRef.current) {
           setIsAds(true);
         }
       }
@@ -2436,7 +2547,7 @@ function PlayerController({
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [setIsAds]);
+  }, [setIsAds, device]);
 
   // 核心單發開火函式
   const fireOneBullet = () => {
@@ -2483,7 +2594,16 @@ function PlayerController({
     recoilOffset.current = activeWeaponRef.current === 'primary' ? 0.07 : 0.04;
 
     let currentSpread = 0.02;
-    const keysState = keys.current;
+    const keyboardState = keys.current;
+    const keysState = {
+      moveForward: keyboardState.moveForward || (mobileKeysRef.current ? mobileKeysRef.current.moveForward : false),
+      moveBackward: keyboardState.moveBackward || (mobileKeysRef.current ? mobileKeysRef.current.moveBackward : false),
+      moveLeft: keyboardState.moveLeft || (mobileKeysRef.current ? mobileKeysRef.current.moveLeft : false),
+      moveRight: keyboardState.moveRight || (mobileKeysRef.current ? mobileKeysRef.current.moveRight : false),
+      jump: keyboardState.jump || (mobileKeysRef.current ? mobileKeysRef.current.jump : false),
+      run: keyboardState.run || (mobileKeysRef.current ? mobileKeysRef.current.run : false),
+      crouch: keyboardState.crouch || (mobileKeysRef.current ? mobileKeysRef.current.crouch : false),
+    };
     const isMoving = keysState.moveForward || keysState.moveBackward || keysState.moveLeft || keysState.moveRight;
 
     if (!isGrounded.current) {
@@ -2658,7 +2778,16 @@ function PlayerController({
     // ------------------------------------------
     // 6.2 移動物理與滑動碰撞偵測 (Sliding AABB Collision)
     // ------------------------------------------
-    const keysState = keys.current;
+    const keyboardState = keys.current;
+    const keysState = {
+      moveForward: keyboardState.moveForward || (mobileKeysRef.current ? mobileKeysRef.current.moveForward : false),
+      moveBackward: keyboardState.moveBackward || (mobileKeysRef.current ? mobileKeysRef.current.moveBackward : false),
+      moveLeft: keyboardState.moveLeft || (mobileKeysRef.current ? mobileKeysRef.current.moveLeft : false),
+      moveRight: keyboardState.moveRight || (mobileKeysRef.current ? mobileKeysRef.current.moveRight : false),
+      jump: keyboardState.jump || (mobileKeysRef.current ? mobileKeysRef.current.jump : false),
+      run: keyboardState.run || (mobileKeysRef.current ? mobileKeysRef.current.run : false),
+      crouch: keyboardState.crouch || (mobileKeysRef.current ? mobileKeysRef.current.crouch : false),
+    };
     const frontVector = new THREE.Vector3();
     const sideVector = new THREE.Vector3();
     const direction = new THREE.Vector3();
@@ -2844,9 +2973,25 @@ function PlayerController({
 export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [isLocked, setIsLocked] = useState(false);
+  const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
 
   // 開鏡瞄準 (ADS) 的 React 狀態
   const [isAds, setIsAds] = useState(false);
+
+  // 行動端專屬狀態
+  const [mobileFiring, setMobileFiring] = useState(false);
+  const [mobileGrenadeTrigger, setMobileGrenadeTrigger] = useState(0);
+  const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
+  const [mobileCrouch, setMobileCrouch] = useState(false);
+  const mobileKeysRef = useRef({
+    moveForward: false,
+    moveBackward: false,
+    moveLeft: false,
+    moveRight: false,
+    run: false,
+    jump: false,
+    crouch: false,
+  });
 
   // 主副武器切換、彈藥與射擊模式狀態
   const [activeWeapon, setActiveWeapon] = useState('primary'); // 'primary' or 'secondary'
@@ -2957,66 +3102,110 @@ export default function App() {
     }
   }, [isLocked]);
 
+  // ==========================================
+  // 行動端與鍵盤觸發器重構 Restructured Triggers
+  // ==========================================
+  const triggerWeaponSwitch = () => {
+    if (gameState !== 'active' || isHealing) return;
+    if (isReloading) {
+      setIsReloading(false);
+      if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
+    }
+    setActiveWeapon((prev) => (prev === 'primary' ? 'secondary' : 'primary'));
+    soundManager.playWeaponSwitch();
+  };
+
+  const triggerReload = () => {
+    if (gameState !== 'active' || isReloading || isHealing) return;
+    const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
+    const maxAmmo = activeWeapon === 'primary' ? 30 : 15;
+    if (currentAmmo < maxAmmo) {
+      setIsReloading(true);
+      if (activeWeapon === 'primary') {
+        soundManager.playReload();
+      } else {
+        soundManager.playPistolReload();
+      }
+      reloadTimeoutRef.current = setTimeout(() => {
+        if (activeWeapon === 'primary') {
+          setPrimaryAmmo(30);
+        } else {
+          setSecondaryAmmo(15);
+        }
+        setIsReloading(false);
+      }, activeWeapon === 'primary' ? 1500 : 1000);
+    }
+  };
+
+  const triggerHeal = () => {
+    if (gameState !== 'active' || isHealing || isReloading) return;
+    if (health >= 100) return;
+    
+    setIsAds(false); // 補血時強迫解除開鏡
+    setIsHealing(true);
+    setHealProgress(0);
+    soundManager.playHeal();
+    
+    if (healIntervalRef.current) clearInterval(healIntervalRef.current);
+    if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+    
+    let progress = 0;
+    const duration = 2000; // 2秒補血動作
+    const intervalTime = 50;
+    const step = (intervalTime / duration) * 100;
+    
+    healIntervalRef.current = setInterval(() => {
+      progress += step;
+      if (progress >= 100) {
+        clearInterval(healIntervalRef.current);
+        setHealProgress(100);
+      } else {
+        setHealProgress(progress);
+      }
+    }, intervalTime);
+
+    healTimeoutRef.current = setTimeout(() => {
+      setHealth(100);
+      setIsHealing(false);
+      setHealProgress(0);
+      soundManager.playSuccessChime();
+    }, duration);
+  };
+
+  const triggerFireMode = () => {
+    if (gameState !== 'active') return;
+    if (activeWeapon === 'secondary') return; // M9 鎖定半自動
+    setPrimaryFireMode((prev) => {
+      const next = prev === 'auto' ? 'semi' : 'auto';
+      if (isTutorial) triggerTutorialStep('fireMode');
+      return next;
+    });
+  };
+
   // 監聽 1 鍵與 2 鍵切換主副武器
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'active' || !isLocked || isHealing) return;
-      if (e.code === 'Digit1') {
-        if (activeWeapon !== 'primary') {
-          // 如果正在裝彈，取消裝彈
-          if (isReloading) {
-            setIsReloading(false);
-            if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
-          }
-          setActiveWeapon('primary');
-          soundManager.playWeaponSwitch();
-        }
-      } else if (e.code === 'Digit2') {
-        if (activeWeapon !== 'secondary') {
-          // 如果正在裝彈，取消裝彈
-          if (isReloading) {
-            setIsReloading(false);
-            if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
-          }
-          setActiveWeapon('secondary');
-          soundManager.playWeaponSwitch();
-        }
+      if (e.code === 'Digit1' && activeWeapon !== 'primary') {
+        triggerWeaponSwitch();
+      } else if (e.code === 'Digit2' && activeWeapon !== 'secondary') {
+        triggerWeaponSwitch();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, isLocked, activeWeapon, isReloading, isHealing]);
+  }, [gameState, isLocked, activeWeapon, isHealing]);
 
   // 監聽 R 鍵重新裝彈，播放合成重新裝彈聲
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'active' || !isLocked || isReloading || isHealing) return;
-      
-      const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
-      const maxAmmo = activeWeapon === 'primary' ? 30 : 15;
-      
-      if (e.code === 'KeyR' && currentAmmo < maxAmmo) {
-        setIsReloading(true);
-        if (activeWeapon === 'primary') {
-          soundManager.playReload();
-        } else {
-          soundManager.playPistolReload();
-        }
-        
-        reloadTimeoutRef.current = setTimeout(() => {
-          if (activeWeapon === 'primary') {
-            setPrimaryAmmo(30);
-          } else {
-            setSecondaryAmmo(15);
-          }
-          setIsReloading(false);
-        }, activeWeapon === 'primary' ? 1500 : 1000);
+      if (e.code === 'KeyR') {
+        triggerReload();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState, isLocked, isReloading, isHealing, activeWeapon, primaryAmmo, secondaryAmmo]);
 
   // 單獨的 useEffect 確保 App 元件卸載時清除 reload/heal timeout
@@ -3049,55 +3238,18 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (gameState !== 'active' || !isLocked || isHealing || isReloading) return;
       if (e.code === 'Digit5' || e.code === 'Numpad5') {
-        if (health >= 100) return;
-        
-        setIsAds(false); // 補血時強迫解除開鏡
-        setIsHealing(true);
-        setHealProgress(0);
-        soundManager.playHeal();
-        
-        if (healIntervalRef.current) clearInterval(healIntervalRef.current);
-        if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
-        
-        let progress = 0;
-        const duration = 2000; // 2秒補血動作
-        const intervalTime = 50;
-        const step = (intervalTime / duration) * 100;
-        
-        healIntervalRef.current = setInterval(() => {
-          progress += step;
-          if (progress >= 100) {
-            clearInterval(healIntervalRef.current);
-            setHealProgress(100);
-          } else {
-            setHealProgress(progress);
-          }
-        }, intervalTime);
-
-        healTimeoutRef.current = setTimeout(() => {
-          setHealth(100);
-          setIsHealing(false);
-          setHealProgress(0);
-          soundManager.playSuccessChime();
-        }, duration);
+        triggerHeal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState, isLocked, isHealing, isReloading, health]);
 
   // 監聽 B 鍵切換射擊模式 (連發/單發)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'KeyB' && gameState === 'active' && isLocked) {
-        if (activeWeapon === 'secondary') return; // M9 鎖定為半自動，B 鍵切換無效
-        setPrimaryFireMode((prev) => {
-          const next = prev === 'auto' ? 'semi' : 'auto';
-          if (isTutorial) triggerTutorialStep('fireMode');
-          return next;
-        });
+        triggerFireMode();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -3116,10 +3268,16 @@ export default function App() {
 
   // 點擊「DEPLOY」按鈕進入遊戲並鎖定滑鼠
   const handleDeploy = () => {
-    if (controlsRef.current) {
-      controlsRef.current.lock();
+    if (device === 'mobile') {
+      setIsLocked(true);
       setGameState('active');
-      soundManager.startAmbient(); // 啟動背景基地環境音
+      soundManager.startAmbient();
+    } else {
+      if (controlsRef.current) {
+        controlsRef.current.lock();
+        setGameState('active');
+        soundManager.startAmbient();
+      }
     }
   };
 
@@ -3463,7 +3621,9 @@ export default function App() {
     soundManager.startAmbient(); // 重啟基地背景音
 
     setTimeout(() => {
-      if (controlsRef.current) {
+      if (device === 'mobile') {
+        setIsLocked(true);
+      } else if (controlsRef.current) {
         controlsRef.current.lock();
       }
     }, 50);
@@ -3503,7 +3663,9 @@ export default function App() {
     soundManager.startAmbient();
 
     setTimeout(() => {
-      if (controlsRef.current) {
+      if (device === 'mobile') {
+        setIsLocked(true);
+      } else if (controlsRef.current) {
         controlsRef.current.lock();
       }
     }, 50);
@@ -3540,7 +3702,9 @@ export default function App() {
     soundManager.startAmbient();
 
     setTimeout(() => {
-      if (controlsRef.current) {
+      if (device === 'mobile') {
+        setIsLocked(true);
+      } else if (controlsRef.current) {
         controlsRef.current.lock();
       }
     }, 50);
@@ -3550,7 +3714,9 @@ export default function App() {
   const handleReturnToLobby = () => {
     setIsTutorial(false);
     setGameState('deploying');
-    if (controlsRef.current) {
+    if (device === 'mobile') {
+      setIsLocked(false);
+    } else if (controlsRef.current) {
       controlsRef.current.unlock();
     }
   };
@@ -3558,11 +3724,13 @@ export default function App() {
   // 監聽教學任務全部完成時，自動解鎖游標
   useEffect(() => {
     if (isTutorial && Object.values(tutorialChecklist).every((val) => val === true)) {
-      if (controlsRef.current) {
+      if (device === 'mobile') {
+        setIsLocked(false);
+      } else if (controlsRef.current) {
         controlsRef.current.unlock();
       }
     }
-  }, [tutorialChecklist, isTutorial]);
+  }, [tutorialChecklist, isTutorial, device]);
 
   // 勝利或失敗狀態下，按 R 鍵亦能快速重新部署
   useEffect(() => {
@@ -3576,6 +3744,85 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState]);
+
+  // ==========================================
+  // 行動端虛擬搖桿事件處理 Joystick Touch Handlers
+  // ==========================================
+  const joystickTouchId = useRef(null);
+  const joystickCenter = useRef({ x: 0, y: 0 });
+  const joystickRadius = useRef(50);
+
+  const handleJoystickStart = (e) => {
+    if (joystickTouchId.current !== null) return;
+    const touch = e.changedTouches[0];
+    joystickTouchId.current = touch.identifier;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    joystickCenter.current = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+    joystickRadius.current = rect.width / 2;
+  };
+
+  const handleJoystickMove = (e) => {
+    if (joystickTouchId.current === null) return;
+    
+    let touch = null;
+    for (let i = 0; i < e.touches.length; i++) {
+      if (e.touches[i].identifier === joystickTouchId.current) {
+        touch = e.touches[i];
+        break;
+      }
+    }
+    if (!touch) return;
+
+    let dx = touch.clientX - joystickCenter.current.x;
+    let dy = touch.clientY - joystickCenter.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = joystickRadius.current;
+
+    if (dist > maxDist) {
+      dx = (dx / dist) * maxDist;
+      dy = (dy / dist) * maxDist;
+    }
+
+    setJoystickPos({ x: dx, y: dy });
+
+    const nx = dx / maxDist;
+    const ny = dy / maxDist;
+
+    // 映射到移動按鍵 mapping to movement keys
+    mobileKeysRef.current.moveLeft = nx < -0.25;
+    mobileKeysRef.current.moveRight = nx > 0.25;
+    mobileKeysRef.current.moveForward = ny < -0.25;
+    mobileKeysRef.current.moveBackward = ny > 0.25;
+
+    // 行動端奔跑判定 (推到底時跑) mobile sprint trigger
+    mobileKeysRef.current.run = (ny < -0.75 && Math.abs(nx) < 0.5);
+  };
+
+  const handleJoystickEnd = (e) => {
+    if (joystickTouchId.current === null) return;
+    
+    let isEnd = false;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === joystickTouchId.current) {
+        isEnd = true;
+        break;
+      }
+    }
+
+    if (isEnd) {
+      joystickTouchId.current = null;
+      setJoystickPos({ x: 0, y: 0 });
+      mobileKeysRef.current.moveLeft = false;
+      mobileKeysRef.current.moveRight = false;
+      mobileKeysRef.current.moveForward = false;
+      mobileKeysRef.current.moveBackward = false;
+      mobileKeysRef.current.run = false;
+    }
+  };
 
   const isTutorialComplete = isTutorial && Object.values(tutorialChecklist).every((val) => val === true);
 
@@ -3607,15 +3854,15 @@ export default function App() {
           <h3>TUTORIAL PROGRESS</h3>
           <div className={`checklist-item ${tutorialChecklist.move ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.move ? '✔' : ''}</div>
-            <span>WASD 移動控制</span>
+            <span>{device === 'pc' ? 'WASD 移動控制' : '虛擬搖桿 移動控制'}</span>
           </div>
           <div className={`checklist-item ${tutorialChecklist.sprintJump ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.sprintJump ? '✔' : ''}</div>
-            <span>Shift 奔跑 + Space 跳躍</span>
+            <span>{device === 'pc' ? 'Shift 奔跑 + Space 跳躍' : '搖桿推頂端奔跑 + JUMP 跳躍'}</span>
           </div>
           <div className={`checklist-item ${tutorialChecklist.fireMode ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.fireMode ? '✔' : ''}</div>
-            <span>B 鍵切換單發/連發</span>
+            <span>{device === 'pc' ? 'B 鍵切換單發/連發' : '點擊模式欄或 B 鍵切換單發/連發'}</span>
           </div>
           <div className={`checklist-item ${tutorialChecklist.shoot ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.shoot ? '✔' : ''}</div>
@@ -3627,11 +3874,11 @@ export default function App() {
           </div>
           <div className={`checklist-item ${tutorialChecklist.grenade ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.grenade ? '✔' : ''}</div>
-            <span>G 鍵投擲戰術手榴彈</span>
+            <span>{device === 'pc' ? 'G 鍵投擲戰術手榴彈' : 'GND 按鈕投擲戰術手榴彈'}</span>
           </div>
           <div className={`checklist-item ${tutorialChecklist.refill ? 'completed' : ''}`}>
             <div className="checklist-checkbox">{tutorialChecklist.refill ? '✔' : ''}</div>
-            <span>E 鍵至中央彈藥箱補給</span>
+            <span>{device === 'pc' ? 'E 鍵至中央彈藥箱補給' : '點擊互動提示進行彈藥補給'}</span>
           </div>
         </div>
       )}
@@ -3699,18 +3946,30 @@ export default function App() {
 
       {/* 物資箱範圍互動提示 */}
       {gameState === 'active' && isLocked && nearStation && (
-        <div className={`interaction-prompt ${(nearStation === 'ammo' ? ammoCooldown : medCooldown) > 0 ? 'cooldown' : ''}`}>
+        <div 
+          className={`interaction-prompt ${(nearStation === 'ammo' ? ammoCooldown : medCooldown) > 0 ? 'cooldown' : ''}`}
+          onClick={() => {
+            if (device === 'mobile') {
+              if (nearStation === 'ammo') handleInteractAmmo();
+              if (nearStation === 'med') handleInteractMed();
+            }
+          }}
+          style={{
+            pointerEvents: device === 'mobile' ? 'auto' : 'none',
+            cursor: device === 'mobile' ? 'pointer' : 'default'
+          }}
+        >
           {nearStation === 'ammo' ? (
             ammoCooldown > 0 ? (
               `STATION RECHARGING (${ammoCooldown}s)`
             ) : (
-              "PRESS [E] TO REFILL AMMO & GRENADES"
+              device === 'mobile' ? "TAP TO REFILL AMMO & GRENADES" : "PRESS [E] TO REFILL AMMO & GRENADES"
             )
           ) : (
             medCooldown > 0 ? (
               `STATION RECHARGING (${medCooldown}s)`
             ) : (
-              "PRESS [E] TO RESTORE HEALTH"
+              device === 'mobile' ? "TAP TO RESTORE HEALTH" : "PRESS [E] TO RESTORE HEALTH"
             )
           )}
         </div>
@@ -3721,37 +3980,80 @@ export default function App() {
         <>
           {gameState === 'deploying' && (
             <div className="menu-overlay">
-              <div className="hud-panel" style={{ maxWidth: '600px' }}>
-                <h1 className="hud-title">DELTA FORCE</h1>
-                <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
-                
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                  <button className="deploy-button" onClick={handleDeploy}>
-                    DEPLOY TO MISSION
-                  </button>
-                  <button 
-                    className="deploy-button" 
-                    style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)' }}
-                    onClick={handleStartTutorial}
-                  >
-                    START TRAINING
-                  </button>
+              {device === null ? (
+                <div className="hud-panel" style={{ maxWidth: '600px' }}>
+                  <h1 className="hud-title">DELTA FORCE</h1>
+                  <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
+                  <div style={{ fontSize: '1.1rem', marginBottom: '25px', color: '#88a888', letterSpacing: '2px' }}>
+                    SELECT CONTROL INTERFACE
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <button className="deploy-button" onClick={() => setDevice('pc')}>
+                      DESKTOP (PC 電腦)
+                    </button>
+                    <button 
+                      className="deploy-button" 
+                      style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)' }}
+                      onClick={() => setDevice('mobile')}
+                    >
+                      MOBILE (行動裝置)
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <div className="hud-panel" style={{ maxWidth: '600px' }}>
+                  <h1 className="hud-title">DELTA FORCE</h1>
+                  <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
+                    <button className="deploy-button" onClick={handleDeploy}>
+                      DEPLOY TO MISSION
+                    </button>
+                    <button 
+                      className="deploy-button" 
+                      style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)' }}
+                      onClick={handleStartTutorial}
+                    >
+                      START TRAINING
+                    </button>
+                  </div>
 
-                <div className="controls-guide">
-                  <div><span className="key-cap">W</span><span className="key-cap">A</span><span className="key-cap">S</span><span className="key-cap">D</span> 控制前、左、後、右移動</div>
-                  <div><span className="key-cap">Shift</span> 按住跑步</div>
-                  <div><span className="key-cap">Space</span> 進行跳躍</div>
-                  <div><span className="key-cap">滑鼠左鍵</span> 進行射擊</div>
-                  <div><span className="key-cap">滑鼠右鍵</span> 按住開鏡瞄準 (ADS)</div>
-                  <div><span className="key-cap">B</span> 切換單發 / 連發射擊模式</div>
-                  <div><span className="key-cap">G</span> 拋擲戰術手榴彈 (引信 2.5 秒)</div>
-                  <div><span className="key-cap">R</span> 重新裝彈 (1.5 秒)</div>
-                  <div><span className="key-cap">5</span> 使用醫療包 (2.0 秒，回滿血量)</div>
-                  <div><span className="key-cap">Esc</span> 暫停遊戲</div>
-                  <div style={{ marginTop: '10px', color: '#ffaa00' }}>※ 點擊按鈕或畫面開始以進行第一人稱視角控制。</div>
+                  {device === 'pc' ? (
+                    <div className="controls-guide">
+                      <div><span className="key-cap">W</span><span className="key-cap">A</span><span className="key-cap">S</span><span className="key-cap">D</span> 控制前、左、後、右移動</div>
+                      <div><span className="key-cap">Shift</span> 按住跑步</div>
+                      <div><span className="key-cap">Space</span> 進行跳躍</div>
+                      <div><span className="key-cap">滑鼠左鍵</span> 進行射擊</div>
+                      <div><span className="key-cap">滑鼠右鍵</span> 按住開鏡瞄準 (ADS)</div>
+                      <div><span className="key-cap">B</span> 切換單發 / 連發射擊模式</div>
+                      <div><span className="key-cap">G</span> 拋擲戰術手榴彈 (引信 2.5 秒)</div>
+                      <div><span className="key-cap">R</span> 重新裝彈 (1.5 秒)</div>
+                      <div><span className="key-cap">5</span> 使用醫療包 (2.0 秒，回滿血量)</div>
+                      <div><span className="key-cap">Esc</span> 暫停遊戲</div>
+                      <div style={{ marginTop: '10px', color: '#ffaa00' }}>※ 點擊按鈕或畫面開始以進行第一人稱視角控制。</div>
+                    </div>
+                  ) : (
+                    <div className="controls-guide">
+                      <div>左下角 <span className="key-cap">虛擬搖桿</span> 控制前後左右移動與跑步</div>
+                      <div>右側 <span className="key-cap">FIRE</span> 按鈕射擊</div>
+                      <div>右側 <span className="key-cap">ADS</span> 按鈕開鏡瞄準</div>
+                      <div>右側 <span className="key-cap">JUMP</span> / <span className="key-cap">CCH</span> 按鈕跳躍與蹲下</div>
+                      <div>右側 <span className="key-cap">RLD</span> / <span className="key-cap">SWT</span> 重新裝彈與切換武器</div>
+                      <div>右側 <span className="key-cap">GND</span> / <span className="key-cap">HEAL</span> 丟手榴彈與醫療包</div>
+                      <div>右上角 <span className="key-cap">PAUSE</span> 暫停遊戲</div>
+                      <div style={{ marginTop: '10px', color: '#00e5ff' }}>※ 滑動螢幕右側區域可控制視角旋轉。</div>
+                    </div>
+                  )}
+                  
+                  <button 
+                    className="tutorial-complete-button" 
+                    style={{ background: 'transparent', border: 'none', color: '#88a888', textShadow: 'none', fontSize: '0.8rem', marginTop: '15px' }}
+                    onClick={() => setDevice(null)}
+                  >
+                    ← CHANGE DEVICE
+                  </button>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -3773,7 +4075,7 @@ export default function App() {
                 <h1 className="hud-title" style={{ color: '#00ff66' }}>MISSION ACCOMPLISHED</h1>
                 <p className="hud-subtitle">ALL HOSTILES ELIMINATED | SECURED</p>
                 <button className="deploy-button" onClick={handleRestart}>
-                  RE-DEPLOY (R)
+                  RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>
             </div>
@@ -3785,12 +4087,105 @@ export default function App() {
                 <h1 className="hud-title" style={{ color: '#ffaa00' }}>MISSION FAILED</h1>
                 <p className="hud-subtitle">KIA - KILLED IN ACTION</p>
                 <button className="deploy-button" onClick={handleRestart}>
-                  RE-DEPLOY (R)
+                  RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>
             </div>
           )}
         </>
+      )}
+
+      {/* 行動端虛擬搖桿與動作按鈕 overlays (僅在遊戲開始且為行動裝置時呈現) */}
+      {device === 'mobile' && gameState !== 'deploying' && isLocked && (
+        <div className="mobile-controls">
+          {/* 搖桿 Joystick */}
+          <div 
+            className="joystick-container"
+            onTouchStart={handleJoystickStart}
+            onTouchMove={handleJoystickMove}
+            onTouchEnd={handleJoystickEnd}
+          >
+            <div className="joystick-base">
+              <div 
+                className="joystick-handle" 
+                style={{
+                  transform: `translate(${joystickPos.x}px, ${joystickPos.y}px)`
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 動作按鈕 Action Buttons */}
+          <div className="mobile-buttons-container">
+            {/* 開火 */}
+            <div 
+              className="mobile-btn btn-fire"
+              onTouchStart={() => setMobileFiring(true)}
+              onTouchEnd={() => setMobileFiring(false)}
+            >
+              FIRE
+            </div>
+            
+            {/* 跳躍 */}
+            <div 
+              className="mobile-btn btn-jump"
+              onTouchStart={() => { mobileKeysRef.current.jump = true }}
+              onTouchEnd={() => { mobileKeysRef.current.jump = false }}
+            >
+              JUMP
+            </div>
+            
+            {/* 開鏡瞄準 ADS */}
+            <div 
+              className={`mobile-btn btn-ads ${isAds ? 'active' : ''}`}
+              onClick={() => setIsAds((prev) => !prev)}
+            >
+              ADS
+            </div>
+
+            {/* 蹲下 */}
+            <div 
+              className={`mobile-btn btn-crouch ${mobileCrouch ? 'active' : ''}`}
+              onClick={() => {
+                setMobileCrouch((prev) => {
+                  const next = !prev;
+                  mobileKeysRef.current.crouch = next;
+                  return next;
+                });
+              }}
+            >
+              CCH
+            </div>
+
+            {/* 換彈 */}
+            <div className="mobile-btn btn-reload" onClick={triggerReload}>
+              RLD
+            </div>
+
+            {/* 切槍 */}
+            <div className="mobile-btn btn-switch" onClick={triggerWeaponSwitch}>
+              SWT
+            </div>
+
+            {/* 手榴彈 */}
+            <div className="mobile-btn btn-grenade" onClick={() => setMobileGrenadeTrigger((prev) => prev + 1)}>
+              GND
+            </div>
+
+            {/* 補血 */}
+            <div className="mobile-btn btn-heal" onClick={triggerHeal}>
+              HEAL
+            </div>
+          </div>
+
+          {/* 暫停 */}
+          <button 
+            className="mobile-pause-btn"
+            onClick={() => setIsLocked(false)}
+          >
+            PAUSE
+          </button>
+        </div>
       )}
 
       {/* 2.2 遊戲 HUD 狀態疊加層 (僅在遊戲開始後顯示) */}
@@ -3829,13 +4224,18 @@ export default function App() {
                     <span className="hud-large-num" style={{ color: ammo <= (activeWeapon === 'primary' ? 5 : 3) ? '#ffaa00' : 'inherit' }}>
                       {ammo}
                     </span>
-                    <span className="hud-small-label">/ {activeWeapon === 'primary' ? '30' : '15'} (R)</span>
+                    <span className="hud-small-label">/ {activeWeapon === 'primary' ? '30' : '15'} {device === 'pc' ? '(R)' : ''}</span>
                   </>
                 )}
               </div>
               <div className="hud-sys-status" style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                 <span>WEAPON: <span className="sys-active" style={{ color: '#00ff66', fontWeight: 'bold' }}>{activeWeapon === 'primary' ? 'M4A1' : 'M9'}</span> <span style={{ color: ammo === 0 ? '#ffaa00' : '#88a888', fontSize: '0.8rem' }}>({ammo === 0 ? 'EMPTY' : 'READY'})</span></span>
-                <span>MODE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{fireMode === 'auto' ? 'AUTO [B]' : 'SEMI [B]'}</span></span>
+                <span 
+                  onClick={device === 'mobile' ? triggerFireMode : undefined} 
+                  style={{ cursor: device === 'mobile' ? 'pointer' : 'default', userSelect: 'none' }}
+                >
+                  MODE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{fireMode === 'auto' ? 'AUTO' : 'SEMI'}{device === 'pc' ? ' [B]' : ' ⇦'}</span>
+                </span>
               </div>
             </div>
 
@@ -3845,7 +4245,7 @@ export default function App() {
                 <span className="hud-large-num" style={{ color: grenades === 0 ? '#ffaa00' : 'inherit' }}>
                   {grenades}
                 </span>
-                <span className="hud-small-label">/ 2 (G)</span>
+                <span className="hud-small-label">/ 2 {device === 'pc' ? '(G)' : ''}</span>
               </div>
               <div className="hud-sys-status">
                 GRENADE: <span className="sys-active" style={{ color: grenades === 0 ? '#ffaa00' : '#00ff66' }}>{grenades === 0 ? 'DEPLETED' : 'READY'}</span>
@@ -3962,14 +4362,20 @@ export default function App() {
             isTutorial={isTutorial}
             onTriggerTutorial={triggerTutorialStep}
             activeWeapon={activeWeapon}
+            device={device}
+            mobileKeysRef={mobileKeysRef}
+            mobileFiring={mobileFiring}
+            mobileGrenadeTrigger={mobileGrenadeTrigger}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
-          <PointerLockControls
-            ref={controlsRef}
-            onLock={() => setIsLocked(true)}
-            onUnlock={() => setIsLocked(false)}
-          />
+          {device !== 'mobile' && (
+            <PointerLockControls
+              ref={controlsRef}
+              onLock={() => setIsLocked(true)}
+              onUnlock={() => setIsLocked(false)}
+            />
+          )}
         </Canvas>
       </div>
     </>
