@@ -639,7 +639,7 @@ const COVERS = [
 ];
 
 const AMMO_STATION_POS = new THREE.Vector3(0, 0, -0.8);
-const MED_STATION_POS = new THREE.Vector3(3.0, 0, 22.0);
+const MED_STATION_POS = new THREE.Vector3(3.0, 0, 92.0);
 
 const STATIC_COLLIDERS = [
   // 1. Guard Towers (4 corners)
@@ -732,7 +732,7 @@ const STATIC_COLLIDERS = [
 
   // 8. Supply Stations
   { x: 0, z: -0.8, hx: 0.7, hz: 0.5 }, // Ammo Supply Station
-  { x: 3.0, z: 22.0, hx: 0.45, hz: 0.35 }, // Medical Supply Station
+  { x: 3.0, z: 92.0, hx: 0.45, hz: 0.35 }, // Medical Supply Station
 
   // 9. Military Bunker A Walls & Interior Crates (Center: -45, -20)
   { x: -49, z: -20, hx: 0.15, hz: 3.0 }, // Left Wall
@@ -2627,18 +2627,30 @@ function PlayerController({
       let hit = null;
       for (let i = 0; i < intersects.length; i++) {
         let obj = intersects[i].object;
-        let isSelf = false;
-        while (obj) {
-          if (obj.name === 'weapon' || obj.name === 'player') {
-            isSelf = true;
+        
+        // Skip player self, weapon meshes, cosmetics, and helper lines/grids
+        let skip = false;
+        let parent = obj;
+        while (parent) {
+          if (parent.name === 'weapon' || 
+              parent.name === 'player' || 
+              parent.name === 'bullet_hole' || 
+              parent.name === 'tracer' || 
+              parent.name === 'casing' || 
+              parent.name === 'magazine' ||
+              parent.type === 'GridHelper' ||
+              parent.type === 'LineSegments' ||
+              parent.type === 'Line' ||
+              parent.userData.isPlayer) {
+            skip = true;
             break;
           }
-          obj = obj.parent;
+          parent = parent.parent;
         }
-        if (!isSelf) {
-          hit = intersects[i];
-          break;
-        }
+        if (skip) continue;
+        
+        hit = intersects[i];
+        break;
       }
 
       if (hit) {
