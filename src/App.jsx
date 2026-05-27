@@ -641,6 +641,16 @@ const COVERS = [
 const AMMO_STATION_POS = new THREE.Vector3(0, 0, -0.8);
 const MED_STATION_POS = new THREE.Vector3(3.0, 0, 92.0);
 
+const Y_PLATFORMS = [
+  // Two-Story Building 1 (Center: -65, -45)
+  { type: 'flat', x1: -69, x2: -61, z1: -49, z2: -41, y: 3.6 },
+  { type: 'ramp', x1: -69, x2: -67, z1: -45, z2: -37, y1: 3.6, y2: 0, dir: 'z' },
+  
+  // Two-Story Building 2 (Center: 65, 45)
+  { type: 'flat', x1: 61, x2: 69, z1: 41, z2: 49, y: 3.6 },
+  { type: 'ramp', x1: 61, x2: 63, z1: 45, z2: 53, y1: 3.6, y2: 0, dir: 'z' }
+];
+
 const STATIC_COLLIDERS = [
   // 1. Guard Towers (4 corners)
   { x: -95, z: -95, hx: 1.6, hz: 1.6 },
@@ -760,6 +770,34 @@ const STATIC_COLLIDERS = [
   { x: -12.25, z: -42, hx: 1.25, hz: 0.15 }, // Front Right Wall
   { x: -17.2, z: -46.8, hx: 0.6, hz: 0.6 }, // Left Interior Crate
   { x: -12.8, z: -46.8, hx: 0.6, hz: 0.6 }, // Right Interior Crate
+
+  // 12. Two-Story Building 1 (Center: -65, -45)
+  { x: -65, z: -49, hx: 4.0, hz: 0.2, minY: 0, maxY: 3.6 }, // Back Wall
+  { x: -69, z: -45, hx: 0.2, hz: 4.0, minY: 0, maxY: 3.6 }, // Left Wall
+  { x: -61, z: -45, hx: 0.2, hz: 4.0, minY: 0, maxY: 3.6 }, // Right Wall
+  { x: -67.75, z: -41, hx: 1.25, hz: 0.2, minY: 0, maxY: 3.6 }, // Front Left Wall
+  { x: -62.25, z: -41, hx: 1.25, hz: 0.2, minY: 0, maxY: 3.6 }, // Front Right Wall
+  { x: -69, z: -41, hx: 0.1, hz: 4.0, minY: 0, maxY: 3.6 }, // Ramp Left Rail
+  { x: -67, z: -41, hx: 0.1, hz: 4.0, minY: 0, maxY: 3.6 }, // Ramp Right Rail
+  { x: -65, z: -49.1, hx: 4.1, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Back Railing
+  { x: -69.1, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Left Railing
+  { x: -60.9, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Right Railing
+  { x: -62.25, z: -40.9, hx: 1.25, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Right Rail
+  { x: -65.5, z: -40.9, hx: 2.0, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Left Rail
+
+  // 13. Two-Story Building 2 (Center: 65, 45)
+  { x: 65, z: 41, hx: 4.0, hz: 0.2, minY: 0, maxY: 3.6 }, // Back Wall
+  { x: 61, z: 45, hx: 0.2, hz: 4.0, minY: 0, maxY: 3.6 }, // Left Wall
+  { x: 69, z: 45, hx: 0.2, hz: 4.0, minY: 0, maxY: 3.6 }, // Right Wall
+  { x: 62.25, z: 49, hx: 1.25, hz: 0.2, minY: 0, maxY: 3.6 }, // Front Left Wall
+  { x: 67.75, z: 49, hx: 1.25, hz: 0.2, minY: 0, maxY: 3.6 }, // Front Right Wall
+  { x: 61, z: 49, hx: 0.1, hz: 4.0, minY: 0, maxY: 3.6 }, // Ramp Left Rail
+  { x: 63, z: 49, hx: 0.1, hz: 4.0, minY: 0, maxY: 3.6 }, // Ramp Right Rail
+  { x: 65, z: 40.9, hx: 4.1, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Back Railing
+  { x: 60.9, z: 45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Left Railing
+  { x: 69.1, z: 45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Right Railing
+  { x: 67.75, z: 49.1, hx: 1.25, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Left Rail
+  { x: 64.5, z: 49.1, hx: 2.0, hz: 0.1, minY: 3.6, maxY: 5.0 },  // 2nd Floor Front Right Rail
 ];
 
 const spawnEnemies = (isTutorial = false) => {
@@ -1093,7 +1131,7 @@ function Enemy({ data, onShootPlayer, onKilled }) {
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
 
-      // 敵軍碰撞檢測 (避免穿牆)
+       // 敵軍碰撞檢測 (避免穿牆)
       const enemyRadius = 0.35;
       for (let i = 0; i < STATIC_COLLIDERS.length; i++) {
         const c = STATIC_COLLIDERS[i];
@@ -1102,7 +1140,14 @@ function Enemy({ data, onShootPlayer, onKilled }) {
         const minZ = c.z - c.hz - enemyRadius;
         const maxZ = c.z + c.hz + enemyRadius;
 
-        if (enemyPos.x > minX && enemyPos.x < maxX &&
+        const enemyFeetY = enemyPos.y;
+        const enemyHeadY = enemyPos.y + 1.8;
+        const minY = c.minY !== undefined ? c.minY : 0;
+        const maxY = c.maxY !== undefined ? c.maxY : Infinity;
+        const yOverlap = enemyHeadY >= minY && enemyFeetY <= maxY;
+
+        if (yOverlap &&
+            enemyPos.x > minX && enemyPos.x < maxX &&
             enemyPos.z > minZ && enemyPos.z < maxZ) {
           const distLeft = enemyPos.x - minX;
           const distRight = maxX - enemyPos.x;
@@ -1584,6 +1629,187 @@ function MilitaryBunker({ position, rotation = [0, 0, 0] }) {
   );
 }
 
+// 全新雙層大型軍事建築 (高 3.6 米, 寬 8.0 米, 深 8.0 米, 包含爬坡鋼梯、二樓平台、科幻發光立柱)
+function TwoStoryBuilding({ position }) {
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: '#4e5357', // 混凝土灰
+    roughness: 0.85,
+    flatShading: true,
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: '#1a1f24', // 深色金屬飾條
+    roughness: 0.9,
+  });
+  const steelMat = new THREE.MeshStandardMaterial({
+    color: '#2a3038', // 鋼製爬坡梯顏色
+    roughness: 0.5,
+    metalness: 0.8,
+  });
+  const railMat = new THREE.MeshStandardMaterial({
+    color: '#1f2429', // 護欄暗色鋼材
+    roughness: 0.7,
+  });
+
+  return (
+    <group position={position}>
+      {/* ================= 1. 一樓牆面與門廊 (高度: 0 ~ 3.6 米) ================= */}
+      {/* 後外牆 */}
+      <mesh position={[0, 1.8, -4.0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[8.0, 3.6, 0.3]} />
+      </mesh>
+      {/* 左外牆 */}
+      <mesh position={[-4.0, 1.8, 0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[0.3, 3.6, 8.0]} />
+      </mesh>
+      {/* 右外牆 */}
+      <mesh position={[4.0, 1.8, 0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[0.3, 3.6, 8.0]} />
+      </mesh>
+      {/* 正面左牆 */}
+      <mesh position={[-2.75, 1.8, 4.0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 3.6, 0.3]} />
+      </mesh>
+      {/* 正面右牆 */}
+      <mesh position={[2.75, 1.8, 4.0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[2.5, 3.6, 0.3]} />
+      </mesh>
+      {/* 正面門楣上方橫樑 */}
+      <mesh position={[0, 3.1, 4.0]} material={trimMat} castShadow receiveShadow>
+        <boxGeometry args={[3.0, 1.0, 0.3]} />
+      </mesh>
+
+      {/* ================= 2. 二樓地板平台 (高度 Y: 3.6 米) ================= */}
+      <mesh position={[0, 3.6, 0]} material={wallMat} castShadow receiveShadow>
+        <boxGeometry args={[8.4, 0.2, 8.4]} />
+      </mesh>
+      {/* 二樓地板邊框飾板 */}
+      <mesh position={[0, 3.6, 4.21]} material={trimMat} castShadow>
+        <boxGeometry args={[8.4, 0.3, 0.05]} />
+      </mesh>
+      <mesh position={[0, 3.6, -4.21]} material={trimMat} castShadow>
+        <boxGeometry args={[8.4, 0.3, 0.05]} />
+      </mesh>
+      <mesh position={[4.21, 3.6, 0]} material={trimMat} castShadow>
+        <boxGeometry args={[0.05, 0.3, 8.4]} />
+      </mesh>
+      <mesh position={[-4.21, 3.6, 0]} material={trimMat} castShadow>
+        <boxGeometry args={[0.05, 0.3, 8.4]} />
+      </mesh>
+
+      {/* ================= 3. 鋼製爬坡梯/斜坡 (Z 軸 +8 到 0 米, X 軸 -3 米) ================= */}
+      {/* 坡度夾角 Math.atan2(3.6, 8.0) = 0.422 弧度, 斜度長度 8.77 米 */}
+      <group position={[-3.0, 1.8, 4.0]} rotation={[-Math.atan2(3.6, 8.0), 0, 0]}>
+        {/* 斜面鋼板底座 */}
+        <mesh material={steelMat} castShadow receiveShadow>
+          <boxGeometry args={[2.0, 0.08, 8.77]} />
+        </mesh>
+        
+        {/* 防滑梯級裝飾 */}
+        {Array.from({ length: 12 }).map((_, i) => (
+          <mesh key={i} position={[0, 0.06, -4.0 + i * 0.73]} material={trimMat} castShadow>
+            <boxGeometry args={[2.0, 0.04, 0.15]} />
+          </mesh>
+        ))}
+
+        {/* 斜坡左側安全護欄 */}
+        <mesh position={[-0.95, 0.5, 0]} material={railMat} castShadow>
+          <boxGeometry args={[0.06, 1.0, 8.77]} />
+        </mesh>
+        {/* 斜坡右側安全護欄 */}
+        <mesh position={[0.95, 0.5, 0]} material={railMat} castShadow>
+          <boxGeometry args={[0.06, 1.0, 8.77]} />
+        </mesh>
+        
+        {/* 斜坡立柱裝飾 */}
+        {Array.from({ length: 4 }).map((_, i) => (
+          <group key={i} position={[0, 0.25, -3.5 + i * 2.3]}>
+            <mesh position={[-0.95, 0, 0]} material={railMat} castShadow>
+              <boxGeometry args={[0.04, 0.5, 0.04]} />
+            </mesh>
+            <mesh position={[0.95, 0, 0]} material={railMat} castShadow>
+              <boxGeometry args={[0.04, 0.5, 0.04]} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+
+      {/* ================= 4. 二樓安全防護鋼製欄杆 (高度 Y: 3.6 ~ 4.8 米) ================= */}
+      {/* 後方防護護欄 */}
+      <mesh position={[0, 4.2, -4.1]} material={railMat} castShadow>
+        <boxGeometry args={[8.2, 1.2, 0.06]} />
+      </mesh>
+      {/* 左側防護護欄 */}
+      <mesh position={[-4.1, 4.2, 0]} material={railMat} castShadow>
+        <boxGeometry args={[0.06, 1.2, 8.2]} />
+      </mesh>
+      {/* 右側防護護欄 */}
+      <mesh position={[4.1, 4.2, 0]} material={railMat} castShadow>
+        <boxGeometry args={[0.06, 1.2, 8.2]} />
+      </mesh>
+      {/* 正面右側護欄 */}
+      <mesh position={[2.75, 4.2, 4.1]} material={railMat} castShadow>
+        <boxGeometry args={[2.5, 1.2, 0.06]} />
+      </mesh>
+      {/* 正面左側與中央護欄 (預留出 X: -4 到 -2 的斜坡出口通道) */}
+      <mesh position={[-0.25, 4.2, 4.1]} material={railMat} castShadow>
+        <boxGeometry args={[3.5, 1.2, 0.06]} />
+      </mesh>
+
+      {/* 護欄粗型角鐵立柱 */}
+      <group position={[0, 4.2, 0]}>
+        <mesh position={[-4.0, 0, -4.0]} material={railMat}><boxGeometry args={[0.1, 1.2, 0.1]} /></mesh>
+        <mesh position={[4.0, 0, -4.0]} material={railMat}><boxGeometry args={[0.1, 1.2, 0.1]} /></mesh>
+        <mesh position={[0, 0, -4.0]} material={railMat}><boxGeometry args={[0.08, 1.2, 0.08]} /></mesh>
+        <mesh position={[-4.0, 0, 0]} material={railMat}><boxGeometry args={[0.08, 1.2, 0.08]} /></mesh>
+        <mesh position={[4.0, 0, 0]} material={railMat}><boxGeometry args={[0.08, 1.2, 0.08]} /></mesh>
+        <mesh position={[-4.0, 0, 4.0]} material={railMat}><boxGeometry args={[0.1, 1.2, 0.1]} /></mesh>
+        <mesh position={[4.0, 0, 4.0]} material={railMat}><boxGeometry args={[0.1, 1.2, 0.1]} /></mesh>
+      </group>
+
+      {/* ================= 5. 科幻軍事發光霓虹細節與戰術指示燈 ================= */}
+      {/* 四角大型承重科幻霓虹柱 (高度 4.8 米) */}
+      {[
+        [-4.1, 4.1],
+        [4.1, 4.1],
+        [-4.1, -4.1],
+        [4.1, -4.1]
+      ].map(([x, z], i) => (
+        <group key={i} position={[x, 2.4, z]}>
+          {/* 主柱體 */}
+          <mesh castShadow>
+            <boxGeometry args={[0.3, 4.8, 0.3]} />
+            <meshStandardMaterial color="#1a1f24" roughness={0.8} />
+          </mesh>
+          {/* 青色發光霓虹燈條 */}
+          <mesh position={[x > 0 ? -0.16 : 0.16, 0, z > 0 ? -0.16 : 0.16]}>
+            <boxGeometry args={[0.05, 4.8, 0.05]} />
+            <meshBasicMaterial color="#00f0ff" />
+          </mesh>
+        </group>
+      ))}
+
+      {/* 大門上楣青色發光裝飾條 */}
+      <mesh position={[0, 3.65, 4.02]}>
+        <boxGeometry args={[3.0, 0.06, 0.06]} />
+        <meshBasicMaterial color="#00f0ff" />
+      </mesh>
+
+      {/* 二樓護欄右上角戰術航標閃爍燈 */}
+      <group position={[3.9, 4.9, 3.9]}>
+        <mesh>
+          <cylinderGeometry args={[0.05, 0.08, 0.2]} />
+          <meshStandardMaterial color="#222" />
+        </mesh>
+        <mesh position={[0, 0.15, 0]}>
+          <sphereGeometry args={[0.06, 8, 8]} />
+          <meshBasicMaterial color="#00f0ff" />
+        </mesh>
+        <pointLight position={[0, 0.2, 0]} color="#00f0ff" intensity={2.0} distance={6} />
+      </group>
+    </group>
+  );
+}
+
 function AmmoSupplyStation({ position, active }) {
   return (
     <group position={position}>
@@ -1771,6 +1997,10 @@ function TacticalAssets() {
       <MilitaryBunker position={[-45, 0, -20]} />
       <MilitaryBunker position={[45, 0, 20]} />
       <MilitaryBunker position={[-15, 0, -45]} />
+
+      {/* 7. 全新雙層大型軍事建築 (包含二樓平台、斜坡及科幻霓虹發光立柱) */}
+      <TwoStoryBuilding position={[-65, 0, -45]} />
+      <TwoStoryBuilding position={[65, 0, 45]} />
     </group>
   );
 }
@@ -2835,6 +3065,8 @@ function PlayerController({
       activeColliders.push({ x: -6, z: 60, hx: 0.5, hz: 0.5 });
     }
 
+    const baseHeight = keysState.crouch ? 0.9 : 1.6;
+
     // 1. 分別沿 X 軸移動並檢測碰撞
     if (direction.x !== 0) {
       camera.position.x += direction.x * moveStep;
@@ -2846,7 +3078,14 @@ function PlayerController({
         const minZ = c.z - c.hz - playerRadius;
         const maxZ = c.z + c.hz + playerRadius;
 
-        if (camera.position.x > minX && camera.position.x < maxX &&
+        const playerFeetY = camera.position.y - baseHeight;
+        const playerHeadY = camera.position.y;
+        const minY = c.minY !== undefined ? c.minY : 0;
+        const maxY = c.maxY !== undefined ? c.maxY : Infinity;
+        const yOverlap = playerHeadY >= minY && playerFeetY <= maxY;
+
+        if (yOverlap &&
+            camera.position.x > minX && camera.position.x < maxX &&
             camera.position.z > minZ && camera.position.z < maxZ) {
           // 碰撞發生！將玩家 X 座標推回最近的邊界
           const distLeft = camera.position.x - minX;
@@ -2872,7 +3111,14 @@ function PlayerController({
         const minZ = c.z - c.hz - playerRadius;
         const maxZ = c.z + c.hz + playerRadius;
 
-        if (camera.position.x > minX && camera.position.x < maxX &&
+        const playerFeetY = camera.position.y - baseHeight;
+        const playerHeadY = camera.position.y;
+        const minY = c.minY !== undefined ? c.minY : 0;
+        const maxY = c.maxY !== undefined ? c.maxY : Infinity;
+        const yOverlap = playerHeadY >= minY && playerFeetY <= maxY;
+
+        if (yOverlap &&
+            camera.position.x > minX && camera.position.x < maxX &&
             camera.position.z > minZ && camera.position.z < maxZ) {
           // 碰撞發生！將玩家 Z 座標推回最近的邊界
           const distBottom = camera.position.z - minZ;
@@ -2900,20 +3146,55 @@ function PlayerController({
       }
     }
 
-    // 重力與跳躍 (配合蹲下機制動態計算基本高度)
-    const baseHeight = keysState.crouch ? 0.9 : 1.6;
+    // 計算當前位置下方的最高平台/斜坡高度
+    let highestUnderPlayer = 0;
+    for (let i = 0; i < Y_PLATFORMS.length; i++) {
+      const p = Y_PLATFORMS[i];
+      if (p.type === 'flat') {
+        if (camera.position.x >= p.x1 && camera.position.x <= p.x2 &&
+            camera.position.z >= p.z1 && camera.position.z <= p.z2) {
+          if (camera.position.y >= p.y + 0.1) {
+            if (p.y > highestUnderPlayer) highestUnderPlayer = p.y;
+          }
+        }
+      } else if (p.type === 'ramp') {
+        if (camera.position.x >= p.x1 && camera.position.x <= p.x2 &&
+            camera.position.z >= p.z1 && camera.position.z <= p.z2) {
+          let ratio = 0;
+          if (p.dir === 'z') {
+            ratio = (camera.position.z - p.z1) / (p.z2 - p.z1);
+          } else {
+            ratio = (camera.position.x - p.x1) / (p.x2 - p.x1);
+          }
+          ratio = Math.max(0, Math.min(1, ratio));
+          const rampY = p.y1 + (p.y2 - p.y1) * ratio;
+          if (camera.position.y >= rampY + 0.1) {
+            if (rampY > highestUnderPlayer) highestUnderPlayer = rampY;
+          }
+        }
+      }
+    }
+    const baseGroundHeight = highestUnderPlayer;
+    const targetHeight = baseGroundHeight + baseHeight;
+
+    // 檢測玩家是否從平台/斜坡邊緣跌落 (當實際高度高於目標站立高度達 0.3 米時觸發自由落體)
+    if (isGrounded.current && camera.position.y > targetHeight + 0.3) {
+      isGrounded.current = false;
+    }
+
+    // 重力與跳躍
     if (!isGrounded.current) {
       velocityY.current -= 9.8 * 2.6 * safeDelta;
       camera.position.y += velocityY.current * safeDelta;
 
-      if (camera.position.y <= baseHeight) {
-        camera.position.y = baseHeight;
+      if (camera.position.y <= targetHeight) {
+        camera.position.y = targetHeight;
         velocityY.current = 0;
         isGrounded.current = true;
       }
     } else {
-      // 站在地面上時，相機高度平滑插值到 baseHeight (蹲下/站立漸變效果)
-      camera.position.y = THREE.MathUtils.lerp(camera.position.y, baseHeight, 15.0 * safeDelta);
+      // 站在平台上時，相機高度平滑插值到 targetHeight
+      camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetHeight, 15.0 * safeDelta);
       
       if (keysState.jump && !keysState.crouch) {
         velocityY.current = 7.0;
