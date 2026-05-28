@@ -936,9 +936,95 @@ function useKeyboard() {
   return keys;
 }
 
-// ==========================================
-// 2. 敵軍 AI 生成位置與邏輯 (回歸常規 Layer 0，隨時可見)
-// ==========================================
+// 兵種類型常量
+const ENEMY_TYPES = {
+  ASSAULT: 'assault',     // 突擊兵
+  SHIELD: 'shield',       // 盾兵
+  GRENADIER: 'grenadier', // 擲彈兵
+  SNIPER: 'sniper',       // 狙擊手
+};
+
+// 各兵種基礎數值設定
+const ENEMY_STATS = {
+  assault: { 
+    hp: 100, 
+    speed: 3.5, 
+    rushSpeed: 4.0, 
+    range: 60, 
+    damage: 10, 
+    cooldown: 2.0, 
+    hitRate: 0.35, 
+    bodyColor: '#aa2222', 
+    helmetColor: '#5c0f0f', 
+    hpBarColor: '#ff3333' 
+  },
+  shield: { 
+    hp: 200, 
+    speed: 1.2, 
+    rushSpeed: 1.2, 
+    range: 15, 
+    damage: 8, 
+    cooldown: 1.5, 
+    hitRate: 0.3, 
+    bodyColor: '#3a6b35', 
+    helmetColor: '#1d3b1a', 
+    hpBarColor: '#00cc66' 
+  },
+  grenadier: { 
+    hp: 80, 
+    speed: 2.0, 
+    rushSpeed: 2.4, 
+    range: 50, 
+    damage: 35, 
+    cooldown: 6.0, 
+    hitRate: 0.0,
+    bodyColor: '#8b6914', 
+    helmetColor: '#4f3b0b', 
+    hpBarColor: '#ffa500' 
+  },
+  sniper: { 
+    hp: 80, 
+    speed: 0, 
+    rushSpeed: 0, 
+    range: 160, 
+    damage: 20, 
+    cooldown: 3.5, 
+    hitRate: 1.0, 
+    bodyColor: '#253b59', 
+    helmetColor: '#132133', 
+    hpBarColor: '#0088ff' 
+  },
+};
+
+// 狙擊哨塔上的固定狙擊手出生點
+const SNIPER_POSITIONS = [
+  new THREE.Vector3(-95, 4.2, -95),
+  new THREE.Vector3(95, 4.2, 95),
+  new THREE.Vector3(-95, 4.2, 95),
+  new THREE.Vector3(95, 4.2, -95)
+];
+
+// 各波次兵種比例配置
+const WAVE_COMPOSITIONS = {
+  1: [
+    { type: ENEMY_TYPES.ASSAULT, count: 3 },
+    { type: ENEMY_TYPES.SHIELD, count: 1 },
+    { type: ENEMY_TYPES.SNIPER, count: 1 },
+  ],
+  2: [
+    { type: ENEMY_TYPES.ASSAULT, count: 3 },
+    { type: ENEMY_TYPES.SHIELD, count: 1 },
+    { type: ENEMY_TYPES.GRENADIER, count: 2 },
+    { type: ENEMY_TYPES.SNIPER, count: 1 },
+  ],
+  3: [
+    { type: ENEMY_TYPES.ASSAULT, count: 4 },
+    { type: ENEMY_TYPES.SHIELD, count: 2 },
+    { type: ENEMY_TYPES.GRENADIER, count: 2 },
+    { type: ENEMY_TYPES.SNIPER, count: 2 },
+  ],
+};
+
 // 掩體座標常數 (在地圖沙包或木箱後方，覆蓋擴大後的地圖)
 const COVERS = [
   // 核心中心與中內圈掩體
@@ -1166,23 +1252,40 @@ export const LOOT_CONTAINERS = [
 ];
 
 export const spawnWave = (waveNumber) => {
-  const count = waveNumber === 1 ? 4 : waveNumber === 2 ? 6 : 8;
+  const composition = WAVE_COMPOSITIONS[waveNumber] || WAVE_COMPOSITIONS[3];
   const spawned = [];
-  for (let i = 0; i < count; i++) {
-    let x = (Math.random() - 0.5) * 180;
-    let z = (Math.random() - 0.5) * 180;
-    while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
-      x = (Math.random() - 0.5) * 180;
-      z = (Math.random() - 0.5) * 180;
+  let idCounter = 0;
+  let sniperIndex = 0;
+
+  for (const group of composition) {
+    for (let i = 0; i < group.count; i++) {
+      const stats = ENEMY_STATS[group.type];
+      let pos;
+
+      if (group.type === ENEMY_TYPES.SNIPER) {
+        // 狙擊手固定在哨塔位置
+        pos = SNIPER_POSITIONS[sniperIndex % SNIPER_POSITIONS.length].clone();
+        sniperIndex++;
+      } else {
+        // 地面部隊隨機生成，避開玩家出生區
+        let x = (Math.random() - 0.5) * 180;
+        let z = (Math.random() - 0.5) * 180;
+        while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+          x = (Math.random() - 0.5) * 180;
+          z = (Math.random() - 0.5) * 180;
+        }
+        pos = new THREE.Vector3(x, 0, z);
+      }
+
+      spawned.push({
+        id: waveNumber * 100 + idCounter + 1,
+        position: pos,
+        hp: stats.hp,
+        state: 'alive',
+        enemyType: group.type,
+      });
+      idCounter++;
     }
-    const pos = new THREE.Vector3(x, 0, z);
-    spawned.push({
-      id: waveNumber * 100 + i + 1,
-      position: pos,
-      hp: 100,
-      state: 'alive',
-      isSniper: false,
-    });
   }
   return spawned;
 };
@@ -1476,9 +1579,9 @@ function TracerLine({ start, end }) {
   );
 }
 
-// 敵軍血量條 (面朝相機看板 Billboard)
-function EnemyHealthBar({ hp }) {
-  const percent = Math.max(0, hp / 100);
+// 敵軍血量條 (面朝相機看板 Billboard) — 依兵種類型顯示不同顏色
+function EnemyHealthBar({ hp, maxHp, barColor }) {
+  const percent = Math.max(0, hp / (maxHp || 100));
   return (
     <group position={[0, 2.3, 0]}>
       <mesh>
@@ -1488,15 +1591,119 @@ function EnemyHealthBar({ hp }) {
       {percent > 0 && (
         <mesh position={[-(1 - percent) * 0.5, 0, 0.005]}>
           <planeGeometry args={[percent, 0.06]} />
-          <meshBasicMaterial color="#00ff66" doubleSide />
+          <meshBasicMaterial color={barColor || '#00ff66'} doubleSide />
         </mesh>
       )}
     </group>
   );
 }
 
+// 3D 地面手榴彈預警圈
+function GrenadeWarningCircle({ position, timeLeft, maxTime }) {
+  const meshRef = useRef();
+  const opacity = Math.abs(Math.sin(timeLeft * 8)) * 0.6 + 0.2;
+  
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.material.opacity = opacity;
+    }
+  });
+
+  return (
+    <mesh ref={meshRef} position={[position.x, 0.05, position.z]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[0.3, 5.0, 32]} />
+      <meshBasicMaterial color="#ff2200" transparent opacity={opacity} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+// 敵方手榴彈 (橙紅色外觀，只傷害玩家)
+function EnemyGrenade({ position, velocity, onExplode, targetPos }) {
+  const meshRef = useRef();
+  const vel = useRef(velocity.clone());
+  const timer = useRef(2.5); // 2.5 秒定時引信
+  const [ledColor, setLedColor] = useState('#ff4400');
+  const [warningPos, setWarningPos] = useState(targetPos);
+
+  useFrame((state, delta) => {
+    if (!meshRef.current) return;
+    const pos = meshRef.current.position;
+
+    timer.current -= delta;
+    if (timer.current <= 0) {
+      onExplode(pos.clone());
+      return;
+    }
+
+    // 橙紅色 LED 快閃
+    const flashIndex = Math.floor(state.clock.getElapsedTime() * 14) % 2;
+    setLedColor(flashIndex === 0 ? '#ff4400' : '#2a0800');
+
+    // 重力
+    vel.current.y -= 9.8 * delta;
+    // 位移
+    pos.addScaledVector(vel.current, delta);
+    // 旋轉
+    meshRef.current.rotation.x += delta * 7;
+    meshRef.current.rotation.y += delta * 4;
+
+    // 更新預警圈位置 (投影到地面)
+    setWarningPos(new THREE.Vector3(pos.x, 0, pos.z));
+
+    // 地面碰撞彈跳
+    if (pos.y <= 0.1) {
+      pos.y = 0.1;
+      if (Math.abs(vel.current.y) > 0.6) {
+        vel.current.y = -vel.current.y * 0.4;
+        vel.current.x *= 0.7;
+        vel.current.z *= 0.7;
+      } else {
+        vel.current.y = 0;
+        vel.current.x *= 0.85 * (1 - delta);
+        vel.current.z *= 0.85 * (1 - delta);
+      }
+    }
+
+    // 牆面碰撞
+    const limit = 119;
+    if (Math.abs(pos.x) >= limit) {
+      pos.x = Math.sign(pos.x) * limit;
+      vel.current.x = -vel.current.x * 0.5;
+    }
+    if (Math.abs(pos.z) >= limit) {
+      pos.z = Math.sign(pos.z) * limit;
+      vel.current.z = -vel.current.z * 0.5;
+    }
+  });
+
+  return (
+    <>
+      {/* 地面預警圈 */}
+      <GrenadeWarningCircle position={warningPos} timeLeft={timer.current} maxTime={2.5} />
+      <group position={[position.x, position.y, position.z]} ref={meshRef}>
+        {/* 橙紅色手榴彈球體 */}
+        <mesh castShadow>
+          <sphereGeometry args={[0.14, 10, 10]} />
+          <meshStandardMaterial color="#8b3a00" roughness={0.85} />
+        </mesh>
+        {/* 金屬保險栓 */}
+        <mesh position={[0, 0.13, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 0.06]} />
+          <meshStandardMaterial color="#333" metalness={0.8} />
+        </mesh>
+        {/* 快閃的引信 LED 燈 */}
+        <mesh position={[0, 0.08, 0.1]}>
+          <sphereGeometry args={[0.03, 6, 6]} />
+          <meshBasicMaterial color={ledColor} />
+        </mesh>
+      </group>
+    </>
+  );
+}
+
 // 敵軍 AI 組件
-function Enemy({ data, onShootPlayer, onKilled }) {
+// 敵軍 AI 組件 (支援突擊、盾兵、擲彈、狙擊四兵種 AI 與精緻模型)
+function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
   const meshRef = useRef();
   const healthBarRef = useRef();
   const [dyingRotation, setDyingRotation] = useState(0);
@@ -1510,10 +1717,17 @@ function Enemy({ data, onShootPlayer, onKilled }) {
   const currentTarget = useRef(new THREE.Vector3());
   const coverTimer = useRef(0);
   const aiState = useRef('movingToCover'); // 'movingToCover', 'shootingFromCover', 'rushing'
+  
+  // 突擊兵側移 strafe 用
+  const strafeOffset = useRef(0);
+  const strafeDir = useRef(1);
 
-  // 初始化尋求的掩體 (步兵) - 改為尋求離自身最近的掩體，避免所有人塞到同一個點
+  // 取得兵種數值
+  const stats = ENEMY_STATS[data.enemyType] || ENEMY_STATS.assault;
+
+  // 初始化尋求的掩體 (地面部隊: assault, grenadier) — 盾兵不使用掩體
   useEffect(() => {
-    if (!data.isSniper) {
+    if (data.enemyType !== ENEMY_TYPES.SNIPER && data.enemyType !== ENEMY_TYPES.SHIELD) {
       const enemyPos = data.position;
       
       let closest = COVERS[0];
@@ -1527,7 +1741,7 @@ function Enemy({ data, onShootPlayer, onKilled }) {
       }
       currentTarget.current.copy(closest);
     }
-  }, [data.isSniper, data.position]);
+  }, [data.enemyType, data.position]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -1557,16 +1771,14 @@ function Enemy({ data, onShootPlayer, onKilled }) {
 
     const distToPlayer = enemyPos.distanceTo(playerPos);
 
-    if (data.isSniper) {
-      // 哨塔狙擊手 AI：留在平台不移動，冷卻時間較長 (3.0s - 4.5s)，單發傷害 20 HP
-      const MAX_SNIPER_RANGE = 160.0; // 狙擊手最遠射擊範圍：160 米
-      if (distToPlayer <= MAX_SNIPER_RANGE) {
+    // ========== 狙擊手 AI ==========
+    if (data.enemyType === ENEMY_TYPES.SNIPER) {
+      if (distToPlayer <= stats.range) {
         const now = state.clock.getElapsedTime();
-        const cooldown = 3.0 + Math.random() * 1.5;
+        const cooldown = stats.cooldown + Math.random() * 1.5;
         if (now - lastShotTime.current > cooldown) {
           lastShotTime.current = now;
 
-          // 視線遮擋射線檢查 (Line of Sight Raycast)
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
           const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
@@ -1579,7 +1791,7 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           let blocked = false;
           for (let i = 0; i < intersects.length; i++) {
             const hit = intersects[i];
-            if (hit.distance < 0.8) continue; // 忽略射擊者自身
+            if (hit.distance < 0.8) continue;
 
             let parent = hit.object;
             let isSelfOrEnemy = false;
@@ -1597,7 +1809,6 @@ function Enemy({ data, onShootPlayer, onKilled }) {
             }
             if (isSelfOrEnemy || isCosmetic) continue;
 
-            // 若在中途擊中任何實體掩體(如沙包、貨櫃、混凝土板)，即判定視線阻擋
             if (hit.distance < distToPlayerLen - 0.5) {
               blocked = true;
               break;
@@ -1605,7 +1816,7 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           }
 
           if (!blocked) {
-            onShootPlayer(20, enemyPos); // 扣 20 HP 并传入位置
+            onShootPlayer(stats.damage, enemyPos);
 
             const startPos = new THREE.Vector3(0.25, 1.12, 1.15).applyMatrix4(meshRef.current.matrixWorld);
             setTracerCoords({
@@ -1617,68 +1828,27 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           }
         }
       }
-    } else {
-      // 地面步兵 AI：掩體跳躍與衝鋒邏輯
-      if (aiState.current === 'movingToCover') {
-        const distToCover = enemyPos.distanceTo(currentTarget.current);
-        if (distToCover > 0.5) {
-          const dir = new THREE.Vector3().subVectors(currentTarget.current, enemyPos);
-          dir.y = 0;
-          dir.normalize();
-          enemyPos.addScaledVector(dir, 2.0 * delta);
-          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 8.5)) * 0.12;
-        } else {
-          aiState.current = 'shootingFromCover';
-          coverTimer.current = 4.0 + Math.random() * 3.0; // 停留射擊 4-7 秒
-        }
-      } else if (aiState.current === 'shootingFromCover') {
-        meshRef.current.position.y = 0;
-        coverTimer.current -= delta;
-        if (coverTimer.current <= 0) {
-          if (distToPlayer > 18) {
-            // 尋找下一個距離玩家更近的掩體
-            let bestCover = currentTarget.current;
-            let bestDist = bestCover.distanceTo(playerPos);
-            for (let i = 0; i < COVERS.length; i++) {
-              const dToPlayer = COVERS[i].distanceTo(playerPos);
-              const dToEnemy = COVERS[i].distanceTo(enemyPos);
-              // 擴大地圖後，將尋求新掩體的最大搜索範圍由 25 米調大至 60 米，避免大縱深間隔中斷尋路
-              if (dToPlayer < distToPlayer && dToEnemy < 60) {
-                if (dToPlayer < bestDist) {
-                  bestDist = dToPlayer;
-                  bestCover = COVERS[i];
-                }
-              }
-            }
-            currentTarget.current.copy(bestCover);
-            aiState.current = 'movingToCover';
-          } else {
-            // 距離已近，開始無掩體衝鋒
-            aiState.current = 'rushing';
-          }
-        }
+    }
+    // ========== 盾兵 AI ==========
+    else if (data.enemyType === ENEMY_TYPES.SHIELD) {
+      // 盾兵不使用掩體，始終朝玩家緩步推進
+      if (distToPlayer > 4) {
+        const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+        dir.y = 0;
+        dir.normalize();
+        enemyPos.addScaledVector(dir, stats.speed * delta);
+        // 沉穩步伐，輕微上下晃動
+        meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 4.0)) * 0.04;
       } else {
-        // 衝鋒狀態：速度加快 (2.5m/s) 直撲玩家
-        if (distToPlayer > 8) {
-          const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
-          dir.y = 0;
-          dir.normalize();
-          enemyPos.addScaledVector(dir, 2.5 * delta);
-          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 10.5)) * 0.14;
-        } else {
-          meshRef.current.position.y = 0;
-        }
+        meshRef.current.position.y = 0;
       }
 
-      // 地面步兵開火判定 (傷害 10 HP，冷卻 2.0s - 2.7s)
-      const MAX_INFANTRY_RANGE = 75.0; // 地面普通步兵最遠射擊範圍：75 米
-      if (distToPlayer <= MAX_INFANTRY_RANGE) {
+      // 近距離開火
+      if (distToPlayer <= stats.range) {
         const now = state.clock.getElapsedTime();
-        const cooldown = 2.0 + Math.random() * 0.7;
-        if (now - lastShotTime.current > cooldown) {
+        if (now - lastShotTime.current > stats.cooldown) {
           lastShotTime.current = now;
 
-          // 視線遮擋射線檢查 (Line of Sight Raycast)
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
           const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
@@ -1691,42 +1861,276 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           let blocked = false;
           for (let i = 0; i < intersects.length; i++) {
             const hit = intersects[i];
-            if (hit.distance < 0.8) continue; // 忽略射擊者自身
-
+            if (hit.distance < 0.8) continue;
             let parent = hit.object;
             let isSelfOrEnemy = false;
             let isCosmetic = false;
             while (parent) {
-              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) {
-                isSelfOrEnemy = true;
-                break;
-              }
-              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') {
-                isCosmetic = true;
-                break;
-              }
+              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
               parent = parent.parent;
             }
             if (isSelfOrEnemy || isCosmetic) continue;
-
-            // 若在中途擊中任何實體掩體(如沙包、貨櫃、混凝土板)，即判定視線阻擋
-            if (hit.distance < distToPlayerLen - 0.5) {
-              blocked = true;
-              break;
-            }
+            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
           }
 
           if (!blocked) {
-            // AI 命中機率判定 (例如 38% 命中率，防範每發皆中)
-            const isHit = Math.random() < 0.38;
+            const isHit = Math.random() < stats.hitRate;
+            const startPos = new THREE.Vector3(0.3, 1.1, 0.9).applyMatrix4(meshRef.current.matrixWorld);
+            let targetCoords = endPos.clone();
             
+            if (isHit) {
+              onShootPlayer(stats.damage, enemyPos);
+            } else {
+              targetCoords.add(new THREE.Vector3(
+                (Math.random() - 0.5) * 3.0,
+                (Math.random() - 0.5) * 2.0,
+                (Math.random() - 0.5) * 3.0
+              ));
+            }
+
+            setTracerCoords({
+              start: [startPos.x, startPos.y, startPos.z],
+              end: [targetCoords.x, targetCoords.y, targetCoords.z],
+            });
+            setTracerVisible(true);
+            setTimeout(() => setTracerVisible(false), 90);
+          }
+        }
+      }
+
+      // 盾兵邊界碰撞
+      enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
+      enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
+    }
+    // ========== 擲彈兵 AI ==========
+    else if (data.enemyType === ENEMY_TYPES.GRENADIER) {
+      // 使用掩體系統 (同突擊兵邏輯，但速度較慢)
+      if (aiState.current === 'movingToCover') {
+        const distToCover = enemyPos.distanceTo(currentTarget.current);
+        if (distToCover > 0.5) {
+          const dir = new THREE.Vector3().subVectors(currentTarget.current, enemyPos);
+          dir.y = 0;
+          dir.normalize();
+          enemyPos.addScaledVector(dir, stats.speed * delta);
+          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 9.0)) * 0.12;
+        } else {
+          aiState.current = 'shootingFromCover';
+          coverTimer.current = 4.0 + Math.random() * 2.0;
+        }
+      } else if (aiState.current === 'shootingFromCover') {
+        meshRef.current.position.y = 0;
+        coverTimer.current -= delta;
+        if (coverTimer.current <= 0) {
+          if (distToPlayer > 18) {
+            // 尋求離玩家更近的掩體
+            let bestCover = currentTarget.current;
+            let bestDist = bestCover.distanceTo(playerPos);
+            for (let i = 0; i < COVERS.length; i++) {
+              const dToPlayer = COVERS[i].distanceTo(playerPos);
+              const dToEnemy = COVERS[i].distanceTo(enemyPos);
+              if (dToPlayer < distToPlayer && dToEnemy < 60) {
+                if (dToPlayer < bestDist) {
+                  bestDist = dToPlayer;
+                  bestCover = COVERS[i];
+                }
+              }
+            }
+            currentTarget.current.copy(bestCover);
+            aiState.current = 'movingToCover';
+          } else {
+            aiState.current = 'rushing';
+          }
+        }
+      } else {
+        // 衝鋒狀態
+        if (distToPlayer > 8) {
+          const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+          dir.y = 0;
+          dir.normalize();
+          enemyPos.addScaledVector(dir, stats.rushSpeed * delta);
+          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 9.0)) * 0.12;
+        } else {
+          meshRef.current.position.y = 0;
+        }
+      }
+
+      // 擲彈兵攻擊：投擲手榴彈 (不使用射線)
+      if (distToPlayer <= stats.range && distToPlayer > 8) {
+        const now = state.clock.getElapsedTime();
+        if (now - lastShotTime.current > stats.cooldown) {
+          lastShotTime.current = now;
+
+          // 視線檢查
+          const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
+          const endPos = playerPos.clone();
+          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+          const distToPlayerLen = direction.length();
+          direction.normalize();
+
+          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+          const intersects = raycaster.intersectObjects(state.scene.children, true);
+          
+          let blocked = false;
+          for (let i = 0; i < intersects.length; i++) {
+            const hit = intersects[i];
+            if (hit.distance < 0.8) continue;
+            let parent = hit.object;
+            let isSelfOrEnemy = false;
+            let isCosmetic = false;
+            while (parent) {
+              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
+              parent = parent.parent;
+            }
+            if (isSelfOrEnemy || isCosmetic) continue;
+            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
+          }
+
+          if (!blocked && onThrowGrenade) {
+            // 計算拋擲速度 (45° 拋物線)
+            const throwStart = new THREE.Vector3(0, 1.8, 0).add(enemyPos);
+            const toPlayer = new THREE.Vector3().subVectors(playerPos, throwStart);
+            const horizontalDist = Math.sqrt(toPlayer.x * toPlayer.x + toPlayer.z * toPlayer.z);
+            const throwSpeed = Math.sqrt(horizontalDist * 9.8); // v = sqrt(d * g) 基於 45° 角
+            const throwDir = toPlayer.clone();
+            throwDir.y = 0;
+            throwDir.normalize();
+            
+            const throwVelocity = new THREE.Vector3(
+              throwDir.x * throwSpeed,
+              throwSpeed * 0.7, // 上仰力
+              throwDir.z * throwSpeed
+            );
+            
+            onThrowGrenade(throwStart, throwVelocity, playerPos);
+          }
+        }
+      }
+
+      // 邊界限制
+      enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
+      enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
+    }
+    // ========== 突擊兵 AI (改良自原步兵) ==========
+    else {
+      if (aiState.current === 'movingToCover') {
+        const distToCover = enemyPos.distanceTo(currentTarget.current);
+        if (distToCover > 0.5) {
+          const dir = new THREE.Vector3().subVectors(currentTarget.current, enemyPos);
+          dir.y = 0;
+          dir.normalize();
+          enemyPos.addScaledVector(dir, stats.speed * delta);
+          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 10.0)) * 0.14;
+        } else {
+          aiState.current = 'shootingFromCover';
+          coverTimer.current = 3.0 + Math.random() * 2.0; // 更短的掩體停留
+        }
+      } else if (aiState.current === 'shootingFromCover') {
+        // 在掩體後左右側移來回閃避 (Strafe)
+        coverTimer.current -= delta;
+        
+        strafeOffset.current += delta * 1.5 * strafeDir.current;
+        if (Math.abs(strafeOffset.current) > 1.2) {
+          strafeDir.current = -strafeDir.current;
+        }
+        
+        // 側移只在局部水平方向作用 (垂直於玩家朝向)
+        const strafeVec = new THREE.Vector3(
+          Math.sin(angle + Math.PI / 2) * strafeOffset.current,
+          0,
+          Math.cos(angle + Math.PI / 2) * strafeOffset.current
+        );
+        meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 5.0)) * 0.05;
+        
+        if (coverTimer.current <= 0) {
+          strafeOffset.current = 0;
+          if (distToPlayer > 18) {
+            // 包抄掩體選擇策略：優先選擇偏向玩家兩側的掩體 (夾角 60° 到 120° 之間)
+            let bestCover = currentTarget.current;
+            let bestScore = -Infinity;
+            
+            const toPlayer = new THREE.Vector3().subVectors(playerPos, enemyPos).normalize();
+            
+            for (let i = 0; i < COVERS.length; i++) {
+              const coverPos = COVERS[i];
+              const dToEnemy = coverPos.distanceTo(enemyPos);
+              const dToPlayer = coverPos.distanceTo(playerPos);
+              
+              if (dToEnemy < 60 && dToPlayer < distToPlayer) {
+                const toCover = new THREE.Vector3().subVectors(coverPos, enemyPos).normalize();
+                // 點積，cos(夾角)
+                const cosVal = Math.abs(toCover.dot(toPlayer)); 
+                // 夾角越接近 90 度 (cos 值接近 0) 分數越高，藉此尋找側面掩體包抄
+                const flankScore = (1.0 - cosVal) * 50.0;
+                const distScore = (60.0 - dToEnemy) * 0.5;
+                const totalScore = flankScore + distScore;
+                
+                if (totalScore > bestScore) {
+                  bestScore = totalScore;
+                  bestCover = coverPos;
+                }
+              }
+            }
+            currentTarget.current.copy(bestCover);
+            aiState.current = 'movingToCover';
+          } else {
+            aiState.current = 'rushing';
+          }
+        }
+      } else {
+        // 衝鋒狀態：高速 (4.0m/s) 衝擊玩家
+        if (distToPlayer > 8) {
+          const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+          dir.y = 0;
+          dir.normalize();
+          enemyPos.addScaledVector(dir, stats.rushSpeed * delta);
+          meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 12.0)) * 0.16;
+        } else {
+          meshRef.current.position.y = 0;
+        }
+      }
+
+      // 突擊兵開火判定
+      if (distToPlayer <= stats.range) {
+        const now = state.clock.getElapsedTime();
+        const cooldown = stats.cooldown + Math.random() * 0.7;
+        if (now - lastShotTime.current > cooldown) {
+          lastShotTime.current = now;
+
+          const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
+          const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
+          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+          const distToPlayerLen = direction.length();
+          direction.normalize();
+
+          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+          const intersects = raycaster.intersectObjects(state.scene.children, true);
+          
+          let blocked = false;
+          for (let i = 0; i < intersects.length; i++) {
+            const hit = intersects[i];
+            if (hit.distance < 0.8) continue;
+            let parent = hit.object;
+            let isSelfOrEnemy = false;
+            let isCosmetic = false;
+            while (parent) {
+              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
+              parent = parent.parent;
+            }
+            if (isSelfOrEnemy || isCosmetic) continue;
+            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
+          }
+
+          if (!blocked) {
+            const isHit = Math.random() < stats.hitRate;
             const startPos = new THREE.Vector3(0.25, 1.12, 0.95).applyMatrix4(meshRef.current.matrixWorld);
             let targetCoords = endPos.clone();
             
             if (isHit) {
-              onShootPlayer(10, enemyPos); // 命中扣 10 HP 并传入位置
+              onShootPlayer(stats.damage, enemyPos);
             } else {
-              // 未命中：隨機偏移 1.5 到 3.5 米以描繪擦肩而過的子彈雷射效果
               const offset = new THREE.Vector3(
                 (Math.random() - 0.5) * 4.0,
                 (Math.random() - 0.5) * 2.0,
@@ -1744,12 +2148,15 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           }
         }
       }
-      // 限制敵軍在圍牆邊界內
+
+      // 邊界與碰撞 (地面部隊通用)
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
+    }
 
-       // 敵軍碰撞檢測 (避免穿牆)
-      const enemyRadius = 0.35;
+    // ========== 地面部隊物理碰撞檢測 (避免穿牆) ==========
+    if (data.enemyType !== ENEMY_TYPES.SNIPER) {
+      const enemyRadius = data.enemyType === ENEMY_TYPES.SHIELD ? 0.45 : 0.35;
       for (let i = 0; i < STATIC_COLLIDERS.length; i++) {
         const c = STATIC_COLLIDERS[i];
         const minX = c.x - c.hx - enemyRadius;
@@ -1786,76 +2193,136 @@ function Enemy({ data, onShootPlayer, onKilled }) {
     }
   });
 
+  // ========== 視覺模型 (依兵種分化) ==========
   return (
-    <group
-      position={[data.position.x, data.position.y, data.position.z]}
-      ref={meshRef}
-      userData={{ isEnemy: true, enemyId: data.id }}
-    >
-      {/* 敵軍主體：狙擊手為藍色迷彩裝，普通兵為紅色 */}
-      <mesh position={[0, 0.9, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.35, 1.4, 8]} />
-        <meshStandardMaterial color={data.isSniper ? "#253b59" : "#aa2222"} roughness={0.7} flatShading />
-      </mesh>
+    <>
+      <group
+        position={[data.position.x, data.position.y, data.position.z]}
+        ref={meshRef}
+        userData={{ isEnemy: true, enemyId: data.id, enemyType: data.enemyType }}
+      >
+        {/* 敵軍主體 */}
+        <mesh position={[0, 0.9, 0]} castShadow>
+          <cylinderGeometry args={[
+            data.enemyType === ENEMY_TYPES.SHIELD ? 0.4 : 0.3,
+            data.enemyType === ENEMY_TYPES.SHIELD ? 0.45 : 0.35,
+            data.enemyType === ENEMY_TYPES.SHIELD ? 1.5 : 1.4,
+            8
+          ]} />
+          <meshStandardMaterial color={stats.bodyColor} roughness={0.7} />
+        </mesh>
+        
+        {/* 敵軍頭部 */}
+        <mesh position={[0, 1.8, 0]} castShadow>
+          <sphereGeometry args={[0.26, 8, 8]} />
+          <meshStandardMaterial color="#e0a890" roughness={0.8} />
+        </mesh>
 
-      {/* 敵軍頭部 */}
-      <mesh position={[0, 1.8, 0]} castShadow>
-        <sphereGeometry args={[0.26, 8, 8]} />
-        <meshStandardMaterial color="#e0a890" roughness={0.8} />
-      </mesh>
+        {/* 粗壯戰術頭盔 (狙擊手與其他兵種皆戴，顏色不同) */}
+        <mesh position={[0, 1.9, 0]} castShadow>
+          <sphereGeometry args={[0.28, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color={stats.helmetColor} roughness={0.9} />
+        </mesh>
 
-      {/* 戰術迷彩頭盔 */}
-      <mesh position={[0, 1.9, 0]} castShadow>
-        <sphereGeometry args={[0.28, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color={data.isSniper ? "#343a40" : "#554b38"} roughness={0.9} />
-      </mesh>
+        {/* 戰術面罩 (突擊兵專屬) */}
+        {data.enemyType === ENEMY_TYPES.ASSAULT && (
+          <mesh position={[0, 1.72, 0.22]} castShadow>
+            <boxGeometry args={[0.22, 0.12, 0.08]} />
+            <meshStandardMaterial color="#111111" metalness={0.5} roughness={0.4} />
+          </mesh>
+        )}
 
-      {/* 敵軍武器：精細步槍模型 */}
-      <group position={[0.25, 1.1, 0.3]} rotation={[0, 0, 0]}>
-        {/* 槍身 (Receiver) */}
-        <mesh castShadow position={[0, 0.02, 0.15]}>
-          <boxGeometry args={[0.06, 0.1, 0.5]} />
-          <meshStandardMaterial color="#222222" metalness={0.7} roughness={0.3} />
-        </mesh>
-        {/* 槍管 (Barrel) */}
-        <mesh castShadow position={[0, 0.04, 0.45]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, data.isSniper ? 0.8 : 0.4]} />
-          <meshStandardMaterial color="#111111" metalness={0.8} roughness={0.2} />
-        </mesh>
-        {/* 彈匣 (Magazine) */}
-        <mesh castShadow position={[0, -0.08, 0.25]} rotation={[0.2, 0, 0]}>
-          <boxGeometry args={[0.04, 0.16, 0.08]} />
-          <meshStandardMaterial color="#151515" metalness={0.5} roughness={0.5} />
-        </mesh>
-        {/* 槍托 (Stock) */}
-        <mesh castShadow position={[0, -0.02, -0.2]}>
-          <boxGeometry args={[0.05, 0.08, 0.25]} />
-          <meshStandardMaterial color="#443322" roughness={0.9} />
-        </mesh>
-        {/* 瞄準鏡 (Scope) - 狙擊手專屬 */}
-        {data.isSniper && (
-          <group position={[0, 0.1, 0.15]}>
-            <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.022, 0.022, 0.35]} />
-              <meshStandardMaterial color="#333333" metalness={0.6} />
+        {/* 投擲手榴彈袋 (擲彈兵專屬) */}
+        {data.enemyType === ENEMY_TYPES.GRENADIER && (
+          <group>
+            {/* 斜背帶 */}
+            <mesh position={[0.15, 1.0, -0.15]} rotation={[0, 0, -0.5]} castShadow>
+              <boxGeometry args={[0.08, 0.9, 0.04]} />
+              <meshStandardMaterial color="#5a4a2a" roughness={0.9} />
             </mesh>
-            {/* 支架 */}
-            <mesh castShadow position={[0, -0.04, 0]}>
-              <boxGeometry args={[0.02, 0.05, 0.1]} />
-              <meshStandardMaterial color="#111111" />
-            </mesh>
+            {/* 手榴彈 x3 */}
+            {[0, 0.2, 0.4].map((offset, i) => (
+              <mesh key={i} position={[-0.28, 0.7 + offset, -0.12]} castShadow>
+                <sphereGeometry args={[0.07, 6, 6]} />
+                <meshStandardMaterial color="#3d4a2d" roughness={0.85} />
+              </mesh>
+            ))}
           </group>
         )}
-      </group>
 
-      <group ref={healthBarRef}>
-        <EnemyHealthBar hp={data.hp} />
+        {/* 盾兵專屬：半透明能量盾 */}
+        {data.enemyType === ENEMY_TYPES.SHIELD && (
+          <group position={[0, 0.9, 0.55]}>
+            {/* 盾牌主體 */}
+            <mesh castShadow>
+              <boxGeometry args={[0.9, 1.6, 0.06]} />
+              <meshPhysicalMaterial 
+                color="#00aaff" 
+                transparent 
+                opacity={0.35} 
+                roughness={0.1} 
+                metalness={0.3}
+                emissive="#003366"
+                emissiveIntensity={0.3}
+              />
+            </mesh>
+            {/* 盾牌邊框 */}
+            <mesh position={[0, 0, 0.035]}>
+              <boxGeometry args={[0.95, 1.65, 0.02]} />
+              <meshStandardMaterial color="#0066aa" transparent opacity={0.5} wireframe />
+            </mesh>
+            {/* 能量光源 */}
+            <pointLight color="#00aaff" intensity={1.5} distance={4} />
+          </group>
+        )}
+
+        {/* 敵軍武器 */}
+        <group position={[0.25, 1.1, 0.3]} rotation={[0, 0, 0]}>
+          {/* 槍身 (Receiver) */}
+          <mesh castShadow position={[0, 0.02, 0.15]}>
+            <boxGeometry args={[0.06, 0.1, 0.5]} />
+            <meshStandardMaterial color="#222222" metalness={0.7} roughness={0.3} />
+          </mesh>
+          {/* 槍管 (Barrel) */}
+          <mesh castShadow position={[0, 0.04, 0.45]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.015, 0.015, data.enemyType === ENEMY_TYPES.SNIPER ? 0.8 : 0.4]} />
+            <meshStandardMaterial color="#111111" metalness={0.8} roughness={0.2} />
+          </mesh>
+          {/* 彈匣 (Magazine) */}
+          <mesh castShadow position={[0, -0.08, 0.25]} rotation={[0.2, 0, 0]}>
+            <boxGeometry args={[0.04, 0.16, 0.08]} />
+            <meshStandardMaterial color="#151515" metalness={0.5} roughness={0.5} />
+          </mesh>
+          {/* 槍托 (Stock) */}
+          <mesh castShadow position={[0, -0.02, -0.2]}>
+            <boxGeometry args={[0.05, 0.08, 0.25]} />
+            <meshStandardMaterial color="#443322" roughness={0.9} />
+          </mesh>
+          {/* 瞄準鏡 (Scope) - 狙擊手專屬 */}
+          {data.enemyType === ENEMY_TYPES.SNIPER && (
+            <group position={[0, 0.1, 0.15]}>
+              <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.022, 0.022, 0.35]} />
+                <meshStandardMaterial color="#333333" metalness={0.6} />
+              </mesh>
+              {/* 支架 */}
+              <mesh castShadow position={[0, -0.04, 0]}>
+                <boxGeometry args={[0.02, 0.05, 0.1]} />
+                <meshStandardMaterial color="#111111" />
+              </mesh>
+            </group>
+          )}
+        </group>
+
+        <group ref={healthBarRef}>
+          <EnemyHealthBar hp={data.hp} maxHp={stats.hp} barColor={stats.hpBarColor} />
+        </group>
       </group>
 
       {tracerVisible && (
         <TracerLine start={tracerCoords.start} end={tracerCoords.end} />
       )}
-    </group>
+    </>
   );
 }
 
@@ -4004,7 +4471,7 @@ function PlayerController({
                 runStatsRef.current.headshots += 1;
               }
             }
-            onHitEnemyRef.current(enemyId, hit.point, isHeadshot);
+            onHitEnemyRef.current(enemyId, hit.point, isHeadshot, parent);
           } else {
             // M870 散彈槍只生成部分彈孔，防止大量物理微粒導致畫面卡頓
             if (activeWeaponId !== 'm870' || p < 2) {
@@ -4600,6 +5067,7 @@ export default function App() {
   // 戰術裝備與拋殼實體狀態
   const [grenades, setGrenades] = useState(2);
   const [grenadeEntities, setGrenadeEntities] = useState([]);
+  const [enemyGrenadeEntities, setEnemyGrenadeEntities] = useState([]);
   const [casings, setCasings] = useState([]);
   const [droppedMags, setDroppedMags] = useState([]);
   const [shakeTrigger, setShakeTrigger] = useState(0);
@@ -4615,6 +5083,7 @@ export default function App() {
 
   // 畫面閃紅受傷特效狀態
   const [hurtActive, setHurtActive] = useState(false);
+  const [shieldBlockActive, setShieldBlockActive] = useState(false);
 
   // 局內波次與物資搜刮狀態
   const [currentWave, setCurrentWave] = useState(1);
@@ -5453,6 +5922,11 @@ export default function App() {
     if (isTutorial) triggerTutorialStep('grenade');
   };
 
+  const addEnemyGrenade = (position, velocity, targetPos) => {
+    const id = Math.random();
+    setEnemyGrenadeEntities((prev) => [...prev, { id, position, velocity, targetPos }]);
+  };
+
   // 輔助函式：發送戰術擊殺訊息
   const addKillFeedEntry = (message, type) => {
     const id = Math.random();
@@ -5585,6 +6059,101 @@ export default function App() {
     }
   };
 
+  // 敵軍手榴彈倒數結束爆炸判定 (只傷害玩家，且新增對應的傷害方向指示器)
+  const handleEnemyGrenadeExplode = (id, explosionPoint) => {
+    // 1. 播放合成爆炸音效
+    soundManager.playExplosion();
+
+    // 2. 移除該敵方手榴彈實體
+    setEnemyGrenadeEntities((prev) => prev.filter((g) => g.id !== id));
+
+    // 3. 生成大範圍橘灰相間微粒
+    const explosionParticles = [];
+    for (let i = 0; i < 35; i++) {
+      const pId = Math.random();
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 8.5,
+        Math.random() * 8.5,
+        (Math.random() - 0.5) * 8.5
+      );
+      explosionParticles.push({
+        id: pId,
+        position: explosionPoint.clone(),
+        velocity,
+        color: Math.random() > 0.45 ? '#d97706' : '#6b7280',
+      });
+    }
+
+    setParticles((prev) => {
+      const combined = [...prev, ...explosionParticles];
+      if (combined.length > 80) combined.splice(0, combined.length - 80);
+      return combined;
+    });
+
+    setTimeout(() => {
+      const pIds = explosionParticles.map((p) => p.id);
+      setParticles((prev) => prev.filter((p) => !pIds.includes(p.id)));
+    }, 1200);
+
+    // 4. 觸發鏡頭劇烈抖動
+    setShakeTrigger((prev) => prev + 1);
+
+    // 5. 範圍傷害判定：僅對玩家 (半徑 5.0 米，35 maxHP，隨距離衰減)
+    if (gunRef.current) {
+      const playerPos = gunRef.current.position;
+      const distToPlayer = playerPos.distanceTo(explosionPoint);
+      if (distToPlayer < 5.0) {
+        const damage = Math.max(0, Math.round(35 * (1 - distToPlayer / 5.0)));
+        if (damage > 0) {
+          setHealth((prev) => {
+            const newHp = Math.max(0, prev - damage);
+            if (newHp <= 0) {
+              setGameState('failed');
+              soundManager.stopAmbient();
+              if (controlsRef.current) {
+                controlsRef.current.unlock();
+              }
+              saveEndgameStats(false);
+            }
+            return newHp;
+          });
+          setHurtActive(true);
+          soundManager.playPlayerHurt();
+          
+          // 計算受擊方向指示器 (Grenade attackerPos = explosionPoint)
+          if (cameraRef.current) {
+            const fwd = new THREE.Vector3();
+            cameraRef.current.getWorldDirection(fwd);
+            fwd.y = 0;
+            fwd.normalize();
+            
+            const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+            const playerPosClean = cameraRef.current.position.clone();
+            playerPosClean.y = 0;
+            
+            const toExplosion = new THREE.Vector3(explosionPoint.x, 0, explosionPoint.z).sub(playerPosClean);
+            toExplosion.y = 0;
+            toExplosion.normalize();
+            
+            const fwdDot = toExplosion.dot(fwd);
+            const rightDot = toExplosion.dot(right);
+            
+            const relativeAngle = Math.atan2(rightDot, fwdDot);
+            const angleDeg = (relativeAngle * 180) / Math.PI;
+
+            const newIndicator = {
+              id: Math.random(),
+              angle: angleDeg,
+              attackerPos: explosionPoint.clone(),
+              createdAt: Date.now()
+            };
+            setDamageIndicators((prev) => [...prev, newIndicator]);
+          }
+        }
+      }
+    }
+  };
+
   // 擊中環境時生成彈孔與噴砂微粒的函式
   const addImpactEffect = (point, normal) => {
     const id = Math.random();
@@ -5629,7 +6198,7 @@ export default function App() {
   };
 
   // 擊中敵人時扣血與擊殺判定
-  const handleHitEnemy = (enemyId, hitPoint, isHeadshot) => {
+  const handleHitEnemy = (enemyId, hitPoint, isHeadshot, enemyMesh = null) => {
     addImpactEffect(hitPoint, new THREE.Vector3(0, 1, 0));
 
     // 顯示命中反饋 (Hit Marker)
@@ -5656,18 +6225,54 @@ export default function App() {
           if (activeWeaponId === 'm4a1' && hasLaser) baseDamage = 30;
           if (activeWeaponId === 'm9' && hasSuppressor) baseDamage = 20;
 
-          const damage = isHeadshot 
+          let damage = isHeadshot 
             ? Math.max(100, Math.round(baseDamage * 3)) 
             : baseDamage;
 
+          // 盾兵正面減傷 60% 判定
+          let isBlocked = false;
+          if (enemy.enemyType === ENEMY_TYPES.SHIELD && enemyMesh) {
+            // 取得敵人目前面向的角度並轉為方向向量
+            const enemyRotY = enemyMesh.rotation.y;
+            const enemyFacing = new THREE.Vector3(Math.sin(enemyRotY), 0, Math.cos(enemyRotY)).normalize();
+
+            // 取得從敵人到玩家的向量
+            const playerPosClean = cameraRef.current.position.clone();
+            const toPlayer = new THREE.Vector3().subVectors(playerPosClean, enemyMesh.position);
+            toPlayer.y = 0;
+            toPlayer.normalize();
+
+            // 夾角點積：如果 dot > 0.5 (即夾角小於 60°)，視為從正面擊中盾牌
+            const dot = enemyFacing.dot(toPlayer);
+            if (dot > 0.5) {
+              isBlocked = true;
+              damage = Math.round(damage * 0.4); // 減傷 60%
+              
+              // 觸發 HUD BLOCKED 特效與閃爍
+              setShieldBlockActive(true);
+              if (window.shieldBlockTimeout) clearTimeout(window.shieldBlockTimeout);
+              window.shieldBlockTimeout = setTimeout(() => {
+                setShieldBlockActive(false);
+              }, 800);
+            }
+          }
+
           const newHp = Math.max(0, enemy.hp - damage);
           const isDead = newHp <= 0;
+          
+          // 決定顯示在擊殺日誌的名字
+          const enemyTypeName = enemy.enemyType ? enemy.enemyType.toUpperCase() : 'ENEMY';
+          const enemyName = `${enemyTypeName}_0${enemy.id}`;
+
           if (isDead) {
             soundManager.playEnemyDeath(); // 播放倒地哀嚎聲
             // 寫入戰術擊殺訊息欄
             const weaponShortName = weaponConfig.name ? weaponConfig.name.split(' ')[0] : 'WEAPON';
             const killType = isHeadshot ? 'HEADSHOT' : weaponShortName;
-            addKillFeedEntry(`PLAYER ➔ [${killType}] ENEMY_0${enemy.id}`, isHeadshot ? 'headshot' : 'normal');
+            
+            // 若為正面擊中但死於此槍，提示正面擊破
+            const finalKillMsg = isBlocked ? `${killType} (BREAK)` : killType;
+            addKillFeedEntry(`PLAYER ➔ [${finalKillMsg}] ${enemyName}`, isHeadshot ? 'headshot' : 'normal');
           }
           return {
             ...enemy,
@@ -5829,6 +6434,7 @@ export default function App() {
     setPrimaryFireMode('auto');
     setGrenades(equippedGrenades);
     setGrenadeEntities([]);
+    setEnemyGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
     setResetTrigger((prev) => prev + 1);
@@ -5892,6 +6498,7 @@ export default function App() {
     setPrimaryFireMode('auto');
     setGrenades(2);
     setGrenadeEntities([]);
+    setEnemyGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
     setResetTrigger((prev) => prev + 1);
@@ -5957,6 +6564,7 @@ export default function App() {
     setPrimaryFireMode('auto');
     setGrenades(equippedGrenades);
     setGrenadeEntities([]);
+    setEnemyGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
     setResetTrigger((prev) => prev + 1);
@@ -6115,7 +6723,6 @@ export default function App() {
                 data-x={ind.attackerPos?.x}
                 data-z={ind.attackerPos?.z}
                 style={{
-                  transform: `translate(-50%, -50%) rotate(${ind.angle}deg) translateY(-100px)`,
                   opacity: opacity,
                 }}
               />
@@ -6220,6 +6827,12 @@ export default function App() {
       {isLocked && gameState === 'active' && !isAds && (
         <div className="crosshair">
           <div className="crosshair-center" />
+          {shieldBlockActive && (
+            <div className="hud-blocked-feedback">
+              <span className="blocked-icon">🛡️</span>
+              <span className="blocked-text">BLOCKED</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -7621,6 +8234,17 @@ export default function App() {
             />
           ))}
 
+          {/* 渲染敵軍投擲的手榴彈 */}
+          {enemyGrenadeEntities.map((g) => (
+            <EnemyGrenade
+              key={g.id}
+              position={g.position}
+              velocity={g.velocity}
+              targetPos={g.targetPos}
+              onExplode={(point) => handleEnemyGrenadeExplode(g.id, point)}
+            />
+          ))}
+
           {/* 敵軍 AI 或訓練標靶 */}
           {enemies.map((enemy) => (
             enemy.isDummy ? (
@@ -7635,6 +8259,7 @@ export default function App() {
                 data={enemy}
                 onShootPlayer={handleShootPlayer}
                 onKilled={handleEnemyKilled}
+                onThrowGrenade={addEnemyGrenade}
               />
             )
           ))}
