@@ -75,6 +75,57 @@ html, body {
   box-shadow: 0 0 6px var(--hud-primary);
 }
 
+/* 狙擊鏡專屬樣式 */
+.sniper-scope-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.scope-lens {
+  position: relative;
+  width: min(82vw, 82vh);
+  height: min(82vw, 82vh);
+  border-radius: 50%;
+  border: 15px solid #000;
+  box-shadow: 0 0 0 9999px #000, inset 0 0 45px rgba(0, 0, 0, 0.95);
+  background: radial-gradient(circle, transparent 65%, rgba(0, 0, 0, 0.4) 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.scope-line-h {
+  position: absolute;
+  width: 100%;
+  height: 1.5px;
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+.scope-line-v {
+  position: absolute;
+  width: 1.5px;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+.scope-center-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background-color: #ff1111;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #ff1111;
+}
+
 /* 戰術 CRT 掃描線效果 */
 .crt-overlay {
   position: absolute;

@@ -9,6 +9,19 @@ import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
 
 
 // ==========================================
+// 00. 槍枝武器規格設定 (Weapon Configurations)
+// ==========================================
+const WEAPON_CONFIGS = {
+  m4a1: { maxAmmo: 30, fireMode: 'auto', fireInterval: 110, damage: 25, recoil: 0.07, isPrimary: true, name: 'M4A1 突擊步槍' },
+  ak47: { maxAmmo: 30, fireMode: 'auto', fireInterval: 140, damage: 38, recoil: 0.11, isPrimary: true, name: 'AK-47 突擊步槍' },
+  awp: { maxAmmo: 5, fireMode: 'semi', fireInterval: 1500, damage: 100, recoil: 0.25, isPrimary: true, name: 'AWP 狙擊步槍' },
+  mp5: { maxAmmo: 30, fireMode: 'auto', fireInterval: 80, damage: 18, recoil: 0.04, isPrimary: true, name: 'MP5 衝鋒槍' },
+  m870: { maxAmmo: 6, fireMode: 'semi', fireInterval: 800, damage: 12, recoil: 0.18, isPrimary: true, name: 'M870 散彈槍' },
+  m9: { maxAmmo: 15, fireMode: 'semi', fireInterval: 200, damage: 15, recoil: 0.04, isPrimary: false, name: 'M9 戰術手槍' },
+  deagle: { maxAmmo: 7, fireMode: 'semi', fireInterval: 350, damage: 45, recoil: 0.12, isPrimary: false, name: '沙鷹重型手槍' }
+};
+
+// ==========================================
 // 0. 原生自體波形合成音效系統 (Procedural Web Audio API)
 // ==========================================
 class ProceduralAudio {
@@ -483,6 +496,260 @@ class ProceduralAudio {
       this.playClick(now, 2200, 0.1, 0.05);
     } catch (e) {
       console.warn('Weapon switch sound failed:', e);
+    }
+  }
+
+  playAK47() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      // AK-47 重步槍：低音 Sine 波
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(115, now);
+      subOsc.frequency.exponentialRampToValueAtTime(45, now + 0.09);
+      subGain.gain.setValueAtTime(0.95, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.16);
+
+      // 爆破噪音 (Noise) - 比 M4A1 稍微低沉
+      const bufferSize = this.ctx.sampleRate * 0.38;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(750, now);
+      filter.frequency.exponentialRampToValueAtTime(95, now + 0.32);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.8, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.38);
+    } catch (e) {
+      console.warn('AK-47 sound failed:', e);
+    }
+  }
+
+  playAWP() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      // AWP 重狙擊槍：極重低音 (Sine)
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(85, now);
+      subOsc.frequency.exponentialRampToValueAtTime(15, now + 0.22);
+      subGain.gain.setValueAtTime(1.4, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.4);
+
+      // AWP 重型爆破震波與尾音環境迴響 (Noise)
+      const bufferSize = this.ctx.sampleRate * 1.1;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(450, now);
+      filter.frequency.exponentialRampToValueAtTime(25, now + 0.75);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(1.15, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 1.05);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 1.1);
+    } catch (e) {
+      console.warn('AWP sound failed:', e);
+    }
+  }
+
+  playMP5() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      // MP5 輕微衝鋒槍：音調稍高、擊發快速
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(170, now);
+      subOsc.frequency.exponentialRampToValueAtTime(75, now + 0.05);
+      subGain.gain.setValueAtTime(0.48, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.1);
+
+      // 高頻清脆的爆破噪音 (Noise)
+      const bufferSize = this.ctx.sampleRate * 0.16;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1300, now);
+      filter.frequency.exponentialRampToValueAtTime(450, now + 0.12);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.55, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.16);
+    } catch (e) {
+      console.warn('MP5 sound failed:', e);
+    }
+  }
+
+  playShotgun() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      // M870 散彈槍：多彈丸同步噴射、強烈空氣爆裂感 (Sine)
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(95, now);
+      subOsc.frequency.exponentialRampToValueAtTime(25, now + 0.16);
+      subGain.gain.setValueAtTime(1.25, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.3);
+
+      // 大範圍爆裂噪音 (Noise)
+      const bufferSize = this.ctx.sampleRate * 0.52;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(650, now);
+      filter.frequency.exponentialRampToValueAtTime(45, now + 0.42);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(1.05, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.52);
+
+      // 擊發後 0.42s 與 0.56s 自動觸發泵動式退彈/上膛聲 (Pump clack-clack)
+      this.playClick(now + 0.42, 950, 0.24, 0.05);
+      this.playClick(now + 0.55, 750, 0.26, 0.06);
+    } catch (e) {
+      console.warn('Shotgun sound failed:', e);
+    }
+  }
+
+  playDeagle() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      // 沙鷹重型手槍：沉重低音 (Sine)
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(160, now);
+      subOsc.frequency.exponentialRampToValueAtTime(50, now + 0.08);
+      subGain.gain.setValueAtTime(0.85, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.18);
+
+      // 強烈爆破噪音 (Noise) - 手槍類中最大聲
+      const bufferSize = this.ctx.sampleRate * 0.3;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1050, now);
+      filter.frequency.exponentialRampToValueAtTime(130, now + 0.24);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.85, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.3);
+    } catch (e) {
+      console.warn('Deagle sound failed:', e);
     }
   }
 }
@@ -2042,7 +2309,7 @@ function TacticalAssets() {
 // ==========================================
 // 4. 第一人稱突擊步槍組件 (採用中空反射式紅點瞄準鏡，完全防遮擋)
 // ==========================================
-function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHealing }) {
+function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeWeaponId, isHealing }) {
   const medkitRef = useRef();
   const medkitLerp = useRef(0);
 
@@ -2068,25 +2335,36 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHeali
 
   return (
     <group ref={gunRef} name="weapon">
-      {/* 槍支本體群組，補血時往下滑出螢幕 */}
+      {/* 槍支本體群組，補血時往下滑出螢幕，狙擊開鏡時隱藏 */}
       <group 
         rotation={[0, Math.PI, 0]} 
         scale={[0.13, 0.13, 0.13]} 
         position={[0, -1.5 * medkitLerp.current, 0]}
+        visible={!(activeWeaponId === 'awp' && isAds)}
       >
         
         {/* 槍口閃光 (Muzzle Flash) - 共用以維持 ref 綁定與光源定位 */}
         <mesh 
           ref={muzzleFlashRef} 
-          position={activeWeapon === 'primary' ? [0, -0.04, 2.9] : [0, 0.28, 1.0]} 
+          position={
+            activeWeaponId === 'awp' ? [0, 0.02, 3.8] :
+            activeWeaponId === 'ak47' ? [0, -0.04, 3.0] :
+            activeWeaponId === 'mp5' ? [0, -0.04, 2.1] :
+            activeWeaponId === 'm870' ? [0, 0.06, 2.8] :
+            activeWeaponId === 'deagle' ? [0, 0.24, 1.1] :
+            activeWeaponId === 'm9' ? [0, 0.20, 1.0] :
+            [0, -0.04, 2.9] // default m4a1
+          } 
           visible={false}
         >
-          <sphereGeometry args={[activeWeapon === 'primary' ? 0.25 : 0.15, 8, 8]} />
+          <sphereGeometry args={[
+            (activeWeaponId === 'm9' || activeWeaponId === 'deagle') ? 0.15 : 0.25, 8, 8
+          ]} />
           <meshBasicMaterial color="#ffaa00" transparent opacity={0.9} />
           <pointLight color="#ffaa00" intensity={4} distance={6} />
         </mesh>
 
-        {activeWeapon === 'primary' ? (
+        {activeWeaponId === 'm4a1' && (
           <>
             {/* 1. 機匣/槍身本體 (Receiver) */}
             <mesh castShadow>
@@ -2136,21 +2414,19 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHeali
               <meshStandardMaterial color="#1f1f1f" />
             </mesh>
             
-            {/* 10. 中空瞄準鏡筒 (Hollow Cylinder, openEnded: true, DoubleSide 材質，可完全看穿) */}
+            {/* 10. 中空瞄準鏡筒 */}
             <mesh position={[0, 0.58, 0.15]} rotation={[Math.PI / 2, 0, 0]} castShadow>
               <cylinderGeometry args={[0.32, 0.32, 0.18, 32, 1, true]} />
               <meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
             </mesh>
 
-            {/* 11. 3D 紅點瞄準線 (懸浮於鏡筒中心，開鏡時顯示) */}
+            {/* 11. 3D 紅點瞄準線 */}
             {isAds && (
               <group position={[0, 0.58, 0.15]}>
-                {/* 中心紅色實心瞄準點 (不進行深度檢測，永遠懸浮於畫面上方) */}
                 <mesh>
                   <circleGeometry args={[0.007, 16]} />
                   <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
                 </mesh>
-                {/* 紅色外圈瞄準環 */}
                 <mesh position={[0, 0, 0.001]}>
                   <ringGeometry args={[0.024, 0.028, 24]} />
                   <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
@@ -2158,7 +2434,281 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHeali
               </group>
             )}
           </>
-        ) : (
+        )}
+
+        {activeWeaponId === 'ak47' && (
+          <>
+            {/* 1. 機匣/槍身本體 (Receiver) */}
+            <mesh castShadow>
+              <boxGeometry args={[0.26, 0.46, 2.0]} />
+              <meshStandardMaterial color="#222222" roughness={0.7} metalness={0.8} />
+            </mesh>
+            
+            {/* 2. 木質槍托 (Stock) */}
+            <mesh position={[0, -0.05, -1.35]} rotation={[-0.05, 0, 0]} castShadow>
+              <boxGeometry args={[0.2, 0.38, 1.1]} />
+              <meshStandardMaterial color="#8a4726" roughness={0.9} />
+            </mesh>
+            
+            {/* 3. 木質護木 (Handguard) */}
+            <mesh position={[0, -0.04, 1.3]} castShadow>
+              <boxGeometry args={[0.24, 0.28, 1.0]} />
+              <meshStandardMaterial color="#8a4726" roughness={0.9} />
+            </mesh>
+            
+            {/* 4. 上方導氣管 (Gas Tube) */}
+            <mesh position={[0, 0.16, 1.25]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.04, 0.04, 0.9]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.6} metalness={0.8} />
+            </mesh>
+            
+            {/* 5. 槍管 (Barrel) */}
+            <mesh position={[0, -0.04, 2.3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.03, 0.03, 1.0]} />
+              <meshStandardMaterial color="#111" roughness={0.5} />
+            </mesh>
+            
+            {/* 6. 準星 (Front Sight) */}
+            <mesh position={[0, 0.18, 2.8]} castShadow>
+              <boxGeometry args={[0.04, 0.16, 0.08]} />
+              <meshStandardMaterial color="#111" />
+            </mesh>
+            
+            {/* 7. 弧形香蕉彈匣 (Magazine) */}
+            <mesh position={[0, -0.5, 0.45]} rotation={[0.35, 0, 0]} castShadow>
+              <boxGeometry args={[0.12, 0.8, 0.4]} />
+              <meshStandardMaterial color="#202020" roughness={0.85} />
+            </mesh>
+            
+            {/* 8. 木質握把 (Grip) */}
+            <mesh position={[0, -0.38, -0.4]} rotation={[-0.38, 0, 0]} castShadow>
+              <boxGeometry args={[0.15, 0.48, 0.24]} />
+              <meshStandardMaterial color="#8a4726" roughness={0.9} />
+            </mesh>
+            
+            {/* 9. 瞄準鏡支架 & 紅點鏡筒 */}
+            <mesh position={[0, 0.42, 0.15]} castShadow>
+              <boxGeometry args={[0.2, 0.18, 0.5]} />
+              <meshStandardMaterial color="#222222" />
+            </mesh>
+            <mesh position={[0, 0.58, 0.15]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.32, 0.32, 0.18, 32, 1, true]} />
+              <meshStandardMaterial color="#222222" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
+            </mesh>
+
+            {/* 紅點瞄準線 */}
+            {isAds && (
+              <group position={[0, 0.58, 0.15]}>
+                <mesh>
+                  <circleGeometry args={[0.007, 16]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+                <mesh position={[0, 0, 0.001]}>
+                  <ringGeometry args={[0.024, 0.028, 24]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            )}
+          </>
+        )}
+
+        {activeWeaponId === 'awp' && (
+          <>
+            {/* 1. 一體化軍綠色主體槍身 (Body & Stock) */}
+            <mesh position={[0, -0.05, 0.1]} castShadow>
+              <boxGeometry args={[0.25, 0.45, 2.2]} />
+              <meshStandardMaterial color="#3b4f3b" roughness={0.9} />
+            </mesh>
+            <mesh position={[0, 0.05, -1.45]} castShadow>
+              <boxGeometry args={[0.22, 0.48, 1.3]} />
+              <meshStandardMaterial color="#3b4f3b" roughness={0.9} />
+            </mesh>
+            
+            {/* 2. 槍托臉頰貼板 */}
+            <mesh position={[0, 0.34, -1.3]} castShadow>
+              <boxGeometry args={[0.18, 0.12, 0.8]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+            </mesh>
+            
+            {/* 3. 超長重型鋼鐵槍管 (Heavy Barrel) */}
+            <mesh position={[0, 0.02, 2.6]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.045, 0.035, 2.4]} />
+              <meshStandardMaterial color="#111111" roughness={0.4} metalness={0.8} />
+            </mesh>
+            
+            {/* 4. 雙室槍口制退器 (Muzzle Brake) */}
+            <mesh position={[0, 0.02, 3.8]} castShadow>
+              <boxGeometry args={[0.08, 0.08, 0.25]} />
+              <meshStandardMaterial color="#111" roughness={0.4} metalness={0.8} />
+            </mesh>
+            
+            {/* 5. 經典手拉機栓 (Bolt Handle) */}
+            <mesh position={[0.16, 0.1, -0.3]} rotation={[0, 0, Math.PI / 3]} castShadow>
+              <cylinderGeometry args={[0.02, 0.02, 0.2]} />
+              <meshStandardMaterial color="#111" roughness={0.3} metalness={0.9} />
+            </mesh>
+            
+            {/* 6. 短狙擊彈匣 (Short Magazine) */}
+            <mesh position={[0, -0.36, 0.1]} castShadow>
+              <boxGeometry args={[0.14, 0.35, 0.3]} />
+              <meshStandardMaterial color="#1e1e1e" roughness={0.8} />
+            </mesh>
+            
+            {/* 7. 大型高倍狙擊鏡 (Sniper Scope) */}
+            <mesh position={[0, 0.34, -0.2]} castShadow>
+              <boxGeometry args={[0.08, 0.2, 0.6]} />
+              <meshStandardMaterial color="#1e1e1e" />
+            </mesh>
+            <mesh position={[0, 0.48, -0.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.14, 0.11, 1.2]} />
+              <meshStandardMaterial color="#111111" roughness={0.4} metalness={0.8} />
+            </mesh>
+            <mesh position={[0, 0.48, 0.42]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.16, 0.14, 0.15]} />
+              <meshStandardMaterial color="#1e1e1e" />
+            </mesh>
+          </>
+        )}
+
+        {activeWeaponId === 'mp5' && (
+          <>
+            {/* MP5 SMG Model */}
+            {/* 1. 機匣與上機蓋 (Receiver) */}
+            <mesh castShadow>
+              <boxGeometry args={[0.24, 0.4, 1.4]} />
+              <meshStandardMaterial color="#1c1c1c" roughness={0.7} metalness={0.75} />
+            </mesh>
+            
+            {/* 2. 伸縮槍托桿 (Telescoping Rods) */}
+            <mesh position={[-0.08, 0.05, -0.8]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.02, 0.02, 0.8]} />
+              <meshStandardMaterial color="#101010" roughness={0.5} metalness={0.9} />
+            </mesh>
+            <mesh position={[0.08, 0.05, -0.8]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.02, 0.02, 0.8]} />
+              <meshStandardMaterial color="#101010" roughness={0.5} metalness={0.9} />
+            </mesh>
+            <mesh position={[0, 0.05, -1.2]} castShadow>
+              <boxGeometry args={[0.18, 0.45, 0.12]} />
+              <meshStandardMaterial color="#151515" roughness={0.9} />
+            </mesh>
+            
+            {/* 3. 戰術肋條塑料護木 (Handguard) */}
+            <mesh position={[0, -0.04, 0.95]} castShadow>
+              <boxGeometry args={[0.22, 0.28, 0.8]} />
+              <meshStandardMaterial color="#151515" roughness={0.9} />
+            </mesh>
+            
+            {/* 4. 短槍管 (Short Barrel) */}
+            <mesh position={[0, -0.02, 1.55]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.028, 0.028, 0.5]} />
+              <meshStandardMaterial color="#111" roughness={0.5} />
+            </mesh>
+            
+            {/* 5. 圓環前準星 (Hooded Front Sight) */}
+            <mesh position={[0, 0.15, 1.7]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.08, 0.08, 0.05, 16, 1, true]} />
+              <meshStandardMaterial color="#101010" side={THREE.DoubleSide} />
+            </mesh>
+            
+            {/* 6. 彎曲 9mm 彈匣 */}
+            <mesh position={[0, -0.45, 0.4]} rotation={[0.18, 0, 0]} castShadow>
+              <boxGeometry args={[0.1, 0.65, 0.18]} />
+              <meshStandardMaterial color="#151515" roughness={0.8} />
+            </mesh>
+            
+            {/* 7. 手槍握把 (Grip) */}
+            <mesh position={[0, -0.35, -0.3]} rotation={[-0.4, 0, 0]} castShadow>
+              <boxGeometry args={[0.14, 0.42, 0.2]} />
+              <meshStandardMaterial color="#151515" roughness={0.9} />
+            </mesh>
+            
+            {/* 8. 瞄準鏡 */}
+            <mesh position={[0, 0.38, 0.15]} castShadow>
+              <boxGeometry args={[0.16, 0.14, 0.4]} />
+              <meshStandardMaterial color="#1a1a1a" />
+            </mesh>
+            <mesh position={[0, 0.52, 0.15]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.28, 0.28, 0.16, 32, 1, true]} />
+              <meshStandardMaterial color="#151515" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
+            </mesh>
+
+            {/* 紅點瞄準線 */}
+            {isAds && (
+              <group position={[0, 0.52, 0.15]}>
+                <mesh>
+                  <circleGeometry args={[0.007, 16]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+                <mesh position={[0, 0, 0.001]}>
+                  <ringGeometry args={[0.024, 0.028, 24]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            )}
+          </>
+        )}
+
+        {activeWeaponId === 'm870' && (
+          <>
+            {/* M870 Shotgun Model */}
+            {/* 1. 金屬灰機匣 (Receiver) */}
+            <mesh castShadow>
+              <boxGeometry args={[0.25, 0.42, 1.8]} />
+              <meshStandardMaterial color="#353535" roughness={0.65} metalness={0.7} />
+            </mesh>
+            
+            {/* 2. 木質槍托 (Stock) */}
+            <mesh position={[0, -0.06, -1.3]} rotation={[-0.1, 0, 0]} castShadow>
+              <boxGeometry args={[0.2, 0.4, 1.2]} />
+              <meshStandardMaterial color="#8a4726" roughness={0.95} />
+            </mesh>
+            
+            {/* 3. 管狀下彈倉 (Magazine Tube) */}
+            <mesh position={[0, -0.06, 1.3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.038, 0.038, 1.3]} />
+              <meshStandardMaterial color="#222" roughness={0.6} metalness={0.8} />
+            </mesh>
+            
+            {/* 4. 木質滑動泵把 (Pump Handle / Slider) */}
+            <mesh position={[0, -0.06, 0.9]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.06, 0.06, 0.7]} />
+              <meshStandardMaterial color="#8a4726" roughness={0.9} />
+            </mesh>
+            
+            {/* 5. 鋼鐵單槍管 (Shotgun Barrel) */}
+            <mesh position={[0, 0.06, 1.5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.045, 0.045, 1.6]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.8} />
+            </mesh>
+            
+            {/* 6. 機械瞄具 (Sight) */}
+            <mesh position={[0, 0.36, 0.15]} castShadow>
+              <boxGeometry args={[0.16, 0.12, 0.4]} />
+              <meshStandardMaterial color="#222" />
+            </mesh>
+            <mesh position={[0, 0.48, 0.15]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.26, 0.26, 0.16, 32, 1, true]} />
+              <meshStandardMaterial color="#222" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
+            </mesh>
+
+            {/* 紅點瞄準線 */}
+            {isAds && (
+              <group position={[0, 0.48, 0.15]}>
+                <mesh>
+                  <circleGeometry args={[0.007, 16]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+                <mesh position={[0, 0, 0.001]}>
+                  <ringGeometry args={[0.024, 0.028, 24]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            )}
+          </>
+        )}
+
+        {activeWeaponId === 'm9' && (
           <>
             {/* M9 Pistol Model */}
             {/* 1. 滑套 (Slide) - 頂部金屬 */}
@@ -2166,52 +2716,109 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, isHeali
               <boxGeometry args={[0.18, 0.22, 1.0]} />
               <meshStandardMaterial color="#2d2d2d" roughness={0.5} metalness={0.7} />
             </mesh>
-
+            
             {/* 2. 槍身底座 (Frame) */}
             <mesh position={[0, 0.04, 0.35]} castShadow>
               <boxGeometry args={[0.16, 0.16, 0.7]} />
               <meshStandardMaterial color="#1e1e1e" roughness={0.8} />
             </mesh>
-
+            
             {/* 3. 槍管 (Barrel) */}
             <mesh position={[0, 0.2, 0.85]} rotation={[Math.PI / 2, 0, 0]} castShadow>
               <cylinderGeometry args={[0.03, 0.03, 0.2]} />
               <meshStandardMaterial color="#111111" roughness={0.3} metalness={0.8} />
             </mesh>
-
+            
             {/* 4. 手槍握把 (Grip) */}
             <mesh position={[0, -0.22, 0.1]} rotation={[-0.2, 0, 0]} castShadow>
               <boxGeometry args={[0.15, 0.45, 0.22]} />
               <meshStandardMaterial color="#121212" roughness={0.95} />
             </mesh>
-
+            
             {/* 5. 扳機護圈 (Trigger Guard) */}
             <mesh position={[0, -0.08, 0.42]} castShadow>
               <boxGeometry args={[0.08, 0.12, 0.15]} />
               <meshStandardMaterial color="#1e1e1e" />
             </mesh>
-
+            
             {/* 6. 紅點瞄準鏡底座 */}
             <mesh position={[0, 0.33, 0.1]} castShadow>
               <boxGeometry args={[0.14, 0.08, 0.24]} />
               <meshStandardMaterial color="#1e1e1e" roughness={0.7} />
             </mesh>
-
+            
             {/* 7. 紅點瞄準鏡框 */}
             <mesh position={[0, 0.45, 0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
               <cylinderGeometry args={[0.16, 0.16, 0.12, 16, 1, true]} />
               <meshStandardMaterial color="#181818" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
             </mesh>
-
+            
             {/* 8. 3D 紅點瞄準線 (開鏡時顯示) */}
             {isAds && (
-              <group position={[0, 0.58, 0.1]}>
-                {/* 中心紅色實心瞄準點 (不進行深度檢測，永遠懸浮於畫面上方) */}
+              <group position={[0, 0.45, 0.1]}>
                 <mesh>
                   <circleGeometry args={[0.007, 16]} />
                   <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
                 </mesh>
-                {/* 紅色外圈瞄準環 */}
+                <mesh position={[0, 0, 0.001]}>
+                  <ringGeometry args={[0.024, 0.028, 24]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            )}
+          </>
+        )}
+
+        {activeWeaponId === 'deagle' && (
+          <>
+            {/* Desert Eagle (Deagle) Model */}
+            {/* 1. 巨大魁梧拋光銀色滑套 (Slide) - 頂部金屬 */}
+            <mesh position={[0, 0.24, 0.35]} castShadow>
+              <boxGeometry args={[0.22, 0.28, 1.2]} />
+              <meshStandardMaterial color="#dddddd" roughness={0.15} metalness={0.9} />
+            </mesh>
+            
+            {/* 2. 拋光銀色槍身底座 (Frame) */}
+            <mesh position={[0, 0.06, 0.40]} castShadow>
+              <boxGeometry args={[0.2, 0.18, 0.8]} />
+              <meshStandardMaterial color="#dddddd" roughness={0.15} metalness={0.9} />
+            </mesh>
+            
+            {/* 3. 大口徑槍管 (Barrel) */}
+            <mesh position={[0, 0.25, 0.95]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.05, 0.05, 0.3]} />
+              <meshStandardMaterial color="#111111" roughness={0.2} metalness={0.9} />
+            </mesh>
+            
+            {/* 4. 巨大黑色橡膠握把 (Black Grip) */}
+            <mesh position={[0, -0.24, 0.1]} rotation={[-0.18, 0, 0]} castShadow>
+              <boxGeometry args={[0.18, 0.52, 0.26]} />
+              <meshStandardMaterial color="#151515" roughness={0.95} />
+            </mesh>
+            
+            {/* 5. 扳機護圈 (Trigger Guard) */}
+            <mesh position={[0, -0.08, 0.48]} castShadow>
+              <boxGeometry args={[0.08, 0.14, 0.18]} />
+              <meshStandardMaterial color="#dddddd" roughness={0.2} metalness={0.9} />
+            </mesh>
+            
+            {/* 6. 瞄準鏡架 & 鏡框 */}
+            <mesh position={[0, 0.41, 0.1]} castShadow>
+              <boxGeometry args={[0.16, 0.08, 0.26]} />
+              <meshStandardMaterial color="#151515" roughness={0.7} />
+            </mesh>
+            <mesh position={[0, 0.53, 0.1]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.18, 0.18, 0.14, 16, 1, true]} />
+              <meshStandardMaterial color="#1c1c1c" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
+            </mesh>
+            
+            {/* 7. 3D 紅點瞄準線 (開鏡時顯示) */}
+            {isAds && (
+              <group position={[0, 0.53, 0.1]}>
+                <mesh>
+                  <circleGeometry args={[0.007, 16]} />
+                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
                 <mesh position={[0, 0, 0.001]}>
                   <ringGeometry args={[0.024, 0.028, 24]} />
                   <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
@@ -2504,6 +3111,8 @@ function PlayerController({
   mobileGrenadeTrigger,
   runStatsRef,
   cameraRef,
+  primaryWeaponId,
+  secondaryWeaponId,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -2543,52 +3152,62 @@ function PlayerController({
   const fireModeRef = useRef(fireMode);
   const gameStateRef = useRef(gameState);
   const activeWeaponRef = useRef(activeWeapon);
-
+  const primaryWeaponIdRef = useRef(primaryWeaponId);
+  const secondaryWeaponIdRef = useRef(secondaryWeaponId);
+ 
   const isTutorialRef = useRef(isTutorial);
   const onTriggerTutorialRef = useRef(onTriggerTutorial);
-
+ 
   const setAmmoRef = useRef(setAmmo);
   const enemiesRef = useRef(enemies);
   const onHitEnemyRef = useRef(onHitEnemy);
   const addImpactEffectRef = useRef(addImpactEffect);
   const addCasingRef = useRef(addCasing);
-
+ 
   // 行動端滑動看視角 Refs
   const lookTouchId = useRef(null);
   const lastLookPos = useRef({ x: 0, y: 0 });
-
+ 
   useEffect(() => {
     isTutorialRef.current = isTutorial;
   }, [isTutorial]);
-
+ 
   useEffect(() => {
     onTriggerTutorialRef.current = onTriggerTutorial;
   }, [onTriggerTutorial]);
-
+ 
   useEffect(() => {
     ammoRef.current = ammo;
   }, [ammo]);
-
+ 
   useEffect(() => {
     isReloadingRef.current = isReloading;
   }, [isReloading]);
-
+ 
   useEffect(() => {
     isHealingRef.current = isHealing;
   }, [isHealing]);
-
+ 
   useEffect(() => {
     fireModeRef.current = fireMode;
   }, [fireMode]);
-
+ 
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
-
+ 
   useEffect(() => {
     activeWeaponRef.current = activeWeapon;
   }, [activeWeapon]);
 
+  useEffect(() => {
+    primaryWeaponIdRef.current = primaryWeaponId;
+  }, [primaryWeaponId]);
+
+  useEffect(() => {
+    secondaryWeaponIdRef.current = secondaryWeaponId;
+  }, [secondaryWeaponId]);
+ 
   useEffect(() => {
     setAmmoRef.current = setAmmo;
   }, [setAmmo]);
@@ -2614,7 +3233,11 @@ function PlayerController({
     isMouseDown.current = mobileFiring;
     if (mobileFiring && fireModeRef.current === 'semi') {
       const now = performance.now() / 1000;
-      const fireInterval = activeWeaponRef.current === 'primary' ? 0.11 : 0.2;
+      const activeWeaponId = activeWeaponRef.current === 'primary' 
+        ? primaryWeaponIdRef.current 
+        : secondaryWeaponIdRef.current;
+      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+      const fireInterval = weaponConfig.fireInterval / 1000;
       if (now - lastFireTime.current >= fireInterval) {
         lastFireTime.current = now;
         fireOneBullet();
@@ -2825,12 +3448,17 @@ function PlayerController({
   const fireOneBullet = () => {
     if (gameStateRef.current !== 'active' || isReloadingRef.current || isHealingRef.current || ammoRef.current <= 0) return;
 
+    const activeWeaponId = activeWeaponRef.current === 'primary' 
+      ? primaryWeaponIdRef.current 
+      : secondaryWeaponIdRef.current;
+    const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+
     if (runStatsRef && runStatsRef.current) {
       runStatsRef.current.shotsFired += 1;
     }
 
     // 播放合成槍聲
-    if (activeWeaponRef.current === 'primary') {
+    if (weaponConfig.isPrimary) {
       soundManager.playGunshot();
     } else {
       soundManager.playPistolGunshot();
@@ -2867,7 +3495,7 @@ function PlayerController({
       }, 50);
     }
 
-    recoilOffset.current = activeWeaponRef.current === 'primary' ? 0.07 : 0.04;
+    recoilOffset.current = weaponConfig.recoil;
 
     let currentSpread = 0.02;
     const keyboardState = keys.current;
@@ -2890,71 +3518,80 @@ function PlayerController({
       currentSpread = 0.035;
     }
 
-    const finalSpread = THREE.MathUtils.lerp(currentSpread, 0.001, adsLerp.current);
+    const pelletCount = activeWeaponId === 'm870' ? 8 : 1;
 
-    const spreadX = (Math.random() - 0.5) * finalSpread;
-    const spreadY = (Math.random() - 0.5) * finalSpread;
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-
-    if (intersects.length > 0) {
-      let hit = null;
-      for (let i = 0; i < intersects.length; i++) {
-        let obj = intersects[i].object;
-        
-        // Skip player self, weapon meshes, cosmetics, and helper lines/grids
-        let skip = false;
-        let parent = obj;
-        while (parent) {
-          if (parent.name === 'weapon' || 
-              parent.name === 'player' || 
-              parent.name === 'bullet_hole' || 
-              parent.name === 'tracer' || 
-              parent.name === 'casing' || 
-              parent.name === 'magazine' ||
-              parent.type === 'GridHelper' ||
-              parent.type === 'LineSegments' ||
-              parent.type === 'Line' ||
-              parent.userData.isPlayer) {
-            skip = true;
-            break;
-          }
-          parent = parent.parent;
-        }
-        if (skip) continue;
-        
-        hit = intersects[i];
-        break;
+    for (let p = 0; p < pelletCount; p++) {
+      let finalSpread = THREE.MathUtils.lerp(currentSpread, 0.001, adsLerp.current);
+      if (activeWeaponId === 'm870') {
+        finalSpread = THREE.MathUtils.lerp(0.065, 0.024, adsLerp.current);
       }
 
-      if (hit) {
-        let enemyId = null;
-        let parent = hit.object;
-        while (parent) {
-          if (parent.userData && parent.userData.isEnemy) {
-            enemyId = parent.userData.enemyId;
-            break;
+      const spreadX = (Math.random() - 0.5) * finalSpread;
+      const spreadY = (Math.random() - 0.5) * finalSpread;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      if (intersects.length > 0) {
+        let hit = null;
+        for (let i = 0; i < intersects.length; i++) {
+          let obj = intersects[i].object;
+          
+          let skip = false;
+          let parent = obj;
+          while (parent) {
+            if (parent.name === 'weapon' || 
+                parent.name === 'player' || 
+                parent.name === 'bullet_hole' || 
+                parent.name === 'tracer' || 
+                parent.name === 'casing' || 
+                parent.name === 'magazine' ||
+                parent.type === 'GridHelper' ||
+                parent.type === 'LineSegments' ||
+                parent.type === 'Line' ||
+                parent.userData.isPlayer) {
+              skip = true;
+              break;
+            }
+            parent = parent.parent;
           }
-          parent = parent.parent;
+          if (skip) continue;
+          
+          hit = intersects[i];
+          break;
         }
 
-        if (enemyId !== null) {
-          const enemyObj = enemiesRef.current.find((e) => e.id === enemyId);
-          let isHeadshot = false;
-          if (enemyObj) {
-            isHeadshot = hit.point.y >= enemyObj.position.y + 1.55;
+        if (hit) {
+          let enemyId = null;
+          let parent = hit.object;
+          while (parent) {
+            if (parent.userData && parent.userData.isEnemy) {
+              enemyId = parent.userData.enemyId;
+              break;
+            }
+            parent = parent.parent;
           }
-          if (runStatsRef && runStatsRef.current) {
-            runStatsRef.current.shotsHit += 1;
-            if (isHeadshot) {
-              runStatsRef.current.headshots += 1;
+
+          if (enemyId !== null) {
+            const enemyObj = enemiesRef.current.find((e) => e.id === enemyId);
+            let isHeadshot = false;
+            if (enemyObj) {
+              isHeadshot = hit.point.y >= enemyObj.position.y + 1.55;
+            }
+            if (runStatsRef && runStatsRef.current) {
+              runStatsRef.current.shotsHit += 1;
+              if (isHeadshot) {
+                runStatsRef.current.headshots += 1;
+              }
+            }
+            onHitEnemyRef.current(enemyId, hit.point, isHeadshot);
+          } else {
+            // M870 散彈槍只生成部分彈孔，防止大量物理微粒導致畫面卡頓
+            if (activeWeaponId !== 'm870' || p < 2) {
+              addImpactEffectRef.current(hit.point, hit.face.normal);
             }
           }
-          onHitEnemyRef.current(enemyId, hit.point, isHeadshot);
-        } else {
-          addImpactEffectRef.current(hit.point, hit.face.normal);
         }
       }
     }
@@ -2970,7 +3607,11 @@ function PlayerController({
       isMouseDown.current = true;
 
       const now = performance.now() / 1000;
-      const fireInterval = activeWeaponRef.current === 'primary' ? 0.11 : 0.2;
+      const activeWeaponId = activeWeaponRef.current === 'primary' 
+        ? primaryWeaponIdRef.current 
+        : secondaryWeaponIdRef.current;
+      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+      const fireInterval = weaponConfig.fireInterval / 1000;
       if (fireModeRef.current === 'semi') {
         if (now - lastFireTime.current >= fireInterval) {
           lastFireTime.current = now;
@@ -3042,7 +3683,11 @@ function PlayerController({
     // ------------------------------------------
     if (fireModeRef.current === 'auto' && isMouseDown.current) {
       const now = performance.now() / 1000;
-      const fireInterval = activeWeaponRef.current === 'primary' ? 0.11 : 0.2;
+      const activeWeaponId = activeWeaponRef.current === 'primary' 
+        ? primaryWeaponIdRef.current 
+        : secondaryWeaponIdRef.current;
+      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+      const fireInterval = weaponConfig.fireInterval / 1000;
       if (now - lastFireTime.current >= fireInterval) {
         if (isHealingRef.current) return;
         lastFireTime.current = now;
@@ -3066,7 +3711,11 @@ function PlayerController({
     // ------------------------------------------
     adsLerp.current = THREE.MathUtils.lerp(adsLerp.current, isAds ? 1 : 0, 0.16);
     
-    camera.fov = THREE.MathUtils.lerp(70, 45, adsLerp.current);
+    const activeWeaponId = activeWeaponRef.current === 'primary' 
+      ? primaryWeaponIdRef.current 
+      : secondaryWeaponIdRef.current;
+    const targetFov = activeWeaponId === 'awp' ? 18 : 45;
+    camera.fov = THREE.MathUtils.lerp(70, targetFov, adsLerp.current);
     camera.updateProjectionMatrix();
 
     // ------------------------------------------
@@ -3422,7 +4071,12 @@ export default function App() {
   const reloadTimeoutRef = useRef(null);
 
   // 衍生狀態
-  const fireMode = activeWeapon === 'primary' ? primaryFireMode : 'semi';
+  const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
+  const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+  const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
+  const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+
+  const fireMode = weaponConfig.fireMode === 'auto' ? (activeWeapon === 'primary' ? primaryFireMode : 'semi') : 'semi';
   const ammo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
   const setAmmo = activeWeapon === 'primary' ? setPrimaryAmmo : setSecondaryAmmo;
 
@@ -3538,23 +4192,30 @@ export default function App() {
 
   const triggerReload = () => {
     if (gameState !== 'active' || isReloading || isHealing) return;
+
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+    const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
+    const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+
     const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
-    const maxAmmo = activeWeapon === 'primary' ? 30 : 15;
+    const maxAmmo = weaponConfig.maxAmmo;
+
     if (currentAmmo < maxAmmo) {
       setIsReloading(true);
-      if (activeWeapon === 'primary') {
+      if (weaponConfig.isPrimary) {
         soundManager.playReload();
       } else {
         soundManager.playPistolReload();
       }
       reloadTimeoutRef.current = setTimeout(() => {
         if (activeWeapon === 'primary') {
-          setPrimaryAmmo(30);
+          setPrimaryAmmo(maxAmmo);
         } else {
-          setSecondaryAmmo(15);
+          setSecondaryAmmo(maxAmmo);
         }
         setIsReloading(false);
-      }, activeWeapon === 'primary' ? 1500 : 1000);
+      }, weaponConfig.isPrimary ? 1500 : 1000);
     }
   };
 
@@ -3993,10 +4654,15 @@ export default function App() {
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     
     // 套用戰術裝備升級
-    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
-    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    const hasArmor = currentUser?.equipped?.bodyArmor;
+    const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
     setHealth(hasArmor ? 150 : 100);
-    setGrenades(hasGrenadePouch ? 3 : 2);
+    setGrenades(equippedGrenades);
+
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
+    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
 
     setGameState('active');
     soundManager.startAmbient();
@@ -4228,17 +4894,28 @@ export default function App() {
     setEnemies((prev) => {
       return prev.map((enemy) => {
         if (enemy.id === enemyId && enemy.state === 'alive') {
-          const hasLaser = currentUser && currentUser.inventory && currentUser.inventory.laserSight;
-          const hasSuppressor = currentUser && currentUser.inventory && currentUser.inventory.suppressor;
-          const primaryDmg = hasLaser ? 30 : 25;
-          const secondaryDmg = hasSuppressor ? 20 : 15;
-          const damage = isHeadshot ? 100 : (activeWeapon === 'primary' ? primaryDmg : secondaryDmg);
+          const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
+          const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+          
+          const hasLaser = currentUser?.equipped?.laserSight || (currentUser && currentUser.inventory && currentUser.inventory.laserSight);
+          const hasSuppressor = currentUser?.equipped?.suppressor || (currentUser && currentUser.inventory && currentUser.inventory.suppressor);
+          
+          let baseDamage = weaponConfig.damage;
+          if (activeWeaponId === 'm4a1' && hasLaser) baseDamage = 30;
+          if (activeWeaponId === 'm9' && hasSuppressor) baseDamage = 20;
+
+          const damage = isHeadshot 
+            ? Math.max(100, Math.round(baseDamage * 3)) 
+            : baseDamage;
+
           const newHp = Math.max(0, enemy.hp - damage);
           const isDead = newHp <= 0;
           if (isDead) {
             soundManager.playEnemyDeath(); // 播放倒地哀嚎聲
             // 寫入戰術擊殺訊息欄
-            addKillFeedEntry(`PLAYER ➔ [${isHeadshot ? 'HEADSHOT' : (activeWeapon === 'primary' ? 'M4A1' : 'M9')}] ENEMY_0${enemy.id}`, isHeadshot ? 'headshot' : 'normal');
+            const weaponShortName = weaponConfig.name ? weaponConfig.name.split(' ')[0] : 'WEAPON';
+            const killType = isHeadshot ? 'HEADSHOT' : weaponShortName;
+            addKillFeedEntry(`PLAYER ➔ [${killType}] ENEMY_0${enemy.id}`, isHeadshot ? 'headshot' : 'normal');
           }
           return {
             ...enemy,
@@ -4292,7 +4969,7 @@ export default function App() {
   const handleShootPlayer = (damage = 10, attackerPos = null) => {
     if (gameState !== 'active') return;
 
-    const hasHelmet = currentUser && currentUser.inventory && currentUser.inventory.opsHelmet;
+    const hasHelmet = currentUser?.equipped?.opsHelmet || (currentUser && currentUser.inventory && currentUser.inventory.opsHelmet);
     const finalDamage = hasHelmet ? Math.max(1, Math.round(damage * 0.75)) : damage;
 
     setHealth((prev) => {
@@ -4347,11 +5024,13 @@ export default function App() {
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     
     // 套用戰術裝備升級
-    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
-    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    const hasArmor = currentUser?.equipped?.bodyArmor;
+    const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
     setHealth(hasArmor ? 150 : 100);
-    setPrimaryAmmo(30);
-    setSecondaryAmmo(15);
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
+    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
     setActiveWeapon('primary');
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
@@ -4365,7 +5044,7 @@ export default function App() {
     setParticles([]);
     setIsAds(false);
     setPrimaryFireMode('auto');
-    setGrenades(hasGrenadePouch ? 3 : 2);
+    setGrenades(equippedGrenades);
     setGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
@@ -4452,11 +5131,13 @@ export default function App() {
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setIsTutorial(false);
     // 重啟進入正式實戰模式
-    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
-    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    const hasArmor = currentUser?.equipped?.bodyArmor;
+    const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
     setHealth(hasArmor ? 150 : 100);
-    setPrimaryAmmo(30);
-    setSecondaryAmmo(15);
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
+    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
     setActiveWeapon('primary');
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
@@ -4466,7 +5147,7 @@ export default function App() {
     setParticles([]);
     setIsAds(false);
     setPrimaryFireMode('auto');
-    setGrenades(hasGrenadePouch ? 3 : 2);
+    setGrenades(equippedGrenades);
     setGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
@@ -4729,6 +5410,17 @@ export default function App() {
       {isLocked && gameState === 'active' && !isAds && (
         <div className="crosshair">
           <div className="crosshair-center" />
+        </div>
+      )}
+
+      {/* 狙擊槍開鏡黑邊與瞄準圈 */}
+      {isLocked && gameState === 'active' && isAds && activeWeaponId === 'awp' && (
+        <div className="sniper-scope-overlay">
+          <div className="scope-lens">
+            <div className="scope-line-h" />
+            <div className="scope-line-v" />
+            <div className="scope-center-dot" />
+          </div>
         </div>
       )}
 
@@ -5421,25 +6113,15 @@ export default function App() {
                                       <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>x{count}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '5px' }}>
-                                      {key === 'm4a1' && count > 0 && (
-                                        <>
-                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', 'm4a1')}>
-                                            主手
-                                          </button>
-                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00e5ff', color: '#00e5ff', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', 'm4a1')}>
-                                            副手
-                                          </button>
-                                        </>
+                                      {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(key) && count > 0 && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', key)}>
+                                          主手
+                                        </button>
                                       )}
-                                      {key === 'm9' && count > 0 && (
-                                        <>
-                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', 'm9')}>
-                                            主手
-                                          </button>
-                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00e5ff', color: '#00e5ff', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', 'm9')}>
-                                            副手
-                                          </button>
-                                        </>
+                                      {['m9', 'deagle'].includes(key) && count > 0 && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', key)}>
+                                          副手
+                                        </button>
                                       )}
                                       {key === 'bodyArmor' && count > 0 && !currentUser.equipped?.bodyArmor && (
                                         <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('bodyArmor', 'bodyArmor')}>
@@ -5895,15 +6577,15 @@ export default function App() {
                   </span>
                 ) : (
                   <>
-                    <span className="hud-large-num" style={{ color: ammo <= (activeWeapon === 'primary' ? 5 : 3) ? '#ffaa00' : 'inherit' }}>
+                    <span className="hud-large-num" style={{ color: ammo <= Math.ceil(weaponConfig.maxAmmo * 0.2) ? '#ffaa00' : 'inherit' }}>
                       {ammo}
                     </span>
-                    <span className="hud-small-label">/ {activeWeapon === 'primary' ? '30' : '15'} {device === 'pc' ? '(R)' : ''}</span>
+                    <span className="hud-small-label">/ {weaponConfig.maxAmmo} {device === 'pc' ? '(R)' : ''}</span>
                   </>
                 )}
               </div>
               <div className="hud-sys-status" style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                <span>WEAPON: <span className="sys-active" style={{ color: '#00ff66', fontWeight: 'bold' }}>{activeWeapon === 'primary' ? 'M4A1' : 'M9'}</span> <span style={{ color: ammo === 0 ? '#ffaa00' : '#88a888', fontSize: '0.8rem' }}>({ammo === 0 ? 'EMPTY' : 'READY'})</span></span>
+                <span>WEAPON: <span className="sys-active" style={{ color: '#00ff66', fontWeight: 'bold' }}>{weaponConfig.name}</span> <span style={{ color: ammo === 0 ? '#ffaa00' : '#88a888', fontSize: '0.8rem' }}>({ammo === 0 ? 'EMPTY' : 'READY'})</span></span>
                 <span 
                   onClick={device === 'mobile' ? triggerFireMode : undefined} 
                   style={{ cursor: device === 'mobile' ? 'pointer' : 'default', userSelect: 'none' }}
@@ -6006,7 +6688,7 @@ export default function App() {
           ))}
 
           {/* 突擊步槍與手槍模型 */}
-          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} isHealing={isHealing} />
+          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} activeWeaponId={activeWeaponId} isHealing={isHealing} />
 
           {/* 玩家與開火 Raycaster 控制器 */}
           <PlayerController
@@ -6042,6 +6724,8 @@ export default function App() {
             mobileGrenadeTrigger={mobileGrenadeTrigger}
             runStatsRef={runStatsRef}
             cameraRef={cameraRef}
+            primaryWeaponId={primaryWeaponId}
+            secondaryWeaponId={secondaryWeaponId}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}

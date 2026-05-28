@@ -14,7 +14,12 @@ export function getAccounts() {
         // 新手包：可打 3 把的物資備份（已裝備 1 套 + 倉庫 2 套）
         a.stash = {
           m4a1: 2,
+          ak47: 0,
+          awp: 0,
+          mp5: 0,
+          m870: 0,
           m9: 2,
+          deagle: 0,
           bodyArmor: 2,
           opsHelmet: 2,
           grenade: 4,
@@ -24,6 +29,14 @@ export function getAccounts() {
           dogTag: 0
         };
         changed = true;
+      } else {
+        // 補全現有帳號中新增的槍枝欄位
+        ['ak47', 'awp', 'mp5', 'm870', 'deagle'].forEach(w => {
+          if (a.stash[w] === undefined) {
+            a.stash[w] = 0;
+            changed = true;
+          }
+        });
       }
       // 升級相容單兵配裝 Equipped 系統
       if (a.equipped === undefined) {
@@ -75,7 +88,12 @@ export function registerAccount(username, nickname, password) {
     coins: 2000, // 初始給予 2000 金幣
     stash: {
       m4a1: 2,
+      ak47: 0,
+      awp: 0,
+      mp5: 0,
+      m870: 0,
       m9: 2,
+      deagle: 0,
       bodyArmor: 2,
       opsHelmet: 2,
       grenade: 4,
