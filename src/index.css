@@ -345,8 +345,8 @@ html, body {
   background: var(--hud-bg);
   border: 1px solid var(--hud-bg-border);
   border-radius: 4px;
-  padding: 15px 20px;
-  width: 250px;
+  padding: 12px 15px;
+  width: 220px;
 }
 
 .hud-label {
@@ -1739,3 +1739,213 @@ html, body {
   box-shadow: 0 0 10px rgba(0, 255, 102, 0.12);
   background: rgba(0, 255, 102, 0.04) !important;
 }
+
+/* ==========================================
+   步驟 4 全新軍事與搜刮 HUD 樣式表
+   ========================================== */
+
+/* 搜刮進度 HUD */
+.hud-looting-overlay {
+  position: absolute;
+  bottom: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(8, 16, 10, 0.9);
+  border: 1px solid var(--hud-amber);
+  border-radius: 4px;
+  padding: 12px 24px;
+  width: 280px;
+  box-shadow: 0 0 20px rgba(255, 170, 0, 0.2);
+  clip-path: polygon(
+    0 8px, 8px 0, 
+    calc(100% - 8px) 0, 100% 8px, 
+    100% calc(100% - 8px), calc(100% - 8px) 100%, 
+    8px 100%, 0 calc(100% - 8px)
+  );
+  animation: pulse-border-amber 1.5s infinite alternate;
+}
+
+.hud-looting-label {
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--hud-amber);
+  margin-bottom: 8px;
+  text-shadow: 0 0 8px var(--hud-amber-glow);
+}
+
+.hud-looting-bar-container {
+  width: 100%;
+  height: 12px;
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid var(--hud-amber-glow);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.hud-looting-bar {
+  height: 100%;
+  background: var(--hud-amber);
+  box-shadow: 0 0 12px var(--hud-amber);
+  transition: width 0.05s linear;
+}
+
+.hud-looting-pct {
+  font-size: 0.8rem;
+  color: #a89888;
+  font-weight: bold;
+}
+
+@keyframes pulse-border-amber {
+  from { box-shadow: 0 0 8px rgba(255, 170, 0, 0.08); }
+  to { box-shadow: 0 0 16px rgba(255, 170, 0, 0.25); }
+}
+
+/* 搜刮獲得物資 Popup */
+.loot-popup-container {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  pointer-events: none;
+  background: rgba(8, 16, 10, 0.95);
+  border: 2px solid var(--hud-primary);
+  border-radius: 4px;
+  padding: 15px 30px;
+  text-align: center;
+  box-shadow: 0 0 25px rgba(0, 255, 102, 0.35);
+  animation: popup-slide-up 0.3s ease-out;
+  clip-path: polygon(
+    0 10px, 10px 0, 
+    calc(100% - 10px) 0, 100% 10px, 
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 
+    10px 100%, 0 calc(100% - 10px)
+  );
+}
+
+.loot-popup-header {
+  font-size: 1.15rem;
+  font-weight: bold;
+  color: var(--hud-primary);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+  text-shadow: 0 0 8px var(--hud-glow);
+}
+
+.loot-popup-content {
+  font-size: 0.9rem;
+  color: #c0eee0;
+  letter-spacing: 1px;
+}
+
+@keyframes popup-slide-up {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* 波次倒數大字提示 */
+.wave-countdown-overlay {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+  font-family: inherit;
+  color: var(--hud-amber);
+  text-shadow: 0 0 15px var(--hud-amber-glow);
+  animation: pulse-countdown 1s infinite alternate;
+}
+
+.wave-countdown-title {
+  font-size: 1.5rem;
+  letter-spacing: 4px;
+  font-weight: bold;
+}
+
+.wave-countdown-number {
+  font-size: 5rem;
+  font-weight: 900;
+  margin: 10px 0;
+}
+
+.wave-countdown-subtitle {
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+  color: #a89888;
+}
+
+@keyframes pulse-countdown {
+  from { transform: translate(-50%, -50%) scale(0.98); opacity: 0.9; }
+  to { transform: translate(-50%, -50%) scale(1.02); opacity: 1; }
+}
+
+/* 戰術背包 HUD 面板 */
+.hud-backpack-panel {
+  position: absolute;
+  top: 285px; /* 下移避免擋住擊殺訊息與教學清單 */
+  left: 30px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  border-left: 3px solid var(--hud-primary);
+  border-radius: 4px;
+  padding: 12px 18px;
+  width: 220px;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.hud-backpack-panel h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  letter-spacing: 1.5px;
+  color: var(--hud-primary);
+  border-bottom: 1px dashed var(--hud-bg-border);
+  padding-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.backpack-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-bottom: 4px;
+  color: #88a888;
+}
+
+.backpack-item.has-val {
+  color: #fff;
+  font-weight: bold;
+}
+
+.backpack-item span:last-child {
+  color: var(--hud-primary);
+}
+
+/* 行動端搜刮按鈕 */
+.btn-search {
+  width: 66px;
+  height: 66px;
+  bottom: 20px;
+  right: 205px;
+  border-color: var(--hud-amber);
+  color: var(--hud-amber);
+  font-size: 0.85rem;
+  text-shadow: 0 0 4px var(--hud-amber-glow);
+}
+
+.btn-search:active {
+  background: var(--hud-amber);
+  color: #000;
+  box-shadow: 0 0 15px var(--hud-amber);
+}
+

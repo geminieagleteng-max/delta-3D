@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, equipItem, unequipItem, buyMarketItem, sellMarketItem } from './utils/account';
+import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
 
@@ -1071,6 +1071,35 @@ const STATIC_COLLIDERS = [
   { x: 64.5, z: 49.1, hx: 2.0, hz: 0.1, minY: 3.6, maxY: 5.0 },  // 2nd Floor Front Right Rail
 ];
 
+export const LOOT_CONTAINERS = [
+  { id: 1, name: '軍用武器箱', position: new THREE.Vector3(-25, 0.4, 15) },
+  { id: 2, name: '醫療補給箱', position: new THREE.Vector3(30, 0.4, -20) },
+  { id: 3, name: '機密保險箱', position: new THREE.Vector3(-45, 0.4, -35) },
+  { id: 4, name: '戰術物資箱', position: new THREE.Vector3(20, 0.4, 50) }
+];
+
+export const spawnWave = (waveNumber) => {
+  const count = waveNumber === 1 ? 4 : waveNumber === 2 ? 6 : 8;
+  const spawned = [];
+  for (let i = 0; i < count; i++) {
+    let x = (Math.random() - 0.5) * 180;
+    let z = (Math.random() - 0.5) * 180;
+    while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+      x = (Math.random() - 0.5) * 180;
+      z = (Math.random() - 0.5) * 180;
+    }
+    const pos = new THREE.Vector3(x, 0, z);
+    spawned.push({
+      id: waveNumber * 100 + i + 1,
+      position: pos,
+      hp: 100,
+      state: 'alive',
+      isSniper: false,
+    });
+  }
+  return spawned;
+};
+
 const spawnEnemies = (isTutorial = false) => {
   if (isTutorial) {
     return [
@@ -1090,32 +1119,35 @@ const spawnEnemies = (isTutorial = false) => {
       }
     ];
   }
-
-  const count = 12;
-  const spawned = [];
-  
-  for (let i = 0; i < count; i++) {
-    const isSniper = false; // 移除角落哨塔狙擊手，全部改為普通地面步兵
-    // 隨機在更大範圍內生成地面步兵，擴大隨機出生範圍至 -90 ~ 90 (與地圖擴大同步)
-    let x = (Math.random() - 0.5) * 180;
-    let z = (Math.random() - 0.5) * 180;
-    // 與南側邊緣玩家出生點 (0, 1.6, 95) 的安全距離拉大為 45 米，防範出生即遭擊中
-    while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 45) {
-      x = (Math.random() - 0.5) * 180;
-      z = (Math.random() - 0.5) * 180;
-    }
-    const pos = new THREE.Vector3(x, 0, z);
-
-    spawned.push({
-      id: i + 1,
-      position: pos,
-      hp: 100,
-      state: 'alive',
-      isSniper,
-    });
-  }
-  return spawned;
+  return spawnWave(1);
 };
+
+export function LootCrate({ position, name, isLooted, rotation = [0, 0, 0] }) {
+  const boxColor = isLooted ? '#424542' : '#8c593b';
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 底部箱體 */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.3, 0.7, 0.8]} />
+        <meshStandardMaterial color={boxColor} roughness={0.7} metalness={0.2} />
+      </mesh>
+      {/* 箱蓋 */}
+      <mesh position={[0, 0.38, 0]} castShadow>
+        <boxGeometry args={[1.36, 0.1, 0.86]} />
+        <meshStandardMaterial color={isLooted ? '#2c2e2c' : '#5c3a25'} roughness={0.8} />
+      </mesh>
+      {/* 扣環鎖具 */}
+      <mesh position={[-0.4, 0.32, 0.41]} castShadow>
+        <boxGeometry args={[0.08, 0.16, 0.04]} />
+        <meshStandardMaterial color="#222" roughness={0.3} metalness={0.9} />
+      </mesh>
+      <mesh position={[0.4, 0.32, 0.41]} castShadow>
+        <boxGeometry args={[0.08, 0.16, 0.04]} />
+        <meshStandardMaterial color="#222" roughness={0.3} metalness={0.9} />
+      </mesh>
+    </group>
+  );
+}
 
 // 彈道紅色雷射軌跡線
 function TracerLine({ start, end }) {
@@ -3113,6 +3145,15 @@ function PlayerController({
   cameraRef,
   primaryWeaponId,
   secondaryWeaponId,
+  nearContainer,
+  setNearContainer,
+  isLooting,
+  setIsLooting,
+  lootProgress,
+  setLootProgress,
+  lootedContainers,
+  startLooting,
+  stopLooting,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -3163,6 +3204,18 @@ function PlayerController({
   const onHitEnemyRef = useRef(onHitEnemy);
   const addImpactEffectRef = useRef(addImpactEffect);
   const addCasingRef = useRef(addCasing);
+
+  const prevNearContainer = useRef(null);
+  const isLootingRef = useRef(isLooting);
+  const nearContainerRef = useRef(nearContainer);
+
+  useEffect(() => {
+    isLootingRef.current = isLooting;
+  }, [isLooting]);
+
+  useEffect(() => {
+    nearContainerRef.current = nearContainer;
+  }, [nearContainer]);
  
   // 行動端滑動看視角 Refs
   const lookTouchId = useRef(null);
@@ -3404,6 +3457,30 @@ function PlayerController({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onInteractAmmo, onInteractMed, device]);
+
+  // 監聽 F 鍵進行物資箱長按搜刮 Hold-to-Search (KeyDown 開始，KeyUp 終止)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'KeyF' && gameStateRef.current === 'active' && (device === 'mobile' || document.pointerLockElement)) {
+        if (prevNearContainer.current) {
+          startLooting();
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'KeyF') {
+        stopLooting();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [device, startLooting, stopLooting]);
 
   // 監聽重置訊號
   useEffect(() => {
@@ -3676,6 +3753,37 @@ function PlayerController({
     if (currentNear !== prevNearStation.current) {
       prevNearStation.current = currentNear;
       setNearStation(currentNear);
+    }
+
+    // ------------------------------------------
+    // 6.X 物資箱鄰近狀態與距離檢測
+    // ------------------------------------------
+    const playerPos3D = camera.position.clone();
+    let closestCrate = null;
+    let minCrateDist = Infinity;
+
+    LOOT_CONTAINERS.forEach((container) => {
+      if (lootedContainers && lootedContainers[container.id]) return;
+      const dist = playerPos3D.distanceTo(container.position);
+      if (dist < minCrateDist) {
+        minCrateDist = dist;
+        closestCrate = container;
+      }
+    });
+
+    let currentNearCrate = null;
+    if (minCrateDist < 3.0 && closestCrate) {
+      currentNearCrate = closestCrate;
+    }
+
+    if (currentNearCrate !== prevNearContainer.current) {
+      prevNearContainer.current = currentNearCrate;
+      setNearContainer(currentNearCrate);
+    }
+
+    // 如果正在搜刮但玩家走遠了，自動中斷
+    if (isLootingRef.current && !currentNearCrate) {
+      stopLooting();
     }
 
     // ------------------------------------------
@@ -4099,6 +4207,34 @@ export default function App() {
   // 畫面閃紅受傷特效狀態
   const [hurtActive, setHurtActive] = useState(false);
 
+  // 局內波次與物資搜刮狀態
+  const [currentWave, setCurrentWave] = useState(1);
+  const [waveCountdown, setWaveCountdown] = useState(0);
+  const [backpack, setBackpack] = useState({
+    goldBar: 0,
+    hardDrive: 0,
+    dogTag: 0,
+    grenade: 0,
+    medkit: 0,
+    coins: 0
+  });
+  const [lootedContainers, setLootedContainers] = useState({});
+  const [nearContainer, setNearContainer] = useState(null);
+  const [isLooting, setIsLooting] = useState(false);
+  const [lootProgress, setLootProgress] = useState(0);
+  const [lootPopup, setLootPopup] = useState(null);
+  const [medkits, setMedkits] = useState(2);
+
+  const nearContainerRef = useRef(nearContainer);
+  useEffect(() => {
+    nearContainerRef.current = nearContainer;
+  }, [nearContainer]);
+
+  const backpackRef = useRef(backpack);
+  useEffect(() => {
+    backpackRef.current = backpack;
+  }, [backpack]);
+
   // 敵人、粒子特效、彈孔貼紙狀態
   const [enemies, setEnemies] = useState(() => spawnEnemies(false));
   const [particles, setParticles] = useState([]);
@@ -4156,6 +4292,27 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [medCooldown]);
+
+  // 波次生存挑戰自動倒數
+  useEffect(() => {
+    if (waveCountdown > 0) {
+      const timer = setTimeout(() => {
+        setWaveCountdown((prev) => {
+          if (prev <= 1) {
+            setCurrentWave((w) => {
+              const nextWave = w + 1;
+              setEnemies(spawnWave(nextWave));
+              addKillFeedEntry(`第 ${nextWave} 波敵軍已進入戰區！`, 'system');
+              return nextWave;
+            });
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [waveCountdown]);
 
   const controlsRef = useRef();
   const gunRef = useRef();
@@ -4221,7 +4378,12 @@ export default function App() {
 
   const triggerHeal = () => {
     if (gameState !== 'active' || isHealing || isReloading) return;
-    if (health >= 100) return;
+    const maxHealth = currentUser?.equipped?.bodyArmor ? 150 : 100;
+    if (health >= maxHealth) return;
+    if (medkits <= 0) {
+      addKillFeedEntry("無可用醫療包！", "system");
+      return;
+    }
     
     setIsAds(false); // 補血時強迫解除開鏡
     setIsHealing(true);
@@ -4247,11 +4409,114 @@ export default function App() {
     }, intervalTime);
 
     healTimeoutRef.current = setTimeout(() => {
-      setHealth(100);
+      setHealth(maxHealth);
+      setMedkits((prev) => Math.max(0, prev - 1));
       setIsHealing(false);
       setHealProgress(0);
       soundManager.playSuccessChime();
     }, duration);
+  };
+
+  const lootIntervalRef = useRef(null);
+
+  const startLooting = () => {
+    if (isLooting || isHealing || isReloading || !nearContainer) return;
+    setIsLooting(true);
+    setLootProgress(0);
+    
+    if (lootIntervalRef.current) clearInterval(lootIntervalRef.current);
+    
+    let progress = 0;
+    const duration = 2500; // 2.5 seconds
+    const intervalTime = 50;
+    const step = (intervalTime / duration) * 100;
+    
+    lootIntervalRef.current = setInterval(() => {
+      progress += step;
+      if (progress >= 100) {
+        clearInterval(lootIntervalRef.current);
+        setLootProgress(100);
+        setIsLooting(false);
+        handleCompleteLoot();
+      } else {
+        setLootProgress(progress);
+      }
+    }, intervalTime);
+  };
+
+  const stopLooting = () => {
+    if (lootIntervalRef.current) {
+      clearInterval(lootIntervalRef.current);
+      lootIntervalRef.current = null;
+    }
+    setIsLooting(false);
+    setLootProgress(0);
+  };
+
+  const handleCompleteLoot = () => {
+    if (!nearContainerRef.current) return;
+    const container = nearContainerRef.current;
+    const containerId = container.id;
+    
+    setLootedContainers((prev) => ({
+      ...prev,
+      [containerId]: true
+    }));
+    
+    let rewards = {};
+    let popupMessage = '';
+    
+    if (containerId === 1) {
+      const coinsEarned = Math.floor(100 + Math.random() * 150);
+      const grenadeCount = Math.random() < 0.6 ? 1 : 2;
+      rewards = { coins: coinsEarned, grenade: grenadeCount };
+      popupMessage = `獲得：手榴彈 x${grenadeCount}，Delta 幣 x${coinsEarned}`;
+      setGrenades((prev) => prev + grenadeCount);
+    } else if (containerId === 2) {
+      const medCount = Math.random() < 0.6 ? 1 : 2;
+      const dogTagCount = Math.floor(1 + Math.random() * 2);
+      rewards = { medkit: medCount, dogTag: dogTagCount };
+      popupMessage = `獲得：醫療包 x${medCount}，敵軍軍籍牌 x${dogTagCount}`;
+      setMedkits((prev) => prev + medCount);
+    } else if (containerId === 3) {
+      const hasGold = Math.random() < 0.5;
+      const hasDrive = Math.random() < 0.5;
+      const coinsEarned = Math.floor(200 + Math.random() * 300);
+      rewards = {
+        goldBar: hasGold ? 1 : 0,
+        hardDrive: hasDrive ? 1 : 0,
+        coins: coinsEarned
+      };
+      popupMessage = `獲得：${hasGold ? '黃金金條 x1，' : ''}${hasDrive ? '加密硬碟 x1，' : ''}Delta 幣 x${coinsEarned}`;
+    } else {
+      const hasTag = Math.random() < 0.4;
+      const coinsEarned = Math.floor(80 + Math.random() * 120);
+      const medCount = Math.random() < 0.5 ? 1 : 0;
+      rewards = {
+        dogTag: hasTag ? 1 : 0,
+        medkit: medCount,
+        coins: coinsEarned
+      };
+      popupMessage = `獲得：${hasTag ? '敵軍軍籍牌 x1，' : ''}${medCount ? '醫療包 x1，' : ''}Delta 幣 x${coinsEarned}`;
+      if (medCount > 0) setMedkits((prev) => prev + medCount);
+    }
+    
+    setBackpack((prev) => {
+      const updated = { ...prev };
+      Object.keys(rewards).forEach((key) => {
+        updated[key] = (updated[key] || 0) + rewards[key];
+      });
+      return updated;
+    });
+    
+    setLootPopup({
+      title: `${container.name} 搜刮完成`,
+      content: popupMessage
+    });
+    
+    soundManager.playSuccessChime();
+    addKillFeedEntry(`玩家搜刮了 ${container.name}`, 'system');
+    setNearContainer(null);
   };
 
   const triggerFireMode = () => {
@@ -4607,12 +4872,37 @@ export default function App() {
       return;
     }
 
+    const bp = backpackRef.current;
+
     if (currentUser.isGuest) {
       // 遊客模式：也累積金幣（暫存於 State，登出消失）
       const updatedUser = {
         ...currentUser,
         coins: (currentUser.coins !== undefined ? currentUser.coins : 0) + totalCoins
       };
+      
+      if (victory) {
+        if (!updatedUser.stash) {
+          updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+        }
+        updatedUser.stash.goldBar = (updatedUser.stash.goldBar || 0) + bp.goldBar;
+        updatedUser.stash.hardDrive = (updatedUser.stash.hardDrive || 0) + bp.hardDrive;
+        updatedUser.stash.dogTag = (updatedUser.stash.dogTag || 0) + bp.dogTag;
+        updatedUser.stash.grenade = (updatedUser.stash.grenade || 0) + bp.grenade;
+        updatedUser.stash.medkit = (updatedUser.stash.medkit || 0) + bp.medkit;
+        updatedUser.coins = (updatedUser.coins || 0) + bp.coins;
+      } else {
+        // 戰死懲罰：丟裝
+        updatedUser.equipped = {
+          primaryWeapon: null,
+          secondaryWeapon: null,
+          bodyArmor: false,
+          opsHelmet: false,
+          grenades: 0,
+          medkits: 0
+        };
+      }
+      
       setCurrentUser(updatedUser);
       setEndgameStats({
         ...runStats,
@@ -4621,17 +4911,18 @@ export default function App() {
       return;
     }
 
-    const result = updateStats(currentUser.username, runStats);
-    if (result) {
-      setCurrentUser(result.user);
+    // 實體帳號：使用 saveMatchLoot 進行存檔、物資併入倉庫、死亡丢裝懲罰
+    const resultUser = saveMatchLoot(currentUser.username, runStats, bp, victory);
+    if (resultUser) {
+      setCurrentUser(resultUser);
       setEndgameStats({
         ...runStats,
-        coinsEarnedDetails: result.coinsEarnedDetails
+        coinsEarnedDetails
       });
       
       // 同步戰績至雲端
       setCloudSyncStatus('syncing');
-      syncPlayerToCloud(currentUser.username, result.user.nickname, result.user.stats)
+      syncPlayerToCloud(currentUser.username, resultUser.nickname, resultUser.stats)
         .then(() => {
           setCloudSyncStatus('done');
           loadCloudLeaderboard();
@@ -4653,6 +4944,19 @@ export default function App() {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     
+    // 重置波次、搜刮與背包狀態
+    setCurrentWave(1);
+    setWaveCountdown(0);
+    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setLootedContainers({});
+    setNearContainer(null);
+    setIsLooting(false);
+    setLootProgress(0);
+    setLootPopup(null);
+
+    const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
+    setMedkits(initialMedkits);
+    
     // 套用戰術裝備升級
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
@@ -4663,6 +4967,7 @@ export default function App() {
     const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
     setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
     setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
+    setEnemies(spawnEnemies(false));
 
     setGameState('active');
     soundManager.startAmbient();
@@ -4949,20 +5254,27 @@ export default function App() {
       return;
     }
 
-    setEnemies((prev) => prev.filter((enemy) => enemy.id !== enemyId));
-    setEliminated((prev) => {
-      const newCount = prev + 1;
-      
-      if (newCount >= 12) {
-        setGameState('victory');
-        soundManager.stopAmbient(); // 勝利時關閉背景環境音
-        if (controlsRef.current) {
-          controlsRef.current.unlock();
+    setEnemies((prev) => {
+      const remaining = prev.filter((enemy) => enemy.id !== enemyId);
+      if (remaining.length === 0) {
+        if (currentWave < 3) {
+          setWaveCountdown(5);
+          addKillFeedEntry(`第 ${currentWave} 波已清除！下一波將在 5 秒後開始...`, 'system');
+        } else {
+          setGameState('victory');
+          soundManager.stopAmbient(); // 勝利時關閉背景環境音
+          if (device === 'mobile') {
+            setIsLocked(false);
+          } else if (controlsRef.current) {
+            controlsRef.current.unlock();
+          }
+          saveEndgameStats(true, eliminated + 1); // 儲存勝利戰績
         }
-        saveEndgameStats(true, newCount); // 儲存勝利戰績
       }
-      return newCount;
+      return remaining;
     });
+
+    setEliminated((prev) => prev + 1);
   };
 
   // 敵軍定時向玩家開火扣血 (接受不同兵種的傷害值與攻擊來源座標)
@@ -5023,6 +5335,19 @@ export default function App() {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     
+    // 重置波次、搜刮與背包狀態
+    setCurrentWave(1);
+    setWaveCountdown(0);
+    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setLootedContainers({});
+    setNearContainer(null);
+    setIsLooting(false);
+    setLootProgress(0);
+    setLootPopup(null);
+
+    const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
+    setMedkits(initialMedkits);
+
     // 套用戰術裝備升級
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
@@ -5130,6 +5455,20 @@ export default function App() {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setIsTutorial(false);
+    
+    // 重置波次、搜刮與背包狀態
+    setCurrentWave(1);
+    setWaveCountdown(0);
+    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setLootedContainers({});
+    setNearContainer(null);
+    setIsLooting(false);
+    setLootProgress(0);
+    setLootPopup(null);
+    
+    const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
+    setMedkits(initialMedkits);
+
     // 重啟進入正式實戰模式
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
@@ -6532,6 +6871,18 @@ export default function App() {
             <div className="mobile-btn btn-heal" onClick={triggerHeal}>
               HEAL
             </div>
+
+            {/* 搜刮按鈕 (僅在靠近物資箱時顯現) */}
+            {nearContainer && (
+              <div 
+                className="mobile-btn btn-search"
+                onTouchStart={() => startLooting()}
+                onTouchEnd={() => stopLooting()}
+                onTouchCancel={() => stopLooting()}
+              >
+                SEARCH
+              </div>
+            )}
           </div>
 
           {/* 暫停 */}
@@ -6552,7 +6903,11 @@ export default function App() {
             <div className="hud-compass">N 024°</div>
             <div className="hud-mission-info">
               <h3>TRAINING OP</h3>
-              <div>HOSTILES ELIMINATED: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{eliminated} / 12</span></div>
+              {isTutorial ? (
+                <div>TARGETS ELIMINATED: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{eliminated}</span></div>
+              ) : (
+                <div>WAVE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{currentWave} / 3</span> | ENEMIES: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{enemies.filter(e => e.state === 'alive').length}</span></div>
+              )}
             </div>
           </div>
 
@@ -6607,7 +6962,85 @@ export default function App() {
                 GRENADE: <span className="sys-active" style={{ color: grenades === 0 ? '#ffaa00' : '#00ff66' }}>{grenades === 0 ? 'DEPLETED' : 'READY'}</span>
               </div>
             </div>
+
+            <div className="hud-status-card">
+              <div className="hud-label">MEDICAL SUPPLY</div>
+              <div className="hud-status-row">
+                <span className="hud-large-num" style={{ color: medkits === 0 ? '#ffaa00' : 'inherit' }}>
+                  {medkits}
+                </span>
+                <span className="hud-small-label">/ {currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2} {device === 'pc' ? '(5)' : ''}</span>
+              </div>
+              <div className="hud-sys-status">
+                MEDKIT: <span className="sys-active" style={{ color: medkits === 0 ? '#ffaa00' : '#00ff66' }}>{medkits === 0 ? 'DEPLETED' : 'READY'}</span>
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* 搜刮進度條 HUD */}
+      {isLooting && (
+        <div className="hud-looting-overlay">
+          <div className="hud-looting-label">SEARCHING CONTAINER...</div>
+          <div className="hud-looting-bar-container">
+            <div className="hud-looting-bar" style={{ width: `${lootProgress}%` }} />
+          </div>
+          <div className="hud-looting-pct">{Math.round(lootProgress)}%</div>
+        </div>
+      )}
+
+      {/* 搜刮獲得物資 Popup HUD */}
+      {lootPopup && (
+        <div className="loot-popup-container">
+          <div className="loot-popup-header">{lootPopup.title}</div>
+          <div className="loot-popup-content">{lootPopup.content}</div>
+        </div>
+      )}
+
+      {/* 波次倒數大字提示 HUD */}
+      {gameState === 'active' && waveCountdown > 0 && (
+        <div className="wave-countdown-overlay">
+          <div className="wave-countdown-title">NEXT WAVE IN</div>
+          <div className="wave-countdown-number">{waveCountdown}</div>
+          <div className="wave-countdown-subtitle">PREPARE FOR CONTACT</div>
+        </div>
+      )}
+
+      {/* 戰術背包 HUD 面板 */}
+      {gameState === 'active' && !isTutorial && (
+        <div className="hud-backpack-panel">
+          <h4>TACTICAL BACKPACK</h4>
+          <div className={`backpack-item ${backpack.goldBar > 0 ? 'has-val' : ''}`}>
+            <span>黃金金條 GOLD BAR</span>
+            <span>x{backpack.goldBar}</span>
+          </div>
+          <div className={`backpack-item ${backpack.hardDrive > 0 ? 'has-val' : ''}`}>
+            <span>加密硬碟 HARD DRIVE</span>
+            <span>x{backpack.hardDrive}</span>
+          </div>
+          <div className={`backpack-item ${backpack.dogTag > 0 ? 'has-val' : ''}`}>
+            <span>敵軍軍籍牌 DOG TAG</span>
+            <span>x{backpack.dogTag}</span>
+          </div>
+          <div className={`backpack-item ${backpack.coins > 0 ? 'has-val' : ''}`}>
+            <span>Delta 金幣 COINS</span>
+            <span>🪙 {backpack.coins}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 物資箱範圍互動提示 */}
+      {gameState === 'active' && isLocked && nearContainer && !isLooting && (
+        <div 
+          className="interaction-prompt container-prompt"
+          style={{
+            bottom: '35%',
+            pointerEvents: device === 'mobile' ? 'auto' : 'none',
+            cursor: device === 'mobile' ? 'pointer' : 'default'
+          }}
+        >
+          {device === 'mobile' ? `HOLD [SEARCH] TO LOOT ${nearContainer.name}` : `HOLD [F] TO LOOT ${nearContainer.name}`}
         </div>
       )}
 
@@ -6638,6 +7071,16 @@ export default function App() {
           {/* 3D 戰術補給站 */}
           <AmmoSupplyStation position={[0, 0, -0.8]} active={ammoCooldown === 0} />
           <MedicalSupplyStation position={[3.0, 0, 92.0]} active={medCooldown === 0} />
+
+          {/* 3D 戰術物資搜刮箱 */}
+          {LOOT_CONTAINERS.map((container) => (
+            <LootCrate
+              key={container.id}
+              position={container.position}
+              name={container.name}
+              isLooted={!!lootedContainers[container.id]}
+            />
+          ))}
 
           {/* 渲染彈孔貼紙 */}
           {holes.map((hole) => (
@@ -6726,6 +7169,15 @@ export default function App() {
             cameraRef={cameraRef}
             primaryWeaponId={primaryWeaponId}
             secondaryWeaponId={secondaryWeaponId}
+            nearContainer={nearContainer}
+            setNearContainer={setNearContainer}
+            isLooting={isLooting}
+            setIsLooting={setIsLooting}
+            lootProgress={lootProgress}
+            setLootProgress={setLootProgress}
+            lootedContainers={lootedContainers}
+            startLooting={startLooting}
+            stopLooting={stopLooting}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
