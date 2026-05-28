@@ -3994,10 +3994,20 @@ function PlayerController({
   const prevNearContainer = useRef(null);
   const isLootingRef = useRef(isLooting);
   const nearContainerRef = useRef(nearContainer);
+  const isAdsRef = useRef(isAds);
+  const lootedContainersRef = useRef(lootedContainers);
 
   useEffect(() => {
     isLootingRef.current = isLooting;
   }, [isLooting]);
+
+  useEffect(() => {
+    isAdsRef.current = isAds;
+  }, [isAds]);
+
+  useEffect(() => {
+    lootedContainersRef.current = lootedContainers;
+  }, [lootedContainers]);
 
   useEffect(() => {
     nearContainerRef.current = nearContainer;
@@ -4398,7 +4408,7 @@ function PlayerController({
 
     if (!isGrounded.current) {
       currentSpread = 0.09;
-    } else if (keysState.run && isMoving && !isAds) {
+    } else if (keysState.run && isMoving && !isAdsRef.current) {
       currentSpread = 0.06;
     } else if (isMoving) {
       currentSpread = 0.035;
@@ -4549,7 +4559,7 @@ function PlayerController({
     // 6.X 雷達小地圖實時更新 (Radar Minimap)
     // ------------------------------------------
     const radarDots = document.getElementById('radar-dots');
-    if (radarDots && gameState === 'active') {
+    if (radarDots && gameStateRef.current === 'active') {
       let dotsHtml = '';
       
       const playerPos = state.camera.position;
@@ -4566,7 +4576,8 @@ function PlayerController({
 
       state.scene.traverse((obj) => {
         if (obj.userData && obj.userData.isEnemy && !obj.userData.isDying) {
-          const enemyPos = obj.position;
+          const enemyPos = new THREE.Vector3();
+          obj.getWorldPosition(enemyPos);
           const diff = new THREE.Vector3().subVectors(enemyPos, playerPos);
           diff.y = 0;
 
@@ -4637,7 +4648,7 @@ function PlayerController({
     let minCrateDist = Infinity;
 
     LOOT_CONTAINERS.forEach((container) => {
-      if (lootedContainers && lootedContainers[container.id]) return;
+      if (lootedContainersRef.current && lootedContainersRef.current[container.id]) return;
       const dist = playerPos3D.distanceTo(container.position);
       if (dist < minCrateDist) {
         minCrateDist = dist;
@@ -4758,7 +4769,7 @@ function PlayerController({
     // ------------------------------------------
     // 6.1 開鏡平滑插值 (ADS Lerp) 與鏡頭 FOV 更新
     // ------------------------------------------
-    adsLerp.current = THREE.MathUtils.lerp(adsLerp.current, isAds ? 1 : 0, 0.16);
+    adsLerp.current = THREE.MathUtils.lerp(adsLerp.current, isAdsRef.current ? 1 : 0, 0.16);
     
     const activeWeaponId = activeWeaponRef.current === 'primary' 
       ? primaryWeaponIdRef.current 
