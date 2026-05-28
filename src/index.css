@@ -287,6 +287,74 @@ html, body {
   box-shadow: 0 0 15px rgba(0, 255, 102, 0.05);
 }
 
+/* 雷達小地圖小點與玩家指針樣式 */
+.radar-player-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.radar-player-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #00ff66;
+  filter: drop-shadow(0 0 4px #00ff66);
+}
+
+.radar-dots-container {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.radar-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.enemy-dot {
+  box-shadow: 0 0 6px rgba(255, 51, 51, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.lz-dot {
+  width: 14px;
+  height: 14px;
+  background: #ffcc00;
+  border: 1px solid #000;
+  border-radius: 2px;
+  color: #000;
+  font-size: 8px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px #ffcc00;
+  animation: lz-pulse 1s infinite alternate;
+}
+
+@keyframes lz-pulse {
+  from { transform: translate(-50%, -50%) scale(0.9); opacity: 0.8; }
+  to { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+}
+
 .hud-radar-scanner::before {
   content: '';
   position: absolute;

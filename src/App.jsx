@@ -2199,7 +2199,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
       <group
         position={[data.position.x, data.position.y, data.position.z]}
         ref={meshRef}
-        userData={{ isEnemy: true, enemyId: data.id, enemyType: data.enemyType }}
+        userData={{ isEnemy: true, enemyId: data.id, enemyType: data.enemyType, isDying: data.state === 'dying' }}
       >
         {/* 敵軍主體 */}
         <mesh position={[0, 0.9, 0]} castShadow>
@@ -4544,6 +4544,71 @@ function PlayerController({
   // 每影格邏輯更新
   useFrame((state, delta) => {
     const safeDelta = Math.min(delta, 0.1);
+
+    // ------------------------------------------
+    // 6.X 雷達小地圖實時更新 (Radar Minimap)
+    // ------------------------------------------
+    const radarDots = document.getElementById('radar-dots');
+    if (radarDots && gameState === 'active') {
+      let dotsHtml = '';
+      
+      const playerPos = state.camera.position;
+      
+      const fwd = new THREE.Vector3();
+      state.camera.getWorldDirection(fwd);
+      fwd.y = 0;
+      fwd.normalize();
+      
+      const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+      
+      const maxRadarDist = 120; // 顯示範圍：120公尺
+      const scale = 60 / maxRadarDist; // 雷達半徑對應 60px
+
+      state.scene.traverse((obj) => {
+        if (obj.userData && obj.userData.isEnemy && !obj.userData.isDying) {
+          const enemyPos = obj.position;
+          const diff = new THREE.Vector3().subVectors(enemyPos, playerPos);
+          diff.y = 0;
+
+          const localX = diff.dot(right);
+          const localY = diff.dot(fwd);
+
+          const dist = Math.sqrt(localX * localX + localY * localY);
+          if (dist < maxRadarDist) {
+            const left = 60 + localX * scale;
+            const top = 60 - localY * scale;
+
+            let dotColor = '#ff3333';
+            if (obj.userData.enemyType === ENEMY_TYPES.SHIELD) {
+              dotColor = '#00ff66';
+            } else if (obj.userData.enemyType === ENEMY_TYPES.GRENADIER) {
+              dotColor = '#ffa500';
+            } else if (obj.userData.enemyType === ENEMY_TYPES.SNIPER) {
+              dotColor = '#0088ff';
+            }
+
+            dotsHtml += `<div class="radar-dot enemy-dot" style="left: ${left}px; top: ${top}px; background-color: ${dotColor};"></div>`;
+          }
+        }
+      });
+
+      if (extractionActiveRef.current) {
+        const diff = new THREE.Vector3(0, 0, 0).sub(playerPos);
+        diff.y = 0;
+        
+        const localX = diff.dot(right);
+        const localY = diff.dot(fwd);
+        
+        const dist = Math.sqrt(localX * localX + localY * localY);
+        if (dist < maxRadarDist) {
+          const left = 60 + localX * scale;
+          const top = 60 - localY * scale;
+          dotsHtml += `<div class="radar-dot lz-dot" style="left: ${left}px; top: ${top}px;">H</div>`;
+        }
+      }
+
+      radarDots.innerHTML = dotsHtml;
+    }
 
     // ------------------------------------------
     // 6.X 補給站鄰近狀態與距離檢測
@@ -7983,7 +8048,14 @@ export default function App() {
       {gameState !== 'deploying' && (
         <div className="game-hud">
           <div className="hud-top">
-            <div className="hud-radar-scanner" />
+            <div className="hud-radar-scanner" id="radar-minimap">
+              {/* 玩家中心點指標 */}
+              <div className="radar-player-center">
+                <div className="radar-player-arrow" />
+              </div>
+              {/* 動態渲染的敵軍與戰術目標點容器 */}
+              <div className="radar-dots-container" id="radar-dots" />
+            </div>
             <div className="hud-compass">N 024°</div>
             <div className="hud-mission-info">
               <h3>TRAINING OP</h3>
