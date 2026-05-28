@@ -4145,7 +4145,7 @@ function PlayerController({
           fwd.y = 0;
           fwd.normalize();
           
-          const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+          const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
           
           const playerPos = state.camera.position.clone();
           playerPos.y = 0;
@@ -5753,7 +5753,7 @@ export default function App() {
       fwd.y = 0;
       fwd.normalize();
       
-      const right = new THREE.Vector3(fwd.z, 0, -fwd.x); // 順時針旋轉 90 度
+      const right = new THREE.Vector3(-fwd.z, 0, fwd.x); // 順時針旋轉 90 度
       
       const playerPos = cameraRef.current.position;
       const toAttacker = new THREE.Vector3().subVectors(attackerPos, playerPos);
