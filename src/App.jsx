@@ -991,9 +991,9 @@ function Enemy({ data, onShootPlayer, onKilled }) {
           }
 
           if (!blocked) {
-            onShootPlayer(20); // 扣 20 HP
+            onShootPlayer(20, enemyPos); // 扣 20 HP 并传入位置
 
-            const startPos = new THREE.Vector3(0.25, 1.1, 1.0).applyMatrix4(meshRef.current.matrixWorld);
+            const startPos = new THREE.Vector3(0.25, 1.12, 1.15).applyMatrix4(meshRef.current.matrixWorld);
             setTracerCoords({
               start: [startPos.x, startPos.y, startPos.z],
               end: [endPos.x, endPos.y, endPos.z],
@@ -1106,11 +1106,11 @@ function Enemy({ data, onShootPlayer, onKilled }) {
             // AI 命中機率判定 (例如 38% 命中率，防範每發皆中)
             const isHit = Math.random() < 0.38;
             
-            const startPos = new THREE.Vector3(0.25, 1.1, 0.7).applyMatrix4(meshRef.current.matrixWorld);
+            const startPos = new THREE.Vector3(0.25, 1.12, 0.95).applyMatrix4(meshRef.current.matrixWorld);
             let targetCoords = endPos.clone();
             
             if (isHit) {
-              onShootPlayer(10); // 命中扣 10 HP
+              onShootPlayer(10, enemyPos); // 命中扣 10 HP 并传入位置
             } else {
               // 未命中：隨機偏移 1.5 到 3.5 米以描繪擦肩而過的子彈雷射效果
               const offset = new THREE.Vector3(
@@ -1196,12 +1196,42 @@ function Enemy({ data, onShootPlayer, onKilled }) {
         <meshStandardMaterial color={data.isSniper ? "#343a40" : "#554b38"} roughness={0.9} />
       </mesh>
 
-      {/* 敵軍武器：狙擊手配備長槍管 */}
+      {/* 敵軍武器：精細步槍模型 */}
       <group position={[0.25, 1.1, 0.3]} rotation={[0, 0, 0]}>
-        <mesh castShadow>
-          <boxGeometry args={[0.08, 0.08, data.isSniper ? 1.4 : 0.8]} />
-          <meshStandardMaterial color={data.isSniper ? "#5a6268" : "#111111"} metalness={data.isSniper ? 0.7 : 0.1} />
+        {/* 槍身 (Receiver) */}
+        <mesh castShadow position={[0, 0.02, 0.15]}>
+          <boxGeometry args={[0.06, 0.1, 0.5]} />
+          <meshStandardMaterial color="#222222" metalness={0.7} roughness={0.3} />
         </mesh>
+        {/* 槍管 (Barrel) */}
+        <mesh castShadow position={[0, 0.04, 0.45]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, data.isSniper ? 0.8 : 0.4]} />
+          <meshStandardMaterial color="#111111" metalness={0.8} roughness={0.2} />
+        </mesh>
+        {/* 彈匣 (Magazine) */}
+        <mesh castShadow position={[0, -0.08, 0.25]} rotation={[0.2, 0, 0]}>
+          <boxGeometry args={[0.04, 0.16, 0.08]} />
+          <meshStandardMaterial color="#151515" metalness={0.5} roughness={0.5} />
+        </mesh>
+        {/* 槍托 (Stock) */}
+        <mesh castShadow position={[0, -0.02, -0.2]}>
+          <boxGeometry args={[0.05, 0.08, 0.25]} />
+          <meshStandardMaterial color="#443322" roughness={0.9} />
+        </mesh>
+        {/* 瞄準鏡 (Scope) - 狙擊手專屬 */}
+        {data.isSniper && (
+          <group position={[0, 0.1, 0.15]}>
+            <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.022, 0.022, 0.35]} />
+              <meshStandardMaterial color="#333333" metalness={0.6} />
+            </mesh>
+            {/* 支架 */}
+            <mesh castShadow position={[0, -0.04, 0]}>
+              <boxGeometry args={[0.02, 0.05, 0.1]} />
+              <meshStandardMaterial color="#111111" />
+            </mesh>
+          </group>
+        )}
       </group>
 
       <group ref={healthBarRef}>
@@ -2472,9 +2502,16 @@ function PlayerController({
   mobileFiring,
   mobileGrenadeTrigger,
   runStatsRef,
+  cameraRef,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
+
+  useEffect(() => {
+    if (cameraRef) {
+      cameraRef.current = camera;
+    }
+  }, [camera, cameraRef]);
   
   // 物理與移動狀態
   const velocityY = useRef(0);
@@ -3281,6 +3318,23 @@ export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
+
+  // 受傷方向指示器與相機參考
+  const cameraRef = useRef();
+  const [damageIndicators, setDamageIndicators] = useState([]);
+
+  // 定期清理已過期（超過 1.5 秒）的受傷方向指示器
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setDamageIndicators((prev) => {
+        const filtered = prev.filter((ind) => now - ind.createdAt < 1500);
+        if (filtered.length === prev.length) return prev;
+        return filtered;
+      });
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
 
   // ==========================================
   // 帳號系統狀態 (Account System States)
@@ -4115,8 +4169,8 @@ export default function App() {
     });
   };
 
-  // 敵軍定時向玩家開火扣血 (接受不同兵種的傷害值)
-  const handleShootPlayer = (damage = 10) => {
+  // 敵軍定時向玩家開火扣血 (接受不同兵種的傷害值與攻擊來源座標)
+  const handleShootPlayer = (damage = 10, attackerPos = null) => {
     if (gameState !== 'active') return;
 
     const hasHelmet = currentUser && currentUser.inventory && currentUser.inventory.opsHelmet;
@@ -4138,6 +4192,34 @@ export default function App() {
 
     setHurtActive(true);
     soundManager.playPlayerHurt(); // 播放玩家受傷聲音
+
+    // 計算受擊方向指示器 (Directional Damage Indicator)
+    if (attackerPos && cameraRef.current) {
+      const fwd = new THREE.Vector3();
+      cameraRef.current.getWorldDirection(fwd);
+      fwd.y = 0;
+      fwd.normalize();
+      
+      const right = new THREE.Vector3(fwd.z, 0, -fwd.x); // 順時針旋轉 90 度
+      
+      const playerPos = cameraRef.current.position;
+      const toAttacker = new THREE.Vector3().subVectors(attackerPos, playerPos);
+      toAttacker.y = 0;
+      toAttacker.normalize();
+      
+      const fwdDot = toAttacker.dot(fwd);
+      const rightDot = toAttacker.dot(right);
+      
+      const relativeAngle = Math.atan2(rightDot, fwdDot);
+      const angleDeg = (relativeAngle * 180) / Math.PI;
+
+      const newIndicator = {
+        id: Math.random(),
+        angle: angleDeg,
+        createdAt: Date.now()
+      };
+      setDamageIndicators((prev) => [...prev, newIndicator]);
+    }
   };
 
   // 重新開始/部署遊戲
@@ -4411,6 +4493,26 @@ export default function App() {
 
       {/* 受傷閃紅疊加層 */}
       <div className={`hurt-overlay ${hurtActive ? 'active' : ''}`} />
+
+      {/* 受傷方向指示器 HUD */}
+      {gameState === 'active' && damageIndicators.length > 0 && (
+        <div className="damage-indicator-container">
+          {damageIndicators.map((ind) => {
+            const age = Date.now() - ind.createdAt;
+            const opacity = Math.max(0, 1 - age / 1500);
+            return (
+              <div
+                key={ind.id}
+                className="damage-indicator-arrow"
+                style={{
+                  transform: `translate(-50%, -50%) rotate(${ind.angle}deg) translateY(-100px)`,
+                  opacity: opacity,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* 補血閃綠疊加層 */}
       <div className={`heal-overlay ${isHealing ? 'active' : ''}`} />
@@ -5574,6 +5676,7 @@ export default function App() {
             mobileFiring={mobileFiring}
             mobileGrenadeTrigger={mobileGrenadeTrigger}
             runStatsRef={runStatsRef}
+            cameraRef={cameraRef}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
