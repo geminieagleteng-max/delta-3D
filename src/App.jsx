@@ -3689,17 +3689,16 @@ export default function App() {
   const handleDeploy = () => {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
-    if (device === 'mobile') {
-      setIsLocked(true);
-      setGameState('active');
-      soundManager.startAmbient();
-    } else {
-      if (controlsRef.current) {
+    setGameState('active');
+    soundManager.startAmbient();
+
+    setTimeout(() => {
+      if (device === 'mobile') {
+        setIsLocked(true);
+      } else if (controlsRef.current) {
         controlsRef.current.lock();
-        setGameState('active');
-        soundManager.startAmbient();
       }
-    }
+    }, 50);
   };
 
   // 實體拋殼與彈匣掉落輔助生成函式
@@ -5163,7 +5162,7 @@ export default function App() {
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
-          {device !== 'mobile' && (
+          {device !== 'mobile' && gameState === 'active' && (
             <PointerLockControls
               ref={controlsRef}
               onLock={() => setIsLocked(true)}
