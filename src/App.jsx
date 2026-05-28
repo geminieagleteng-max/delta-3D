@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
+import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats } from './utils/account';
+
 
 // ==========================================
 // 0. 原生自體波形合成音效系統 (Procedural Web Audio API)
@@ -2468,6 +2470,7 @@ function PlayerController({
   mobileKeysRef,
   mobileFiring,
   mobileGrenadeTrigger,
+  runStatsRef,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -2783,6 +2786,10 @@ function PlayerController({
   const fireOneBullet = () => {
     if (gameStateRef.current !== 'active' || isReloadingRef.current || isHealingRef.current || ammoRef.current <= 0) return;
 
+    if (runStatsRef && runStatsRef.current) {
+      runStatsRef.current.shotsFired += 1;
+    }
+
     // 播放合成槍聲
     if (activeWeaponRef.current === 'primary') {
       soundManager.playGunshot();
@@ -2899,6 +2906,12 @@ function PlayerController({
           let isHeadshot = false;
           if (enemyObj) {
             isHeadshot = hit.point.y >= enemyObj.position.y + 1.55;
+          }
+          if (runStatsRef && runStatsRef.current) {
+            runStatsRef.current.shotsHit += 1;
+            if (isHeadshot) {
+              runStatsRef.current.headshots += 1;
+            }
           }
           onHitEnemyRef.current(enemyId, hit.point, isHeadshot);
         } else {
@@ -3160,7 +3173,7 @@ function PlayerController({
       } else if (p.type === 'ramp') {
         if (camera.position.x >= p.x1 && camera.position.x <= p.x2 &&
             camera.position.z >= p.z1 && camera.position.z <= p.z2) {
-          let ratio = 0;
+          let ratio;
           if (p.dir === 'z') {
             ratio = (camera.position.z - p.z1) / (p.z2 - p.z1);
           } else {
@@ -3267,6 +3280,36 @@ export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
+
+  // ==========================================
+  // 帳號系統狀態 (Account System States)
+  // ==========================================
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authTab, setAuthTab] = useState('login'); // 'login' or 'register'
+  const [authForm, setAuthForm] = useState({
+    username: '',
+    nickname: '',
+    password: '',
+    confirmPassword: '',
+  });
+  const [authError, setAuthError] = useState('');
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [newNickname, setNewNickname] = useState('');
+  const [endgameStats, setEndgameStats] = useState(null);
+
+  // 載入與同步本機排行榜
+  const leaderboard = useMemo(() => {
+    return getLeaderboard();
+  }, [currentUser, gameState]);
+
+  // 單場戰績即時統計
+  const runStatsRef = useRef({
+    shotsFired: 0,
+    shotsHit: 0,
+    headshots: 0,
+    startTime: 0,
+  });
+
 
   // 開鏡瞄準 (ADS) 的 React 狀態
   const [isAds, setIsAds] = useState(false);
@@ -3559,8 +3602,93 @@ export default function App() {
     }
   }, [hurtActive]);
 
+  // 表單輸入處理
+  const handleAuthInputChange = (e) => {
+    const { name, value } = e.target;
+    setAuthForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // 執行登入
+  const handleLogin = (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const user = loginAccount(authForm.username, authForm.password);
+      setCurrentUser(user);
+      setNewNickname(user.nickname);
+      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  // 執行註冊
+  const handleRegister = (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (authForm.password !== authForm.confirmPassword) {
+      setAuthError('兩次密碼輸入不一致！');
+      return;
+    }
+    try {
+      const user = registerAccount(authForm.username, authForm.nickname, authForm.password);
+      setCurrentUser(user);
+      setNewNickname(user.nickname);
+      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  // 修改暱稱
+  const handleSaveNickname = () => {
+    if (!newNickname.trim()) return;
+    try {
+      const updated = updateNickname(currentUser.username, newNickname);
+      setCurrentUser(updated);
+      setIsEditingNickname(false);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // 登出
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setNewNickname('');
+    setIsEditingNickname(false);
+  };
+
+  // 儲存結算數據至本機資料庫
+  const saveEndgameStats = (victory, killsOverride = null) => {
+    const finalKills = killsOverride !== null ? killsOverride : eliminated;
+    const playTimeSeconds = Math.max(1, Math.round((Date.now() - runStatsRef.current.startTime) / 1000));
+    const runStats = {
+      victory,
+      kills: finalKills,
+      headshots: runStatsRef.current.headshots,
+      shotsFired: runStatsRef.current.shotsFired,
+      shotsHit: runStatsRef.current.shotsHit,
+      playTimeSeconds
+    };
+    
+    // 儲存至 React state，避免在 render 時直接讀取 useRef.current 導致 Linter 報錯
+    setEndgameStats(runStats);
+
+    if (!currentUser || isTutorial || currentUser.isGuest) return;
+    const updatedUser = updateStats(currentUser.username, runStats);
+    if (updatedUser) {
+      setCurrentUser(updatedUser);
+    }
+  };
+
   // 點擊「DEPLOY」按鈕進入遊戲並鎖定滑鼠
   const handleDeploy = () => {
+    setEndgameStats(null);
+    runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     if (device === 'mobile') {
       setIsLocked(true);
       setGameState('active');
@@ -3720,6 +3848,7 @@ export default function App() {
               if (controlsRef.current) {
                 controlsRef.current.unlock();
               }
+              saveEndgameStats(false); // 儲存自爆失敗戰績
             }
             return newHp;
           });
@@ -3841,6 +3970,7 @@ export default function App() {
         if (controlsRef.current) {
           controlsRef.current.unlock();
         }
+        saveEndgameStats(true, newCount); // 儲存勝利戰績
       }
       return newCount;
     });
@@ -3859,6 +3989,7 @@ export default function App() {
         if (controlsRef.current) {
           controlsRef.current.unlock();
         }
+        saveEndgameStats(false); // 儲存戰死失敗戰績
       }
       return newHp;
     });
@@ -3869,6 +4000,8 @@ export default function App() {
 
   // 重新開始/部署遊戲
   const handleRestart = () => {
+    setEndgameStats(null);
+    runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setHealth(100);
     setPrimaryAmmo(30);
     setSecondaryAmmo(15);
@@ -3924,6 +4057,8 @@ export default function App() {
 
   // 進入新手互動教學模式
   const handleStartTutorial = () => {
+    setEndgameStats(null);
+    runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setIsTutorial(true);
     setTutorialChecklist({
       move: false,
@@ -3966,6 +4101,8 @@ export default function App() {
 
   // 教學完成後進入實戰
   const handleDeployFromTutorial = () => {
+    setEndgameStats(null);
+    runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setIsTutorial(false);
     // 重啟進入正式實戰模式
     setHealth(100);
@@ -4273,78 +4410,375 @@ export default function App() {
         <>
           {gameState === 'deploying' && (
             <div className="menu-overlay">
-              {device === null ? (
-                <div className="hud-panel" style={{ maxWidth: '600px' }}>
+              {currentUser === null ? (
+                // 帳號登入/註冊門檻
+                <div className="hud-panel" style={{ maxWidth: '460px', width: '90%' }}>
                   <h1 className="hud-title">DELTA FORCE</h1>
                   <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
-                  <div style={{ fontSize: '1.1rem', marginBottom: '25px', color: '#88a888', letterSpacing: '2px' }}>
-                    SELECT CONTROL INTERFACE
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <button className="deploy-button" onClick={() => setDevice('pc')}>
-                      DESKTOP (PC 電腦)
-                    </button>
+                  
+                  <div className="auth-container">
+                    <div className="auth-tabs">
+                      <button 
+                        type="button"
+                        className={`auth-tab ${authTab === 'login' ? 'active' : ''}`}
+                        onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                      >
+                        登入 LOGIN
+                      </button>
+                      <button 
+                        type="button"
+                        className={`auth-tab ${authTab === 'register' ? 'active' : ''}`}
+                        onClick={() => { setAuthTab('register'); setAuthError(''); }}
+                      >
+                        註冊 REGISTER
+                      </button>
+                    </div>
+
+                    {authError && <div className="auth-error">{authError}</div>}
+
+                    {authTab === 'login' ? (
+                      <form className="auth-form" onSubmit={handleLogin}>
+                        <div className="form-group">
+                          <label>使用者帳號 USERNAME</label>
+                          <input 
+                            type="text" 
+                            name="username" 
+                            className="auth-input"
+                            required
+                            placeholder="請輸入帳號"
+                            value={authForm.username}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>密碼 PASSWORD</label>
+                          <input 
+                            type="password" 
+                            name="password" 
+                            className="auth-input"
+                            required
+                            placeholder="請輸入密碼"
+                            value={authForm.password}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <button type="submit" className="auth-submit-btn">驗證登入 AUTHENTICATE</button>
+                      </form>
+                    ) : (
+                      <form className="auth-form" onSubmit={handleRegister}>
+                        <div className="form-group">
+                          <label>使用者帳號 USERNAME</label>
+                          <input 
+                            type="text" 
+                            name="username" 
+                            className="auth-input"
+                            required
+                            placeholder="英文字母或數字"
+                            value={authForm.username}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>玩家暱稱 NICKNAME</label>
+                          <input 
+                            type="text" 
+                            name="nickname" 
+                            className="auth-input"
+                            required
+                            placeholder="遊戲內顯示名稱"
+                            value={authForm.nickname}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>密碼 PASSWORD</label>
+                          <input 
+                            type="password" 
+                            name="password" 
+                            className="auth-input"
+                            required
+                            placeholder="密碼密鑰"
+                            value={authForm.password}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>確認密碼 CONFIRM PASSWORD</label>
+                          <input 
+                            type="password" 
+                            name="confirmPassword" 
+                            className="auth-input"
+                            required
+                            placeholder="再次輸入密碼"
+                            value={authForm.confirmPassword}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <button type="submit" className="auth-submit-btn">建立檔案 CREATE PROFILE</button>
+                      </form>
+                    )}
+
                     <button 
-                      className="deploy-button" 
-                      style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)' }}
-                      onClick={() => setDevice('mobile')}
+                      type="button"
+                      className="auth-guest-btn"
+                      onClick={() => setCurrentUser({ username: 'Guest', nickname: 'GUEST_RECRUIT', isGuest: true })}
                     >
-                      MOBILE (行動裝置)
+                      以遊客身份遊玩 PLAY AS GUEST
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="hud-panel" style={{ maxWidth: '600px' }}>
-                  <h1 className="hud-title">DELTA FORCE</h1>
-                  <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                    <button className="deploy-button" onClick={handleDeploy}>
-                      DEPLOY TO MISSION
-                    </button>
-                    <button 
-                      className="deploy-button" 
-                      style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)' }}
-                      onClick={handleStartTutorial}
-                    >
-                      START TRAINING
-                    </button>
-                  </div>
+                // 登入後的雙欄大廳
+                <div className="hud-panel" style={{ maxWidth: '1000px', width: '92%' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '30px' }}>
+                    
+                    {/* 左欄：設備選擇、部署按鈕與操作指南 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--hud-bg-border)', paddingRight: '30px' }}>
+                      <h1 className="hud-title" style={{ textAlign: 'left', fontSize: '2.0rem' }}>DELTA FORCE</h1>
+                      <p className="hud-subtitle" style={{ textAlign: 'left', marginBottom: '20px' }}>3D TACTICAL TRAINING OUTPOST</p>
+                      
+                      {device === null ? (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '15px' }}>
+                          <div style={{ fontSize: '1.0rem', color: '#88a888', letterSpacing: '2px', textAlign: 'left', marginBottom: '5px' }}>
+                            SELECT CONTROL INTERFACE:
+                          </div>
+                          <button className="deploy-button" style={{ fontSize: '1.0rem', padding: '12px' }} onClick={() => setDevice('pc')}>
+                            DESKTOP (PC 電腦)
+                          </button>
+                          <button 
+                            className="deploy-button" 
+                            style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)', fontSize: '1.0rem', padding: '12px' }}
+                            onClick={() => setDevice('mobile')}
+                          >
+                            MOBILE (行動裝置)
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'left', gap: '15px', marginBottom: '20px' }}>
+                            <button className="deploy-button" style={{ fontSize: '1.0rem', padding: '12px 30px' }} onClick={handleDeploy}>
+                              DEPLOY TO MISSION
+                            </button>
+                            <button 
+                              className="deploy-button" 
+                              style={{ borderColor: '#00e5ff', color: '#00e5ff', boxShadow: '0 0 10px rgba(0, 229, 255, 0.2)', fontSize: '1.0rem', padding: '12px 30px' }}
+                              onClick={handleStartTutorial}
+                            >
+                              START TRAINING
+                            </button>
+                          </div>
 
-                  {device === 'pc' ? (
-                    <div className="controls-guide">
-                      <div><span className="key-cap">W</span><span className="key-cap">A</span><span className="key-cap">S</span><span className="key-cap">D</span> 控制前、左、後、右移動</div>
-                      <div><span className="key-cap">Shift</span> 按住跑步</div>
-                      <div><span className="key-cap">Space</span> 進行跳躍</div>
-                      <div><span className="key-cap">滑鼠左鍵</span> 進行射擊</div>
-                      <div><span className="key-cap">滑鼠右鍵</span> 按住開鏡瞄準 (ADS)</div>
-                      <div><span className="key-cap">B</span> 切換單發 / 連發射擊模式</div>
-                      <div><span className="key-cap">G</span> 拋擲戰術手榴彈 (引信 2.5 秒)</div>
-                      <div><span className="key-cap">R</span> 重新裝彈 (1.5 秒)</div>
-                      <div><span className="key-cap">5</span> 使用醫療包 (2.0 秒，回滿血量)</div>
-                      <div><span className="key-cap">Esc</span> 暫停遊戲</div>
-                      <div style={{ marginTop: '10px', color: '#ffaa00' }}>※ 點擊按鈕或畫面開始以進行第一人稱視角控制。</div>
+                          {device === 'pc' ? (
+                            <div className="controls-guide" style={{ fontSize: '0.8rem', marginTop: '0', paddingTop: '10px' }}>
+                              <div><span className="key-cap">W</span><span className="key-cap">A</span><span className="key-cap">S</span><span className="key-cap">D</span> 控制前、左、後、右移動</div>
+                              <div><span className="key-cap">Shift</span> 按住跑步 | <span className="key-cap">Space</span> 進行跳躍</div>
+                              <div><span className="key-cap">滑鼠左鍵</span> 進行射擊 | <span className="key-cap">滑鼠右鍵</span> 按住開鏡瞄準 (ADS)</div>
+                              <div><span className="key-cap">B</span> 切換單發/連發 | <span className="key-cap">G</span> 拋擲戰術手榴彈 (2.5 秒)</div>
+                              <div><span className="key-cap">R</span> 重新裝彈 (1.5 秒) | <span className="key-cap">5</span> 使用醫療包 (2.0 秒)</div>
+                            </div>
+                          ) : (
+                            <div className="controls-guide" style={{ fontSize: '0.8rem', marginTop: '0', paddingTop: '10px' }}>
+                              <div>左下角 <span className="key-cap">虛擬搖桿</span> 控制前後左右移動與跑步</div>
+                              <div>右側 <span className="key-cap">FIRE</span> 射擊 | <span className="key-cap">ADS</span> 開鏡 | <span className="key-cap">JUMP</span> 跳躍 | <span className="key-cap">CCH</span> 蹲下</div>
+                              <div>右側 <span className="key-cap">RLD</span> 裝彈 | <span className="key-cap">SWT</span> 切換武器 | <span className="key-cap">GND</span> 手榴彈 | <span className="key-cap">HEAL</span> 補血</div>
+                            </div>
+                          )}
+                          
+                          <button 
+                            className="tutorial-complete-button" 
+                            style={{ background: 'transparent', border: 'none', color: '#88a888', textShadow: 'none', fontSize: '0.75rem', marginTop: '15px', padding: '5px', alignSelf: 'flex-start' }}
+                            onClick={() => setDevice(null)}
+                          >
+                            ← CHANGE DEVICE
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="controls-guide">
-                      <div>左下角 <span className="key-cap">虛擬搖桿</span> 控制前後左右移動與跑步</div>
-                      <div>右側 <span className="key-cap">FIRE</span> 按鈕射擊</div>
-                      <div>右側 <span className="key-cap">ADS</span> 按鈕開鏡瞄準</div>
-                      <div>右側 <span className="key-cap">JUMP</span> / <span className="key-cap">CCH</span> 按鈕跳躍與蹲下</div>
-                      <div>右側 <span className="key-cap">RLD</span> / <span className="key-cap">SWT</span> 重新裝彈與切換武器</div>
-                      <div>右側 <span className="key-cap">GND</span> / <span className="key-cap">HEAL</span> 丟手榴彈與醫療包</div>
-                      <div>右上角 <span className="key-cap">PAUSE</span> 暫停遊戲</div>
-                      <div style={{ marginTop: '10px', color: '#00e5ff' }}>※ 滑動螢幕右側區域可控制視角旋轉。</div>
+
+                    {/* 右欄：個人檔案與生涯統計 */}
+                    <div className="lobby-dashboard">
+                      <div className="profile-header">
+                        <div className="profile-avatar-circle" style={{ borderColor: currentUser.isGuest ? '#88a888' : getRank(currentUser.stats?.kills || 0).color, color: currentUser.isGuest ? '#88a888' : getRank(currentUser.stats?.kills || 0).color }}>
+                          {currentUser.nickname.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="profile-title-area">
+                          <div className="profile-name-edit-row">
+                            {isEditingNickname ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <input 
+                                  type="text" 
+                                  className="profile-name-input"
+                                  value={newNickname}
+                                  onChange={(e) => setNewNickname(e.target.value)}
+                                  maxLength={12}
+                                />
+                                <button type="button" className="edit-btn" style={{ color: '#00ff66' }} onClick={handleSaveNickname}>✔</button>
+                                <button type="button" className="edit-btn" style={{ color: '#ff3b3b' }} onClick={() => { setIsEditingNickname(false); setNewNickname(currentUser.nickname); }}>✘</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h2 style={{ margin: 0 }}>{currentUser.nickname}</h2>
+                                {!currentUser.isGuest && (
+                                  <button type="button" className="edit-btn" onClick={() => setIsEditingNickname(true)}>✏</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {!currentUser.isGuest ? (
+                            <div className="profile-rank-info" style={{ color: getRank(currentUser.stats.kills).color }}>
+                              軍階：{getRank(currentUser.stats.kills).zhTitle} ({getRank(currentUser.stats.kills).title})
+                            </div>
+                          ) : (
+                            <div className="profile-rank-info" style={{ color: '#ffaa00' }}>
+                              遊客模式 (戰績不予儲存)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 升級進度條 */}
+                      {!currentUser.isGuest && currentUser.stats && (
+                        <div className="rank-progress-container">
+                          <div className="rank-progress-labels">
+                            <span>生涯擊殺：{currentUser.stats.kills}</span>
+                            <span>下級軍階：{getRank(currentUser.stats.kills).nextRankTitle} ({getRank(currentUser.stats.kills).nextRankKills ? `${getRank(currentUser.stats.kills).nextRankKills} 殺` : '已滿級'})</span>
+                          </div>
+                          <div className="rank-progress-bar-bg">
+                            <div 
+                              className="rank-progress-bar-fill" 
+                              style={{ 
+                                width: `${getRank(currentUser.stats.kills).progress * 100}%`,
+                                backgroundColor: getRank(currentUser.stats.kills).color 
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {!currentUser.isGuest && currentUser.stats ? (
+                        <>
+                          {/* 生涯數據網格 */}
+                          <div className="stats-grid">
+                            <div className="stat-item">
+                              <div className="stat-item-label">場次 GAMES</div>
+                              <div className="stat-item-val">{currentUser.stats.gamesPlayed}</div>
+                            </div>
+                            <div className="stat-item">
+                              <div className="stat-item-label">勝率 WIN RATE</div>
+                              <div className="stat-item-val">
+                                {currentUser.stats.gamesPlayed > 0 
+                                  ? `${Math.round((currentUser.stats.wins / currentUser.stats.gamesPlayed) * 100)}%` 
+                                  : '0%'}
+                              </div>
+                            </div>
+                            <div className="stat-item">
+                              <div className="stat-item-label">命中率 ACC</div>
+                              <div className="stat-item-val">
+                                {currentUser.stats.shotsFired > 0 
+                                  ? `${Math.round((currentUser.stats.shotsHit / currentUser.stats.shotsFired) * 100)}%` 
+                                  : '0%'}
+                              </div>
+                            </div>
+                            <div className="stat-item">
+                              <div className="stat-item-label">總擊殺 KILLS</div>
+                              <div className="stat-item-val">{currentUser.stats.kills}</div>
+                            </div>
+                            <div className="stat-item">
+                              <div className="stat-item-label">爆頭率 HS %</div>
+                              <div className="stat-item-val">
+                                {currentUser.stats.kills > 0 
+                                  ? `${Math.round((currentUser.stats.headshots / currentUser.stats.kills) * 100)}%` 
+                                  : '0%'}
+                              </div>
+                            </div>
+                            <div className="stat-item">
+                              <div className="stat-item-label">遊玩時間 TIME</div>
+                              <div className="stat-item-val">
+                                {currentUser.stats.playTimeSeconds >= 60 
+                                  ? `${Math.floor(currentUser.stats.playTimeSeconds / 60)}m${currentUser.stats.playTimeSeconds % 60}s`
+                                  : `${currentUser.stats.playTimeSeconds}s`}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 成就系統 */}
+                          <div className="achievements-section">
+                            <h4>榮譽徽章 BADGES</h4>
+                            <div className="badges-grid">
+                              <div className={`badge-card ${currentUser.achievements.firstBlood ? 'unlocked' : ''}`}>
+                                <div className="badge-icon">🩸</div>
+                                <div className="badge-name">First Blood</div>
+                                <div className="badge-desc-tooltip">獲得生涯首次擊殺。</div>
+                              </div>
+                              <div className={`badge-card ${currentUser.achievements.deadeye ? 'unlocked' : ''}`}>
+                                <div className="badge-icon">🎯</div>
+                                <div className="badge-name">Deadeye</div>
+                                <div className="badge-desc-tooltip">累計達成 5 次爆頭擊殺。</div>
+                              </div>
+                              <div className={`badge-card ${currentUser.achievements.survivor ? 'unlocked' : ''}`}>
+                                <div className="badge-icon">🛡</div>
+                                <div className="badge-name">Survivor</div>
+                                <div className="badge-desc-tooltip">成功生存並贏得一場戰役。</div>
+                              </div>
+                              <div className={`badge-card ${currentUser.achievements.heavyGunner ? 'unlocked' : ''}`}>
+                                <div className="badge-icon">⚙</div>
+                                <div className="badge-name">Gunner</div>
+                                <div className="badge-desc-tooltip">生涯累計擊發 500 發子彈。</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 本機排行榜 */}
+                          <div className="leaderboard-section">
+                            <h4>本機特種排行榜 LEADERBOARD</h4>
+                            <div className="leaderboard-wrapper">
+                              <table className="leaderboard-table">
+                                <thead>
+                                  <tr>
+                                    <th>排名</th>
+                                    <th>特種隊員</th>
+                                    <th>軍銜</th>
+                                    <th>總擊殺</th>
+                                    <th>勝場</th>
+                                    <th>生涯積分</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {leaderboard.map((player, index) => (
+                                    <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
+                                      <td className="leaderboard-rank">#{index + 1}</td>
+                                      <td>{player.nickname}</td>
+                                      <td>{getRank(player.kills).zhTitle}</td>
+                                      <td>{player.kills}</td>
+                                      <td>{player.wins}</td>
+                                      <td>{player.totalScore}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="guest-notice" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffaa00', border: '1px dashed rgba(255, 170, 0, 0.2)', padding: '20px', borderRadius: '4px' }}>
+                          <div>
+                            ⚠️ <strong>您目前以遊客身份登入</strong><br/>
+                            遊客帳號僅能進行實戰演練與新手教學。您的擊殺數、勝率、射擊精準度以及時間將不會計入本機資料庫與排行榜中。<br/>
+                            如需記錄戰績，請登出並註冊一個永久軍籍帳號。
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 登出按鈕 */}
+                      <div className="dashboard-actions">
+                        <button type="button" className="logout-btn" onClick={handleLogout}>登出帳號 LOGOUT</button>
+                        {!currentUser.isGuest && currentUser.stats && (
+                          <span style={{ fontSize: '0.7rem', color: '#88a888' }}>最高得分：{currentUser.stats.highScore}</span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  
-                  <button 
-                    className="tutorial-complete-button" 
-                    style={{ background: 'transparent', border: 'none', color: '#88a888', textShadow: 'none', fontSize: '0.8rem', marginTop: '15px' }}
-                    onClick={() => setDevice(null)}
-                  >
-                    ← CHANGE DEVICE
-                  </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -4364,9 +4798,42 @@ export default function App() {
 
           {gameState === 'victory' && (
             <div className="menu-overlay victory">
-              <div className="hud-panel">
+              <div className="hud-panel" style={{ maxWidth: '480px' }}>
                 <h1 className="hud-title" style={{ color: '#00ff66' }}>MISSION ACCOMPLISHED</h1>
                 <p className="hud-subtitle">ALL HOSTILES ELIMINATED | SECURED</p>
+
+                <div className="endgame-stats-panel">
+                  <div className="endgame-stats-title">戰術數據結算 TACTICAL ANALYSIS</div>
+                  <div className="endgame-stats-row">
+                    <span>任務結果 Result</span>
+                    <span style={{ color: '#00ff66' }}>任務完成 SUCCESS</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>擊殺敵軍 Kills</span>
+                    <span>{eliminated} / 12</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>爆頭次數 Headshots</span>
+                    <span style={{ color: '#ff1111' }}>{endgameStats ? endgameStats.headshots : 0}</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>擊發彈藥 Shots Fired</span>
+                    <span>{endgameStats ? endgameStats.shotsFired : 0}</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>射擊精準度 Accuracy</span>
+                    <span>
+                      {endgameStats && endgameStats.shotsFired > 0 
+                        ? `${Math.round((endgameStats.shotsHit / endgameStats.shotsFired) * 100)}%` 
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>作戰耗時 Duration</span>
+                    <span>{endgameStats ? endgameStats.playTimeSeconds : 0} 秒</span>
+                  </div>
+                </div>
+
                 <button className="deploy-button" onClick={handleRestart}>
                   RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
@@ -4376,9 +4843,42 @@ export default function App() {
 
           {gameState === 'failed' && (
             <div className="menu-overlay failed">
-              <div className="hud-panel">
+              <div className="hud-panel" style={{ maxWidth: '480px' }}>
                 <h1 className="hud-title" style={{ color: '#ffaa00' }}>MISSION FAILED</h1>
                 <p className="hud-subtitle">KIA - KILLED IN ACTION</p>
+
+                <div className="endgame-stats-panel">
+                  <div className="endgame-stats-title" style={{ color: '#ffaa00', borderColor: 'var(--hud-amber-glow)' }}>戰術數據結算 TACTICAL ANALYSIS</div>
+                  <div className="endgame-stats-row">
+                    <span>任務結果 Result</span>
+                    <span style={{ color: '#ffaa00' }}>作戰陣亡 K.I.A</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>擊殺敵軍 Kills</span>
+                    <span>{eliminated} / 12</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>爆頭次數 Headshots</span>
+                    <span style={{ color: '#ffaa00' }}>{endgameStats ? endgameStats.headshots : 0}</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>擊發彈藥 Shots Fired</span>
+                    <span>{endgameStats ? endgameStats.shotsFired : 0}</span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>射擊精準度 Accuracy</span>
+                    <span>
+                      {endgameStats && endgameStats.shotsFired > 0 
+                        ? `${Math.round((endgameStats.shotsHit / endgameStats.shotsFired) * 100)}%` 
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="endgame-stats-row">
+                    <span>作戰耗時 Duration</span>
+                    <span>{endgameStats ? endgameStats.playTimeSeconds : 0} 秒</span>
+                  </div>
+                </div>
+
                 <button className="deploy-button" onClick={handleRestart}>
                   RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
@@ -4659,6 +5159,7 @@ export default function App() {
             mobileKeysRef={mobileKeysRef}
             mobileFiring={mobileFiring}
             mobileGrenadeTrigger={mobileGrenadeTrigger}
+            runStatsRef={runStatsRef}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}

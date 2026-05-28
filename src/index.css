@@ -933,5 +933,551 @@ html, body {
   pointer-events: none;
 }
 
+/* ==========================================
+   帳號系統 - 磨砂玻璃與戰術 HUD 樣式表 (Account System CSS)
+   ========================================== */
 
+/* 登入與註冊外部容器 */
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
 
+.auth-tabs {
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid var(--hud-bg-border);
+  margin-bottom: 25px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #88a888;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: bold;
+  padding: 12px;
+  cursor: pointer;
+  letter-spacing: 2px;
+  transition: all 0.25s ease;
+  text-align: center;
+}
+
+.auth-tab.active {
+  color: var(--hud-primary);
+  border-bottom: 2px solid var(--hud-primary);
+  text-shadow: 0 0 8px var(--hud-glow);
+}
+
+.auth-tab:hover {
+  color: var(--hud-primary);
+}
+
+.auth-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  color: #88a888;
+  text-transform: uppercase;
+}
+
+.auth-input {
+  background: rgba(0, 255, 102, 0.03);
+  border: 1px solid rgba(0, 255, 102, 0.2);
+  color: var(--hud-primary);
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  border-radius: 4px;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.auth-input:focus {
+  border-color: var(--hud-primary);
+  background: rgba(0, 255, 102, 0.08);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 102, 0.15);
+}
+
+.auth-error {
+  color: #ff3b3b;
+  font-size: 0.8rem;
+  text-align: left;
+  margin-top: -6px;
+  text-shadow: 0 0 4px rgba(255, 59, 59, 0.2);
+  min-height: 1rem;
+}
+
+.auth-submit-btn {
+  background: transparent;
+  border: 1px solid var(--hud-primary);
+  color: var(--hud-primary);
+  padding: 12px;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.25s ease;
+  margin-top: 10px;
+}
+
+.auth-submit-btn:hover {
+  background: var(--hud-primary);
+  color: #050805;
+  box-shadow: 0 0 15px var(--hud-primary);
+}
+
+.auth-guest-btn {
+  background: transparent;
+  border: none;
+  color: #88a888;
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 15px;
+  transition: color 0.2s;
+  letter-spacing: 1px;
+}
+
+.auth-guest-btn:hover {
+  color: var(--hud-primary);
+}
+
+/* 戰術儀表板 - 個人檔案資訊 */
+.lobby-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid var(--hud-bg-border);
+  padding-bottom: 15px;
+  text-align: left;
+}
+
+.profile-avatar-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid var(--hud-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 900;
+  font-size: 1.6rem;
+  box-shadow: 0 0 12px var(--hud-glow);
+  background: rgba(0, 255, 102, 0.05);
+}
+
+.profile-title-area {
+  flex: 1;
+}
+
+.profile-name-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-name-edit-row h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+}
+
+.profile-name-input {
+  background: rgba(0, 255, 102, 0.05);
+  border: 1px solid var(--hud-primary);
+  color: var(--hud-primary);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: bold;
+  border-radius: 2px;
+  outline: none;
+  width: 150px;
+}
+
+.edit-btn {
+  background: transparent;
+  border: none;
+  color: #88a888;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.edit-btn:hover {
+  color: var(--hud-primary);
+}
+
+.profile-rank-info {
+  font-size: 0.85rem;
+  margin-top: 4px;
+  letter-spacing: 1.5px;
+  font-weight: bold;
+}
+
+/* 生涯戰績數據網格 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.stat-item {
+  background: rgba(0, 255, 102, 0.02);
+  border: 1px solid rgba(0, 255, 102, 0.1);
+  padding: 10px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.stat-item-label {
+  font-size: 0.7rem;
+  color: #88a888;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-item-val {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--hud-primary);
+}
+
+/* 成就徽章區 */
+.achievements-section {
+  text-align: left;
+}
+
+.achievements-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  color: #88a888;
+  text-transform: uppercase;
+  border-bottom: 1px dashed var(--hud-bg-border);
+  padding-bottom: 6px;
+}
+
+.badges-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.badge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 8px 4px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.badge-card.unlocked {
+  border-color: rgba(0, 255, 102, 0.3);
+  background: rgba(0, 255, 102, 0.04);
+}
+
+.badge-icon {
+  font-size: 1.5rem;
+  filter: grayscale(100%);
+  opacity: 0.4;
+  margin-bottom: 6px;
+  transition: all 0.3s;
+}
+
+.badge-card.unlocked .badge-icon {
+  filter: none;
+  opacity: 1;
+  transform: scale(1.1);
+  text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+}
+
+.badge-name {
+  font-size: 0.65rem;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-align: center;
+  color: #668866;
+}
+
+.badge-card.unlocked .badge-name {
+  color: var(--hud-primary);
+}
+
+.badge-desc-tooltip {
+  display: none;
+  position: absolute;
+  bottom: 105%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 16, 10, 0.98);
+  border: 1px solid var(--hud-primary);
+  padding: 6px 10px;
+  font-size: 0.65rem;
+  border-radius: 3px;
+  width: 140px;
+  color: #88a888;
+  z-index: 10;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.badge-card:hover .badge-desc-tooltip {
+  display: block;
+}
+
+/* 本機排行榜 */
+.leaderboard-section {
+  margin-top: 10px;
+  text-align: left;
+}
+
+.leaderboard-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  color: #88a888;
+  text-transform: uppercase;
+  border-bottom: 1px dashed var(--hud-bg-border);
+  padding-bottom: 6px;
+}
+
+.leaderboard-wrapper {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid rgba(0, 255, 102, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+/* 捲軸美化 */
+.leaderboard-wrapper::-webkit-scrollbar {
+  width: 5px;
+}
+.leaderboard-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.leaderboard-wrapper::-webkit-scrollbar-thumb {
+  background: var(--hud-bg-border);
+  border-radius: 3px;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-family: inherit;
+}
+
+.leaderboard-table th, .leaderboard-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 255, 102, 0.05);
+}
+
+.leaderboard-table th {
+  color: #88a888;
+  font-weight: bold;
+  background: rgba(0, 255, 102, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.leaderboard-table tr.current-user {
+  background: rgba(0, 255, 102, 0.15) !important;
+  color: var(--hud-primary);
+  font-weight: bold;
+}
+
+.leaderboard-table tr:hover {
+  background: rgba(0, 255, 102, 0.03);
+}
+
+.leaderboard-rank {
+  font-weight: bold;
+  color: var(--hud-amber);
+}
+
+/* 登出與控制列 */
+.dashboard-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed var(--hud-bg-border);
+  padding-top: 15px;
+  margin-top: 5px;
+}
+
+.dashboard-actions .logout-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 59, 59, 0.4);
+  color: #ff3b3b;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 1px;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+.dashboard-actions .logout-btn:hover {
+  background: #ff3b3b;
+  color: #000;
+  box-shadow: 0 0 10px rgba(255, 59, 59, 0.3);
+}
+
+.guest-notice {
+  font-size: 0.75rem;
+  color: #ff9800;
+  letter-spacing: 0.5px;
+  text-align: left;
+}
+
+/* 軍階升級條 */
+.rank-progress-container {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.rank-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: #88a888;
+  margin-bottom: 4px;
+}
+
+.rank-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 255, 102, 0.08);
+  border: 1px solid rgba(0, 255, 102, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rank-progress-bar-fill {
+  height: 100%;
+  background: var(--hud-primary);
+  box-shadow: 0 0 8px var(--hud-primary);
+  transition: width 0.3s ease;
+}
+
+/* 遊戲內 HUD - 玩家小卡 */
+.hud-player-tag {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-bg-border);
+  border-left: 3px solid var(--hud-primary);
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.hud-player-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--hud-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 900;
+  box-shadow: 0 0 6px var(--hud-glow);
+  background: rgba(0, 255, 102, 0.05);
+}
+
+.hud-player-info {
+  text-align: left;
+}
+
+.hud-player-name {
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.hud-player-rank {
+  font-size: 0.65rem;
+  color: #88a888;
+  margin-top: 1px;
+  letter-spacing: 0.5px;
+}
+
+/* 結算頁面中的戰績展示 */
+.endgame-stats-panel {
+  width: 100%;
+  border-top: 1px dashed var(--hud-bg-border);
+  margin: 15px 0;
+  padding-top: 15px;
+  text-align: left;
+}
+
+.endgame-stats-title {
+  font-size: 0.85rem;
+  color: #88a888;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.endgame-stats-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+  color: #88a888;
+}
+
+.endgame-stats-row span:last-child {
+  color: var(--hud-primary);
+  font-weight: bold;
+}

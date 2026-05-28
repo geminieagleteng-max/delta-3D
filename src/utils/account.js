@@ -1,0 +1,189 @@
+// DELTA FORCE 3D - Local Account System Utility
+
+const STORAGE_KEY = 'delta_3d_accounts';
+
+// 取得所有本機帳號
+export function getAccounts() {
+  const data = localStorage.getItem(STORAGE_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    console.error('Failed to parse accounts from localStorage:', e);
+    return [];
+  }
+}
+
+// 儲存帳號清單
+export function saveAccounts(accounts) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+}
+
+// 註冊新帳號
+export function registerAccount(username, nickname, password) {
+  if (!username || !nickname || !password) {
+    throw new Error('所有欄位皆為必填！');
+  }
+  const accounts = getAccounts();
+  const exists = accounts.some(a => a.username.toLowerCase() === username.toLowerCase());
+  if (exists) {
+    throw new Error('此帳號已存在！');
+  }
+
+  const newAccount = {
+    username,
+    nickname,
+    password, // 基於展示目的採用明文比對
+    stats: {
+      gamesPlayed: 0,
+      wins: 0,
+      kills: 0,
+      headshots: 0,
+      shotsFired: 0,
+      shotsHit: 0,
+      playTimeSeconds: 0,
+      highScore: 0
+    },
+    achievements: {
+      firstBlood: false,
+      deadeye: false,
+      survivor: false,
+      heavyGunner: false
+    }
+  };
+
+  accounts.push(newAccount);
+  saveAccounts(accounts);
+  return { username: newAccount.username, nickname: newAccount.nickname, stats: newAccount.stats, achievements: newAccount.achievements };
+}
+
+// 登入帳號
+export function loginAccount(username, password) {
+  if (!username || !password) {
+    throw new Error('帳號與密碼皆為必填！');
+  }
+  const accounts = getAccounts();
+  const user = accounts.find(a => a.username.toLowerCase() === username.toLowerCase());
+  if (!user || user.password !== password) {
+    throw new Error('帳號或密碼錯誤！');
+  }
+  return { username: user.username, nickname: user.nickname, stats: user.stats, achievements: user.achievements };
+}
+
+// 修改暱稱
+export function updateNickname(username, newNickname) {
+  if (!newNickname || !newNickname.trim()) {
+    throw new Error('暱稱不得為空！');
+  }
+  const accounts = getAccounts();
+  const idx = accounts.findIndex(a => a.username === username);
+  if (idx === -1) {
+    throw new Error('找不到該帳號！');
+  }
+  accounts[idx].nickname = newNickname.trim();
+  saveAccounts(accounts);
+  return { 
+    username: accounts[idx].username, 
+    nickname: accounts[idx].nickname, 
+    stats: accounts[idx].stats, 
+    achievements: accounts[idx].achievements 
+  };
+}
+
+// 更新遊玩戰績
+export function updateStats(username, runStats) {
+  const accounts = getAccounts();
+  const idx = accounts.findIndex(a => a.username === username);
+  if (idx === -1) return null;
+
+  const user = accounts[idx];
+  
+  // 累加數值
+  user.stats.gamesPlayed += 1;
+  if (runStats.victory) {
+    user.stats.wins += 1;
+  }
+  user.stats.kills += runStats.kills;
+  user.stats.headshots += runStats.headshots;
+  user.stats.shotsFired += runStats.shotsFired;
+  user.stats.shotsHit += runStats.shotsHit;
+  user.stats.playTimeSeconds += runStats.playTimeSeconds;
+
+  // 計算單場得分，並更新最高分 (Kills = 100分, Wins = 500分)
+  const currentRunScore = (runStats.kills * 100) + (runStats.victory ? 500 : 0);
+  user.stats.highScore = Math.max(user.stats.highScore, currentRunScore);
+
+  // 更新成就判定
+  if (user.stats.kills >= 1) user.achievements.firstBlood = true;
+  if (user.stats.headshots >= 5) user.achievements.deadeye = true;
+  if (user.stats.wins >= 1) user.achievements.survivor = true;
+  if (user.stats.shotsFired >= 500) user.achievements.heavyGunner = true;
+
+  saveAccounts(accounts);
+  return { username: user.username, nickname: user.nickname, stats: user.stats, achievements: user.achievements };
+}
+
+// 軍階對照表
+const RANKS = [
+  { minKills: 0, title: 'RECRUIT', zhTitle: '新兵', color: '#88a888' },
+  { minKills: 5, title: 'PRIVATE', zhTitle: '二兵', color: '#a3b899' },
+  { minKills: 12, title: 'CORPORAL', zhTitle: '下士', color: '#4f7a53' },
+  { minKills: 25, title: 'SERGEANT', zhTitle: '中士', color: '#3d8c4b' },
+  { minKills: 50, title: 'LIEUTENANT', zhTitle: '少尉', color: '#00bcd4' },
+  { minKills: 100, title: 'CAPTAIN', zhTitle: '上尉', color: '#3f51b5' },
+  { minKills: 200, title: 'MAJOR', zhTitle: '少校', color: '#9c27b0' },
+  { minKills: 500, title: 'COLONEL', zhTitle: '上校', color: '#ff9800' },
+  { minKills: 1000, title: 'GENERAL', zhTitle: '將軍', color: '#f44336' }
+];
+
+// 計算目前軍階
+export function getRank(kills) {
+  let currentRank = RANKS[0];
+  let nextRank = null;
+
+  for (let i = 0; i < RANKS.length; i++) {
+    if (kills >= RANKS[i].minKills) {
+      currentRank = RANKS[i];
+      nextRank = RANKS[i + 1] || null;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    title: currentRank.title,
+    zhTitle: currentRank.zhTitle,
+    color: currentRank.color,
+    minKills: currentRank.minKills,
+    nextRankTitle: nextRank ? nextRank.title : 'MAX',
+    nextRankKills: nextRank ? nextRank.minKills : null,
+    progress: nextRank ? (kills - currentRank.minKills) / (nextRank.minKills - currentRank.minKills) : 1
+  };
+}
+
+// 取得本機排行榜
+export function getLeaderboard() {
+  const accounts = getAccounts();
+  const sorted = accounts.map(a => {
+    // 生涯總分計算公式
+    const totalScore = (a.stats.kills * 100) + (a.stats.wins * 500);
+    return {
+      username: a.username,
+      nickname: a.nickname,
+      totalScore,
+      highScore: a.stats.highScore,
+      kills: a.stats.kills,
+      wins: a.stats.wins,
+      gamesPlayed: a.stats.gamesPlayed
+    };
+  });
+
+  // 排序優先序：總積分 -> 擊殺數 -> 勝場數
+  sorted.sort((a, b) => {
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    if (b.kills !== a.kills) return b.kills - a.kills;
+    return b.wins - a.wins;
+  });
+
+  return sorted;
+}
