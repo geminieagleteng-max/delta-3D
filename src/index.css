@@ -1481,3 +1481,105 @@ html, body {
   color: var(--hud-primary);
   font-weight: bold;
 }
+
+/* 雲端排行榜分頁與狀態 */
+.leaderboard-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 255, 102, 0.15);
+  padding-bottom: 4px;
+  align-items: center;
+}
+
+.leaderboard-tab-btn {
+  background: transparent;
+  border: none;
+  color: #88a888;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: all 0.2s ease;
+  letter-spacing: 1px;
+  border-radius: 2px 2px 0 0;
+}
+
+.leaderboard-tab-btn.active {
+  color: var(--hud-primary);
+  border-bottom: 2px solid var(--hud-primary);
+  text-shadow: 0 0 6px var(--hud-glow);
+  background: rgba(0, 255, 102, 0.03);
+}
+
+.leaderboard-tab-btn:hover {
+  color: var(--hud-primary);
+  background: rgba(0, 255, 102, 0.02);
+}
+
+.leaderboard-status-indicator {
+  font-size: 0.65rem;
+  color: #88a888;
+  margin-left: auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 102, 0.1);
+}
+
+.leaderboard-status-indicator.syncing {
+  color: var(--hud-primary);
+  border-color: rgba(0, 255, 102, 0.3);
+  box-shadow: 0 0 6px rgba(0, 255, 102, 0.15);
+}
+
+.leaderboard-status-indicator.error {
+  color: #ff3b3b;
+  border-color: rgba(255, 59, 59, 0.3);
+}
+
+.leaderboard-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 120px;
+  color: var(--hud-primary);
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 4px var(--hud-glow);
+}
+
+.leaderboard-loading-dots::after {
+  content: ' .';
+  animation: loading-dots-anim 1.5s infinite steps(4);
+}
+
+@keyframes loading-dots-anim {
+  0% { content: ''; }
+  25% { content: ' .'; }
+  50% { content: ' . .'; }
+  75% { content: ' . . .'; }
+}
+
+.leaderboard-refresh-btn {
+  background: transparent;
+  border: 1px solid rgba(0, 255, 102, 0.3);
+  color: var(--hud-primary);
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.leaderboard-refresh-btn:hover {
+  background: var(--hud-primary);
+  color: #000;
+  box-shadow: 0 0 8px var(--hud-primary);
+}

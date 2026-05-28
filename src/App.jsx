@@ -4,6 +4,7 @@ import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
 import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, SHOP_ITEMS, purchaseItem } from './utils/account';
+import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 
 
 // ==========================================
@@ -3298,6 +3299,34 @@ export default function App() {
   const [endgameStats, setEndgameStats] = useState(null);
   const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop'
 
+  const [leaderboardType, setLeaderboardType] = useState('global');
+  const [cloudLeaderboard, setCloudLeaderboard] = useState([]);
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const [cloudError, setCloudError] = useState(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('idle');
+
+  const loadCloudLeaderboard = async () => {
+    setIsCloudLoading(true);
+    setCloudError(null);
+    try {
+      const data = await fetchCloudLeaderboard();
+      setCloudLeaderboard(data);
+    } catch (err) {
+      console.error(err);
+      setCloudError('無法載入雲端數據，已自動切換至本機排行。');
+      setLeaderboardType('local');
+    } finally {
+      setIsCloudLoading(false);
+    }
+  };
+
+  // 當回到登入畫面/大廳時，自動讀取雲端排行榜
+  useEffect(() => {
+    if (gameState === 'deploying') {
+      loadCloudLeaderboard();
+    }
+  }, [gameState]);
+
   // 載入與同步本機排行榜
   const leaderboard = useMemo(() => {
     return getLeaderboard();
@@ -3651,6 +3680,18 @@ export default function App() {
       const updated = updateNickname(currentUser.username, newNickname);
       setCurrentUser(updated);
       setIsEditingNickname(false);
+      
+      // 同步新暱稱至雲端
+      setCloudSyncStatus('syncing');
+      syncPlayerToCloud(currentUser.username, newNickname.trim(), updated.stats)
+        .then(() => {
+          setCloudSyncStatus('done');
+          loadCloudLeaderboard();
+        })
+        .catch(err => {
+          console.error(err);
+          setCloudSyncStatus('error');
+        });
     } catch (err) {
       alert(err.message);
     }
@@ -3753,6 +3794,18 @@ export default function App() {
         ...runStats,
         coinsEarnedDetails: result.coinsEarnedDetails
       });
+      
+      // 同步戰績至雲端
+      setCloudSyncStatus('syncing');
+      syncPlayerToCloud(currentUser.username, result.user.nickname, result.user.stats)
+        .then(() => {
+          setCloudSyncStatus('done');
+          loadCloudLeaderboard();
+        })
+        .catch(err => {
+          console.error(err);
+          setCloudSyncStatus('error');
+        });
     } else {
       setEndgameStats({
         ...runStats,
@@ -4884,34 +4937,102 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* 本機排行榜 */}
+                            {/* 排行榜區塊 */}
                             <div className="leaderboard-section">
-                              <h4>本機特種排行榜 LEADERBOARD</h4>
+                              <div className="leaderboard-tabs">
+                                <button 
+                                  className={`leaderboard-tab-btn ${leaderboardType === 'global' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setLeaderboardType('global');
+                                    loadCloudLeaderboard();
+                                  }}
+                                >
+                                  全球雲端排行 (GLOBAL)
+                                </button>
+                                <button 
+                                  className={`leaderboard-tab-btn ${leaderboardType === 'local' ? 'active' : ''}`}
+                                  onClick={() => setLeaderboardType('local')}
+                                >
+                                  本機特種排行 (LOCAL)
+                                </button>
+
+                                {isCloudLoading ? (
+                                  <span className="leaderboard-status-indicator syncing">
+                                    載入中<span className="leaderboard-loading-dots"></span>
+                                  </span>
+                                ) : cloudSyncStatus === 'syncing' ? (
+                                  <span className="leaderboard-status-indicator syncing">
+                                    同步中<span className="leaderboard-loading-dots"></span>
+                                  </span>
+                                ) : cloudSyncStatus === 'done' ? (
+                                  <span className="leaderboard-status-indicator" style={{ color: '#00ff66', borderColor: 'rgba(0,255,102,0.3)' }}>
+                                    ✓ 已同步
+                                  </span>
+                                ) : cloudSyncStatus === 'error' ? (
+                                  <span className="leaderboard-status-indicator error" onClick={loadCloudLeaderboard} style={{ cursor: 'pointer' }}>
+                                    ⚠ 同步失敗 (點擊重試)
+                                  </span>
+                                ) : leaderboardType === 'global' ? (
+                                  <button className="leaderboard-refresh-btn" onClick={loadCloudLeaderboard}>
+                                    ↻ 整理
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              {cloudError && leaderboardType === 'global' && (
+                                <div style={{ color: '#ff3b3b', fontSize: '0.65rem', marginBottom: '8px', textAlign: 'center', letterSpacing: '0.5px' }}>
+                                  {cloudError}
+                                </div>
+                              )}
+
                               <div className="leaderboard-wrapper">
-                                <table className="leaderboard-table">
-                                  <thead>
-                                    <tr>
-                                      <th>排名</th>
-                                      <th>特種隊員</th>
-                                      <th>軍銜</th>
-                                      <th>總擊殺</th>
-                                      <th>勝場</th>
-                                      <th>生涯積分</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {leaderboard.map((player, index) => (
-                                      <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
-                                        <td className="leaderboard-rank">#{index + 1}</td>
-                                        <td>{player.nickname}</td>
-                                        <td>{getRank(player.kills).zhTitle}</td>
-                                        <td>{player.kills}</td>
-                                        <td>{player.wins}</td>
-                                        <td>{player.totalScore}</td>
+                                {leaderboardType === 'global' && isCloudLoading && cloudLeaderboard.length === 0 ? (
+                                  <div className="leaderboard-loading">
+                                    載入雲端排行中<span className="leaderboard-loading-dots"></span>
+                                  </div>
+                                ) : leaderboardType === 'global' && cloudLeaderboard.length === 0 ? (
+                                  <div className="leaderboard-loading" style={{ color: '#88a888' }}>
+                                    目前尚無雲端排行紀錄
+                                  </div>
+                                ) : (
+                                  <table className="leaderboard-table">
+                                    <thead>
+                                      <tr>
+                                        <th>排名</th>
+                                        <th>特種隊員</th>
+                                        <th>軍銜</th>
+                                        <th>總擊殺</th>
+                                        <th>勝場</th>
+                                        <th>生涯積分</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {leaderboardType === 'global' ? (
+                                        cloudLeaderboard.map((player, index) => (
+                                          <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
+                                            <td className="leaderboard-rank">#{index + 1}</td>
+                                            <td>{player.nickname}</td>
+                                            <td>{getRank(player.kills).zhTitle}</td>
+                                            <td>{player.kills}</td>
+                                            <td>{player.wins}</td>
+                                            <td>{player.totalScore}</td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        leaderboard.map((player, index) => (
+                                          <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
+                                            <td className="leaderboard-rank">#{index + 1}</td>
+                                            <td>{player.nickname}</td>
+                                            <td>{getRank(player.kills).zhTitle}</td>
+                                            <td>{player.kills}</td>
+                                            <td>{player.wins}</td>
+                                            <td>{player.totalScore}</td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                )}
                               </div>
                             </div>
                           </>
