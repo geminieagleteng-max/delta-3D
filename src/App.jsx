@@ -3,8 +3,9 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, SHOP_ITEMS, purchaseItem } from './utils/account';
+import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, SHOP_ITEMS, purchaseItem, equipItem, unequipItem } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
+import { ITEM_NAMES } from './config/marketConfig';
 
 
 // ==========================================
@@ -3759,6 +3760,98 @@ export default function App() {
     setLobbyTab('stats');
   };
 
+  // 局外裝備配置
+  const handleEquip = (slot, itemId) => {
+    if (!currentUser) return;
+    if (currentUser.isGuest) {
+      const updatedUser = { ...currentUser };
+      if (!updatedUser.stash) {
+        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+      }
+      if (!updatedUser.equipped) {
+        updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
+      }
+      
+      if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
+        if (updatedUser.equipped[slot]) {
+          const prev = updatedUser.equipped[slot];
+          updatedUser.stash[prev] += 1;
+        }
+        if (!itemId) {
+          updatedUser.equipped[slot] = null;
+        } else {
+          if (updatedUser.stash[itemId] <= 0) return;
+          updatedUser.stash[itemId] -= 1;
+          updatedUser.equipped[slot] = itemId;
+        }
+      } else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
+        if (updatedUser.equipped[slot]) {
+          updatedUser.stash[slot] += 1;
+        }
+        if (!itemId) {
+          updatedUser.equipped[slot] = false;
+        } else {
+          if (updatedUser.stash[slot] <= 0) return;
+          updatedUser.stash[slot] -= 1;
+          updatedUser.equipped[slot] = true;
+        }
+      } else if (slot === 'grenades' || slot === 'medkits') {
+        const stashKey = slot === 'grenades' ? 'grenade' : 'medkit';
+        if (updatedUser.stash[stashKey] <= 0) return;
+        updatedUser.stash[stashKey] -= 1;
+        updatedUser.equipped[slot] += 1;
+      }
+      setCurrentUser(updatedUser);
+    } else {
+      try {
+        const updated = equipItem(currentUser.username, slot, itemId);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  };
+
+  const handleUnequip = (slot) => {
+    if (!currentUser) return;
+    if (currentUser.isGuest) {
+      const updatedUser = { ...currentUser };
+      if (!updatedUser.stash) {
+        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+      }
+      if (!updatedUser.equipped) {
+        updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
+      }
+
+      if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
+        if (updatedUser.equipped[slot]) {
+          const prev = updatedUser.equipped[slot];
+          updatedUser.stash[prev] += 1;
+          updatedUser.equipped[slot] = null;
+        }
+      } else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
+        if (updatedUser.equipped[slot]) {
+          updatedUser.stash[slot] += 1;
+          updatedUser.equipped[slot] = false;
+        }
+      } else if (slot === 'grenades' || slot === 'medkits') {
+        if (updatedUser.equipped[slot] > 0) {
+          const stashKey = slot === 'grenades' ? 'grenade' : 'medkit';
+          updatedUser.equipped[slot] -= 1;
+          updatedUser.stash[stashKey] += 1;
+        }
+      }
+      setCurrentUser(updatedUser);
+    } else {
+      try {
+        const updated = unequipItem(currentUser.username, slot);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  };
+
   // 購買裝備商品
   const handleBuyItem = (itemId) => {
     if (!currentUser) return;
@@ -4767,11 +4860,34 @@ export default function App() {
                         <button type="submit" className="auth-submit-btn">建立檔案 CREATE PROFILE</button>
                       </form>
                     )}
-
                     <button 
                       type="button"
                       className="auth-guest-btn"
-                      onClick={() => setCurrentUser({ username: 'Guest', nickname: 'GUEST_RECRUIT', isGuest: true })}
+                      onClick={() => setCurrentUser({ 
+                        username: 'Guest', 
+                        nickname: 'GUEST_RECRUIT', 
+                        isGuest: true,
+                        coins: 500,
+                        stash: {
+                          m4a1: 0,
+                          m9: 0,
+                          bodyArmor: 0,
+                          opsHelmet: 0,
+                          grenade: 0,
+                          medkit: 0,
+                          goldBar: 0,
+                          hardDrive: 0,
+                          dogTag: 0
+                        },
+                        equipped: {
+                          primaryWeapon: 'm4a1',
+                          secondaryWeapon: 'm9',
+                          bodyArmor: false,
+                          opsHelmet: false,
+                          grenades: 1,
+                          medkits: 1
+                        }
+                      })}
                     >
                       以遊客身份遊玩 PLAY AS GUEST
                     </button>
@@ -4914,6 +5030,26 @@ export default function App() {
                           onClick={() => setLobbyTab('stats')}
                         >
                           📊 個人數據 STATS
+                        </button>
+                        <button
+                          type="button"
+                          className={`lobby-tab-btn ${lobbyTab === 'loadout' ? 'active' : ''}`}
+                          style={{
+                            background: lobbyTab === 'loadout' ? 'rgba(0, 229, 255, 0.15)' : 'transparent',
+                            color: lobbyTab === 'loadout' ? '#00e5ff' : '#88a888',
+                            border: '1px solid',
+                            borderColor: lobbyTab === 'loadout' ? '#00e5ff' : 'rgba(136, 168, 136, 0.3)',
+                            padding: '6px 15px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            borderRadius: '4px',
+                            textShadow: lobbyTab === 'loadout' ? '0 0 5px rgba(0,229,255,0.5)' : 'none',
+                            transition: 'all 0.2s',
+                            fontWeight: 'bold'
+                          }}
+                          onClick={() => setLobbyTab('loadout')}
+                        >
+                          ⚔ 戰術配裝 LOADOUT
                         </button>
                         <button
                           type="button"
@@ -5139,6 +5275,171 @@ export default function App() {
                             </div>
                           </>
                         )
+                      ) : lobbyTab === 'loadout' ? (
+                        <div className="loadout-container" style={{ display: 'flex', gap: '20px', flex: 1, maxHeight: '420px', overflow: 'hidden' }}>
+                          {/* 左側：單兵配置 Equipped Loadout */}
+                          <div className="loadout-column equipped-list" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h5 style={{ color: '#00e5ff', margin: '0 0 5px 0', borderBottom: '1px solid rgba(0,229,255,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                              單兵配裝 LOADOUT
+                            </h5>
+                            
+                            {/* Slot 1: Primary Weapon */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>主武器 PRIMARY WEAPON</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                  {ITEM_NAMES[currentUser.equipped?.primaryWeapon] || '無空缺 (Empty)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.primaryWeapon && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('primaryWeapon')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Slot 2: Secondary Weapon */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>副武器 SECONDARY WEAPON</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                  {ITEM_NAMES[currentUser.equipped?.secondaryWeapon] || '無空缺 (Empty)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.secondaryWeapon && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('secondaryWeapon')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Slot 3: Body Armor */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>防彈護甲 BODY ARMOR (+50 HP)</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.bodyArmor ? '#00ff66' : '#88a888' }}>
+                                  {currentUser.equipped?.bodyArmor ? '重型防彈衣 (Equipped)' : '未穿戴 (None)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.bodyArmor && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('bodyArmor')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Slot 4: Ops Helmet */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>特種頭盔 HELMET (減傷 25%)</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.opsHelmet ? '#00ff66' : '#88a888' }}>
+                                  {currentUser.equipped?.opsHelmet ? '特種作戰頭盔 (Equipped)' : '未穿戴 (None)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.opsHelmet && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('opsHelmet')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Slot 5: Grenades */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰術手榴彈 GRENADES</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                  {currentUser.equipped?.grenades || 0} 顆
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <button className="loadout-action-btn" style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('grenades')}>
+                                  +
+                                </button>
+                                <button className="loadout-action-btn" style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('grenades')}>
+                                  -
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Slot 6: Medkits */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰地醫療包 MEDKITS</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                  {currentUser.equipped?.medkits || 0} 個
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <button className="loadout-action-btn" style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('medkits')}>
+                                  +
+                                </button>
+                                <button className="loadout-action-btn" style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('medkits')}>
+                                  -
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* 右側：個人倉庫 Stash */}
+                          <div className="loadout-column stash-list" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h5 style={{ color: '#ffcc00', margin: '0 0 5px 0', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                              個人倉庫 STASH
+                            </h5>
+                            <div className="stash-items-grid" style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px', textAlign: 'left' }}>
+                              {Object.keys(currentUser.stash || {}).map((key) => {
+                                const count = currentUser.stash[key] || 0;
+                                return (
+                                  <div key={key} className="stash-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 204, 0, 0.03)', border: '1px solid rgba(255,204,0,0.1)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '50%' }}>
+                                      <span style={{ color: '#fff' }}>{ITEM_NAMES[key] || key}</span>
+                                      <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>x{count}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                      {key === 'm4a1' && count > 0 && (
+                                        <>
+                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', 'm4a1')}>
+                                            主手
+                                          </button>
+                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00e5ff', color: '#00e5ff', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', 'm4a1')}>
+                                            副手
+                                          </button>
+                                        </>
+                                      )}
+                                      {key === 'm9' && count > 0 && (
+                                        <>
+                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', 'm9')}>
+                                            主手
+                                          </button>
+                                          <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00e5ff', color: '#00e5ff', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', 'm9')}>
+                                            副手
+                                          </button>
+                                        </>
+                                      )}
+                                      {key === 'bodyArmor' && count > 0 && !currentUser.equipped?.bodyArmor && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('bodyArmor', 'bodyArmor')}>
+                                          裝備
+                                        </button>
+                                      )}
+                                      {key === 'opsHelmet' && count > 0 && !currentUser.equipped?.opsHelmet && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('opsHelmet', 'opsHelmet')}>
+                                          裝備
+                                        </button>
+                                      )}
+                                      {(key === 'grenade' || key === 'medkit') && count > 0 && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip(key === 'grenade' ? 'grenades' : 'medkits')}>
+                                          帶入
+                                        </button>
+                                      )}
+                                      {(key === 'goldBar' || key === 'hardDrive' || key === 'dogTag') && (
+                                        <span style={{ color: '#88a888', fontSize: '0.7rem' }}>僅供出售</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
                       ) : (
                         /* 戰術商店分頁 */
                         <div className="shop-section" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>

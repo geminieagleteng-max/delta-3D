@@ -1610,3 +1610,49 @@ html, body {
   pointer-events: none;
   transition: opacity 0.1s linear;
 }
+
+/* 倉庫與單兵配裝 UI 樣式 */
+.loadout-container {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+}
+
+.loadout-column {
+  background: rgba(8, 16, 10, 0.45);
+  border: 1px solid var(--hud-bg-border);
+  padding: 15px;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.loadout-slot-card {
+  transition: all 0.2s ease;
+}
+
+.loadout-slot-card:hover {
+  border-color: rgba(0, 229, 255, 0.3) !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.1);
+}
+
+.stash-item-row {
+  transition: all 0.2s ease;
+}
+
+.stash-item-row:hover {
+  background: rgba(255, 204, 0, 0.08) !important;
+  border-color: rgba(255, 204, 0, 0.3) !important;
+}
+
+.loadout-action-btn {
+  transition: all 0.15s ease;
+}
+
+.loadout-action-btn:hover {
+  transform: scale(1.05);
+}
+
+.loadout-action-btn:active {
+  transform: scale(0.95);
+}
