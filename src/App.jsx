@@ -3,9 +3,16 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot } from './utils/account';
+import {
+  getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats,
+  equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot,
+  initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace,
+  getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
+  equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid
+} from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
+import { ATTACHMENTS, ATTACHMENT_TYPES } from './config/attachmentsConfig';
 
 
 // ==========================================
@@ -182,7 +189,7 @@ class ProceduralAudio {
     }
   }
 
-  playGunshot() {
+  playGunshot(isSilenced = false) {
     this.resume();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -192,10 +199,10 @@ class ProceduralAudio {
       const subOsc = this.ctx.createOscillator();
       const subGain = this.ctx.createGain();
       subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(140, now);
-      subOsc.frequency.exponentialRampToValueAtTime(55, now + 0.08);
-      subGain.gain.setValueAtTime(0.8, now);
-      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      subOsc.frequency.setValueAtTime(isSilenced ? 80 : 140, now);
+      subOsc.frequency.exponentialRampToValueAtTime(isSilenced ? 40 : 55, now + 0.08);
+      subGain.gain.setValueAtTime(isSilenced ? 0.15 : 0.8, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.06 : 0.12));
       
       subOsc.connect(subGain);
       subGain.connect(this.ctx.destination);
@@ -203,7 +210,7 @@ class ProceduralAudio {
       subOsc.stop(now + 0.15);
 
       // 2. 槍口爆破噪音 (Noise)
-      const bufferSize = this.ctx.sampleRate * 0.35;
+      const bufferSize = this.ctx.sampleRate * (isSilenced ? 0.15 : 0.35);
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -215,12 +222,12 @@ class ProceduralAudio {
       
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(900, now);
-      filter.frequency.exponentialRampToValueAtTime(120, now + 0.3);
+      filter.frequency.setValueAtTime(isSilenced ? 500 : 900, now);
+      filter.frequency.exponentialRampToValueAtTime(isSilenced ? 80 : 120, now + (isSilenced ? 0.12 : 0.3));
       
       const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.7, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+      noiseGain.gain.setValueAtTime(isSilenced ? 0.12 : 0.7, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.14 : 0.32));
       
       noiseNode.connect(filter);
       filter.connect(noiseGain);
@@ -492,7 +499,104 @@ class ProceduralAudio {
     }
   }
 
-  playPistolGunshot() {
+  playMeleeSwipe() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(80, now);
+      osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    } catch (e) {}
+  }
+
+  playKnifeHit() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.2);
+      this.playClick(now, 400, 0.4, 0.08);
+    } catch (e) {}
+  }
+
+  playFlashbangExplosion() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const popOsc = this.ctx.createOscillator();
+      const popGain = this.ctx.createGain();
+      popOsc.type = 'sine';
+      popOsc.frequency.setValueAtTime(300, now);
+      popOsc.frequency.exponentialRampToValueAtTime(60, now + 0.12);
+      popGain.gain.setValueAtTime(0.8, now);
+      popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      popOsc.connect(popGain);
+      popGain.connect(this.ctx.destination);
+      popOsc.start(now);
+      popOsc.stop(now + 0.25);
+
+      const ringOsc = this.ctx.createOscillator();
+      const ringGain = this.ctx.createGain();
+      ringOsc.type = 'sine';
+      ringOsc.frequency.setValueAtTime(6000, now);
+      ringGain.gain.setValueAtTime(0.25, now);
+      ringGain.gain.exponentialRampToValueAtTime(0.001, now + 3.0);
+      ringOsc.connect(ringGain);
+      ringGain.connect(this.ctx.destination);
+      ringOsc.start(now);
+      ringOsc.stop(now + 3.1);
+    } catch (e) {}
+  }
+
+  playSmokeHiss() {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const bufferSize = this.ctx.sampleRate * 2.0;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noiseSource = this.ctx.createBufferSource();
+      noiseSource.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1000, now);
+      filter.Q.setValueAtTime(1.0, now);
+      const gainNode = this.ctx.createGain();
+      gainNode.gain.setValueAtTime(0.22, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.95);
+      noiseSource.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(this.ctx.destination);
+      noiseSource.start(now);
+      noiseSource.stop(now + 2.0);
+    } catch (e) {}
+  }
+
+  playPistolGunshot(isSilenced = false) {
     this.resume();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -502,10 +606,10 @@ class ProceduralAudio {
       const subOsc = this.ctx.createOscillator();
       const subGain = this.ctx.createGain();
       subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(240, now);
-      subOsc.frequency.exponentialRampToValueAtTime(90, now + 0.06);
-      subGain.gain.setValueAtTime(0.5, now);
-      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      subOsc.frequency.setValueAtTime(isSilenced ? 120 : 240, now);
+      subOsc.frequency.exponentialRampToValueAtTime(isSilenced ? 60 : 90, now + 0.06);
+      subGain.gain.setValueAtTime(isSilenced ? 0.12 : 0.5, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.05 : 0.1));
       
       subOsc.connect(subGain);
       subGain.connect(this.ctx.destination);
@@ -513,7 +617,7 @@ class ProceduralAudio {
       subOsc.stop(now + 0.12);
 
       // 2. 槍口爆破噪音 (Noise) - 手槍較短促清脆
-      const bufferSize = this.ctx.sampleRate * 0.22;
+      const bufferSize = this.ctx.sampleRate * (isSilenced ? 0.08 : 0.22);
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -525,12 +629,12 @@ class ProceduralAudio {
       
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1400, now);
-      filter.frequency.exponentialRampToValueAtTime(280, now + 0.18);
+      filter.frequency.setValueAtTime(isSilenced ? 800 : 1400, now);
+      filter.frequency.exponentialRampToValueAtTime(isSilenced ? 180 : 280, now + (isSilenced ? 0.10 : 0.18));
       
       const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.45, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      noiseGain.gain.setValueAtTime(isSilenced ? 0.10 : 0.45, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.12 : 0.2));
       
       noiseNode.connect(filter);
       filter.connect(noiseGain);
@@ -1225,9 +1329,10 @@ const STATIC_COLLIDERS = [
   { x: -67, z: -41, hx: 0.1, hz: 4.0, minY: 0, maxY: 3.6 }, // Ramp Right Rail
   { x: -65, z: -49.1, hx: 4.1, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Back Railing
   { x: -69.1, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Left Railing
-  { x: -60.9, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Right Railing
-  { x: -62.25, z: -40.9, hx: 1.25, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Right Rail
-  { x: -65.5, z: -40.9, hx: 2.0, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Left Rail
+  { x: -60.9, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Left Railing
+  { x: -69.1, z: -45, hx: 0.1, hz: 4.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Right Railing
+  { x: -67.75, z: -49.1, hx: 1.25, hz: 0.1, minY: 3.6, maxY: 5.0 }, // 2nd Floor Front Left Rail
+  { x: -62.25, z: -49.1, hx: 1.25, hz: 0.1, minY: 3.6, maxY: 5.0 },  // 2nd Floor Front Right Rail
 
   // 13. Two-Story Building 2 (Center: 65, 45)
   { x: 65, z: 41, hx: 4.0, hz: 0.2, minY: 0, maxY: 3.6 }, // Back Wall
@@ -1245,10 +1350,12 @@ const STATIC_COLLIDERS = [
 ];
 
 export const LOOT_CONTAINERS = [
-  { id: 1, name: '軍用武器箱', position: new THREE.Vector3(-25, 0.4, 15) },
-  { id: 2, name: '醫療補給箱', position: new THREE.Vector3(30, 0.4, -20) },
-  { id: 3, name: '機密保險箱', position: new THREE.Vector3(-45, 0.4, -35) },
-  { id: 4, name: '戰術物資箱', position: new THREE.Vector3(20, 0.4, 50) }
+  { id: 1, name: '軍用武器箱', position: new THREE.Vector3(-25, 0.4, 15), type: 'weapon' },
+  { id: 2, name: '醫療補給箱', position: new THREE.Vector3(30, 0.4, -20), type: 'med' },
+  { id: 3, name: '機密保險箱', position: new THREE.Vector3(-45, 0.4, -35), type: 'safe' },
+  { id: 4, name: '戰術物資箱', position: new THREE.Vector3(20, 0.4, 50), type: 'default' },
+  { id: 5, name: '加密電腦主機', position: new THREE.Vector3(-15, 0.4, -15), type: 'pc' },
+  { id: 6, name: '實驗室密室保險箱', position: new THREE.Vector3(-75, 0.4, 0), type: 'locked_safe', requiresKeycard: 'keycard' }
 ];
 
 export const spawnWave = (waveNumber) => {
@@ -1281,8 +1388,10 @@ export const spawnWave = (waveNumber) => {
         id: waveNumber * 100 + idCounter + 1,
         position: pos,
         hp: stats.hp,
-        state: 'alive',
+        maxHp: stats.hp,
         enemyType: group.type,
+        state: 'alive',
+        patrolCenter: pos.clone()
       });
       idCounter++;
     }
@@ -1312,7 +1421,125 @@ const spawnEnemies = (isTutorial = false) => {
   return spawnWave(1);
 };
 
-export function LootCrate({ position, name, isLooted, rotation = [0, 0, 0] }) {
+export function LootCrate({ position, name, isLooted, type = 'default', rotation = [0, 0, 0] }) {
+  if (type === 'pc') {
+    return (
+      <group position={position} rotation={rotation}>
+        {/* PC 主機箱體 */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[0.4, 0.7, 0.7]} />
+          <meshStandardMaterial color={isLooted ? '#2a2a2a' : '#121212'} roughness={0.3} metalness={0.8} />
+        </mesh>
+        {/* 前面板設計 */}
+        <mesh position={[0, 0, 0.36]} castShadow>
+          <boxGeometry args={[0.36, 0.66, 0.03]} />
+          <meshStandardMaterial color="#1e1e1e" roughness={0.8} />
+        </mesh>
+        {/* 電源指示燈 */}
+        <mesh position={[0.12, 0.28, 0.38]}>
+          <sphereGeometry args={[0.015, 6, 6]} />
+          <meshBasicMaterial color={isLooted ? '#555' : '#00ff66'} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (type === 'safe' || type === 'locked_safe') {
+    const isLockedType = type === 'locked_safe';
+    return (
+      <group position={position} rotation={rotation}>
+        {/* 重型保險箱體 */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[0.8, 0.8, 0.8]} />
+          <meshStandardMaterial color={isLooted ? '#3b3d40' : '#4a5056'} roughness={0.4} metalness={0.7} />
+        </mesh>
+        {/* 門縫線 */}
+        <mesh position={[0, 0, 0.405]}>
+          <boxGeometry args={[0.72, 0.72, 0.01]} />
+          <meshStandardMaterial color="#151718" roughness={0.9} />
+        </mesh>
+        {/* 旋轉密碼鎖 */}
+        <mesh position={[-0.15, 0.05, 0.415]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.1, 0.03, 16]} />
+          <meshStandardMaterial color="#2b2d2f" metalness={0.9} roughness={0.2} />
+        </mesh>
+        {/* 密碼鎖把手 */}
+        <mesh position={[-0.15, 0.05, 0.435]} rotation={[0, 0, Math.PI / 4]} castShadow>
+          <boxGeometry args={[0.15, 0.03, 0.02]} />
+          <meshStandardMaterial color="#666" metalness={0.9} />
+        </mesh>
+        {/* 鑰匙卡感應器 / 狀態指示燈 */}
+        <mesh position={[0.18, 0.2, 0.415]} castShadow>
+          <boxGeometry args={[0.18, 0.12, 0.02]} />
+          <meshStandardMaterial color="#1f2122" roughness={0.6} />
+        </mesh>
+        {/* 感應器 LED */}
+        <mesh position={[0.18, 0.2, 0.428]}>
+          <sphereGeometry args={[0.02, 8, 8]} />
+          <meshBasicMaterial color={isLooted ? '#444' : isLockedType ? '#ff1100' : '#00ff66'} />
+        </mesh>
+        {isLockedType && !isLooted && (
+          <pointLight position={[0.18, 0.2, 0.5]} color="#ff1100" intensity={1.5} distance={3} />
+        )}
+      </group>
+    );
+  }
+
+  if (type === 'weapon') {
+    const boxColor = isLooted ? '#263028' : '#35483a';
+    return (
+      <group position={position} rotation={rotation}>
+        {/* 長型武器箱體 */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[1.6, 0.45, 0.7]} />
+          <meshStandardMaterial color={boxColor} roughness={0.8} metalness={0.4} />
+        </mesh>
+        {/* 強化邊緣筋條 */}
+        <mesh position={[0, 0.23, 0]} castShadow>
+          <boxGeometry args={[1.64, 0.03, 0.74]} />
+          <meshStandardMaterial color={isLooted ? '#1c241e' : '#223026'} roughness={0.9} />
+        </mesh>
+        {/* 箱扣 */}
+        <mesh position={[-0.4, 0.1, 0.355]} castShadow>
+          <boxGeometry args={[0.08, 0.12, 0.02]} />
+          <meshStandardMaterial color="#1a1a1a" metalness={0.9} />
+        </mesh>
+        <mesh position={[0.4, 0.1, 0.355]} castShadow>
+          <boxGeometry args={[0.08, 0.12, 0.02]} />
+          <meshStandardMaterial color="#1a1a1a" metalness={0.9} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (type === 'med') {
+    const boxColor = isLooted ? '#cfcfcf' : '#f0f3f5';
+    return (
+      <group position={position} rotation={rotation}>
+        {/* 醫療箱體 */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[0.8, 0.5, 0.5]} />
+          <meshStandardMaterial color={boxColor} roughness={0.4} />
+        </mesh>
+        {/* 醫療十字標誌 - 橫條 */}
+        {!isLooted && (
+          <group position={[0, 0, 0.252]}>
+            <mesh>
+              <boxGeometry args={[0.22, 0.06, 0.005]} />
+              <meshBasicMaterial color="#ff1111" />
+            </mesh>
+            {/* 醫療十字標誌 - 直條 */}
+            <mesh>
+              <boxGeometry args={[0.06, 0.22, 0.005]} />
+              <meshBasicMaterial color="#ff1111" />
+            </mesh>
+          </group>
+        )}
+      </group>
+    );
+  }
+
+  // 預設木箱物資箱 (type === 'default')
   const boxColor = isLooted ? '#424542' : '#8c593b';
   return (
     <group position={position} rotation={rotation}>
@@ -1701,13 +1928,144 @@ function EnemyGrenade({ position, velocity, onExplode, targetPos }) {
   );
 }
 
+// 戰術閃光彈眩暈星體特效 (Dizzy Stars)
+function DizzyStars() {
+  const groupRef = useRef();
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.getElapsedTime() * 5.0;
+    }
+  });
+  return (
+    <group ref={groupRef}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.22, 0.25, 8]} />
+        <meshBasicMaterial color="#f1c40f" side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0.25, 0.08, 0]}>
+        <sphereGeometry args={[0.04, 4, 4]} />
+        <meshBasicMaterial color="#f1c40f" />
+      </mesh>
+      <mesh position={[-0.25, 0.08, 0]}>
+        <sphereGeometry args={[0.04, 4, 4]} />
+        <meshBasicMaterial color="#ffff00" />
+      </mesh>
+    </group>
+  );
+}
+
+// 檢查視線是否被戰術煙霧彈阻擋 (Line of Sight Blocked by Smoke Check)
+const isLineBlockedBySmoke = (p1, p2, smokeClouds) => {
+  if (!smokeClouds || smokeClouds.length === 0) return false;
+  
+  const d = new THREE.Vector3().subVectors(p2, p1);
+  const len = d.length();
+  if (len === 0) return false;
+  d.normalize();
+  
+  const ac = new THREE.Vector3();
+  const closestPoint = new THREE.Vector3();
+  
+  for (let i = 0; i < smokeClouds.length; i++) {
+    const cloud = smokeClouds[i];
+    // Check if either endpoint is inside the smoke cloud (proximity check)
+    const distP1 = p1.distanceTo(cloud.position);
+    const distP2 = p2.distanceTo(cloud.position);
+    if (distP1 < cloud.radius || distP2 < cloud.radius) {
+      return true;
+    }
+    
+    // Project cloud center onto segment
+    ac.subVectors(cloud.position, p1);
+    let t = ac.dot(d);
+    t = Math.max(0, Math.min(len, t));
+    
+    closestPoint.copy(p1).addScaledVector(d, t);
+    const distToCloud = closestPoint.distanceTo(cloud.position);
+    if (distToCloud < cloud.radius) {
+      return true;
+    }
+  }
+  return false;
+};
+
+// 戰術煙霧彈體積煙霧渲染組件 (Volumetric Smoke Cloud)
+function SmokeCloud({ position, radius = 10.0, timeLeft }) {
+  const groupRef = useRef();
+
+  const spheres = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < 18; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+      const r = Math.random() * (radius * 0.45);
+      
+      const x = Math.sin(phi) * Math.cos(theta) * r;
+      const y = Math.random() * 2.2;
+      const z = Math.sin(phi) * Math.sin(theta) * r;
+
+      arr.push({
+        id: i,
+        offset: [x, y, z],
+        size: radius * (0.35 + Math.random() * 0.25),
+        speed: 0.1 + Math.random() * 0.15,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    return arr;
+  }, [radius]);
+
+  const scaleFactor = Math.min(1.0, timeLeft / 1.5);
+  const opacity = Math.min(0.12, (timeLeft / 12.0) * 0.12);
+
+  useFrame((state, delta) => {
+    if (!groupRef.current) return;
+    const time = state.clock.getElapsedTime();
+    groupRef.current.rotation.y += delta * 0.05;
+    
+    const children = groupRef.current.children;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child && spheres[i]) {
+        const breath = 1 + Math.sin(time * spheres[i].speed + spheres[i].phase) * 0.08;
+        const scaleVal = breath * scaleFactor;
+        child.scale.set(scaleVal, scaleVal, scaleVal);
+      }
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[position.x, position.y, position.z]}>
+      {spheres.map((s) => (
+        <mesh key={s.id} position={s.offset}>
+          <sphereGeometry args={[s.size, 16, 16]} />
+          <meshBasicMaterial
+            color="#95a5a6"
+            transparent
+            opacity={opacity}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // 敵軍 AI 組件
 // 敵軍 AI 組件 (支援突擊、盾兵、擲彈、狙擊四兵種 AI 與精緻模型)
-function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
+function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [] }) {
   const meshRef = useRef();
   const healthBarRef = useRef();
   const [dyingRotation, setDyingRotation] = useState(0);
   const lastShotTime = useRef(0);
+
+  // 戰術閃光彈致盲眩暈本機倒數
+  const localStunnedTimer = useRef(0);
+  useEffect(() => {
+    if (data.stunnedTimer > 0) {
+      localStunnedTimer.current = data.stunnedTimer;
+    }
+  }, [data.stunnedTimer]);
 
   // 敵軍開火紅色射線狀態
   const [tracerVisible, setTracerVisible] = useState(false);
@@ -1724,6 +2082,25 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
 
   // 取得兵種數值
   const stats = ENEMY_STATS[data.enemyType] || ENEMY_STATS.assault;
+
+  // 戰術受擊阻滯與盲射狀態
+  const prevHp = useRef(data.hp);
+  const staggerTimer = useRef(0);
+  const shootLockTimer = useRef(0);
+  const staggerTilt = useRef(0);
+  const staggerScaleY = useRef(1);
+  const isBlindFiring = useRef(false);
+  const blindFireLerp = useRef(0);
+
+  useEffect(() => {
+    if (data.hp < prevHp.current) {
+      staggerTimer.current = 0.4;
+      shootLockTimer.current = 0.2;
+      staggerTilt.current = (Math.random() > 0.5 ? 1 : -1) * (0.15 + Math.random() * 0.1);
+      staggerScaleY.current = 0.82;
+    }
+    prevHp.current = data.hp;
+  }, [data.hp]);
 
   // 初始化尋求的掩體 (地面部隊: assault, grenadier) — 盾兵不使用掩體
   useEffect(() => {
@@ -1746,6 +2123,17 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
   useFrame((state, delta) => {
     if (!meshRef.current) return;
 
+    staggerTimer.current = Math.max(0, staggerTimer.current - delta);
+    shootLockTimer.current = Math.max(0, shootLockTimer.current - delta);
+    staggerTilt.current = THREE.MathUtils.lerp(staggerTilt.current, 0, 8.0 * delta);
+    staggerScaleY.current = THREE.MathUtils.lerp(staggerScaleY.current, 1, 8.0 * delta);
+    blindFireLerp.current = THREE.MathUtils.lerp(blindFireLerp.current, isBlindFiring.current ? 1.0 : 0.0, 6.0 * delta);
+
+    if (meshRef.current) {
+      meshRef.current.scale.set(1, staggerScaleY.current, 1);
+      meshRef.current.rotation.z = (data.state === 'dying') ? dyingRotation : staggerTilt.current;
+    }
+
     if (data.state === 'dying') {
       if (dyingRotation < Math.PI / 2) {
         const speed = 4.5;
@@ -1756,6 +2144,16 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
         onKilled(data.id);
       }
       return;
+    }
+
+    // 檢查閃光彈致盲狀態 (Check Flashbang Stun)
+    if (localStunnedTimer.current > 0) {
+      localStunnedTimer.current = Math.max(0, localStunnedTimer.current - delta);
+      meshRef.current.rotation.y += delta * 5.0; // 旋轉失控
+      if (healthBarRef.current) {
+        healthBarRef.current.lookAt(state.camera.position);
+      }
+      return; // 略過移動與開火 AI
     }
 
     const enemyPos = meshRef.current.position;
@@ -1776,42 +2174,45 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
       if (distToPlayer <= stats.range) {
         const now = state.clock.getElapsedTime();
         const cooldown = stats.cooldown + Math.random() * 1.5;
-        if (now - lastShotTime.current > cooldown) {
+        if (shootLockTimer.current <= 0 && now - lastShotTime.current > cooldown) {
           lastShotTime.current = now;
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
-          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-          const distToPlayerLen = direction.length();
-          direction.normalize();
-
-          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
-          const intersects = raycaster.intersectObjects(state.scene.children, true);
           
-          let blocked = false;
-          for (let i = 0; i < intersects.length; i++) {
-            const hit = intersects[i];
-            if (hit.distance < 0.8) continue;
+          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          if (!blocked) {
+            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+            const distToPlayerLen = direction.length();
+            direction.normalize();
 
-            let parent = hit.object;
-            let isSelfOrEnemy = false;
-            let isCosmetic = false;
-            while (parent) {
-              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) {
-                isSelfOrEnemy = true;
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const intersects = raycaster.intersectObjects(state.scene.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {
+              const hit = intersects[i];
+              if (hit.distance < 0.8) continue;
+
+              let parent = hit.object;
+              let isSelfOrEnemy = false;
+              let isCosmetic = false;
+              while (parent) {
+                if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) {
+                  isSelfOrEnemy = true;
+                  break;
+                }
+                if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') {
+                  isCosmetic = true;
+                  break;
+                }
+                parent = parent.parent;
+              }
+              if (isSelfOrEnemy || isCosmetic) continue;
+
+              if (hit.distance < distToPlayerLen - 0.5) {
+                blocked = true;
                 break;
               }
-              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') {
-                isCosmetic = true;
-                break;
-              }
-              parent = parent.parent;
-            }
-            if (isSelfOrEnemy || isCosmetic) continue;
-
-            if (hit.distance < distToPlayerLen - 0.5) {
-              blocked = true;
-              break;
             }
           }
 
@@ -1836,7 +2237,8 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
         const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
         dir.y = 0;
         dir.normalize();
-        enemyPos.addScaledVector(dir, stats.speed * delta);
+        const currentSpeed = (staggerTimer.current > 0 ? stats.speed * 0.35 : stats.speed);
+        enemyPos.addScaledVector(dir, currentSpeed * delta);
         // 沉穩步伐，輕微上下晃動
         meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 4.0)) * 0.04;
       } else {
@@ -1846,32 +2248,35 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
       // 近距離開火
       if (distToPlayer <= stats.range) {
         const now = state.clock.getElapsedTime();
-        if (now - lastShotTime.current > stats.cooldown) {
+        if (shootLockTimer.current <= 0 && now - lastShotTime.current > stats.cooldown) {
           lastShotTime.current = now;
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
-          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-          const distToPlayerLen = direction.length();
-          direction.normalize();
-
-          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
-          const intersects = raycaster.intersectObjects(state.scene.children, true);
           
-          let blocked = false;
-          for (let i = 0; i < intersects.length; i++) {
-            const hit = intersects[i];
-            if (hit.distance < 0.8) continue;
-            let parent = hit.object;
-            let isSelfOrEnemy = false;
-            let isCosmetic = false;
-            while (parent) {
-              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
-              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
-              parent = parent.parent;
+          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          if (!blocked) {
+            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+            const distToPlayerLen = direction.length();
+            direction.normalize();
+
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const intersects = raycaster.intersectObjects(state.scene.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {
+              const hit = intersects[i];
+              if (hit.distance < 0.8) continue;
+              let parent = hit.object;
+              let isSelfOrEnemy = false;
+              let isCosmetic = false;
+              while (parent) {
+                if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+                if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
+                parent = parent.parent;
+              }
+              if (isSelfOrEnemy || isCosmetic) continue;
+              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
             }
-            if (isSelfOrEnemy || isCosmetic) continue;
-            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
           }
 
           if (!blocked) {
@@ -1905,6 +2310,9 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
     }
     // ========== 擲彈兵 AI ==========
     else if (data.enemyType === ENEMY_TYPES.GRENADIER) {
+      const currentSpeed = (staggerTimer.current > 0 ? stats.speed * 0.35 : stats.speed);
+      const currentRushSpeed = (staggerTimer.current > 0 ? stats.rushSpeed * 0.35 : stats.rushSpeed);
+
       // 使用掩體系統 (同突擊兵邏輯，但速度較慢)
       if (aiState.current === 'movingToCover') {
         const distToCover = enemyPos.distanceTo(currentTarget.current);
@@ -1912,16 +2320,53 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
           const dir = new THREE.Vector3().subVectors(currentTarget.current, enemyPos);
           dir.y = 0;
           dir.normalize();
-          enemyPos.addScaledVector(dir, stats.speed * delta);
+          enemyPos.addScaledVector(dir, currentSpeed * delta);
           meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 9.0)) * 0.12;
         } else {
           aiState.current = 'shootingFromCover';
           coverTimer.current = 4.0 + Math.random() * 2.0;
+          if (data.hp < stats.hp * 0.5 && Math.random() < 0.4) {
+            isBlindFiring.current = true;
+          } else {
+            isBlindFiring.current = false;
+          }
         }
       } else if (aiState.current === 'shootingFromCover') {
         meshRef.current.position.y = 0;
         coverTimer.current -= delta;
+
+        // 盲射開火行為
+        if (isBlindFiring.current) {
+          const now = state.clock.getElapsedTime();
+          const cooldown = 0.8 + Math.random() * 0.5;
+          if (shootLockTimer.current <= 0 && now - lastShotTime.current > cooldown) {
+            lastShotTime.current = now;
+            const startPos = new THREE.Vector3(0.25, 1.12, 0.95).applyMatrix4(meshRef.current.matrixWorld);
+            const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
+            
+            const isHit = Math.random() < 0.08;
+            let targetCoords = endPos.clone();
+            if (isHit) {
+              onShootPlayer(10, enemyPos);
+            } else {
+              const offset = new THREE.Vector3(
+                (Math.random() - 0.5) * 12.0,
+                (Math.random() - 0.5) * 6.0,
+                (Math.random() - 0.5) * 12.0
+              );
+              targetCoords.add(offset);
+            }
+            setTracerCoords({
+              start: [startPos.x, startPos.y, startPos.z],
+              end: [targetCoords.x, targetCoords.y, targetCoords.z],
+            });
+            setTracerVisible(true);
+            setTimeout(() => setTracerVisible(false), 90);
+          }
+        }
+
         if (coverTimer.current <= 0) {
+          isBlindFiring.current = false;
           if (distToPlayer > 18) {
             // 尋求離玩家更近的掩體
             let bestCover = currentTarget.current;
@@ -1948,15 +2393,15 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
           const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
           dir.y = 0;
           dir.normalize();
-          enemyPos.addScaledVector(dir, stats.rushSpeed * delta);
+          enemyPos.addScaledVector(dir, currentRushSpeed * delta);
           meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 9.0)) * 0.12;
         } else {
           meshRef.current.position.y = 0;
         }
       }
 
-      // 擲彈兵攻擊：投擲手榴彈 (不使用射線)
-      if (distToPlayer <= stats.range && distToPlayer > 8) {
+      // 擲彈兵攻擊：投擲手榴彈 (不使用射線，盲射或硬直時不投擲)
+      if (distToPlayer <= stats.range && distToPlayer > 8 && !isBlindFiring.current && shootLockTimer.current <= 0) {
         const now = state.clock.getElapsedTime();
         if (now - lastShotTime.current > stats.cooldown) {
           lastShotTime.current = now;
@@ -1964,27 +2409,30 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
           // 視線檢查
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone();
-          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-          const distToPlayerLen = direction.length();
-          direction.normalize();
-
-          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
-          const intersects = raycaster.intersectObjects(state.scene.children, true);
           
-          let blocked = false;
-          for (let i = 0; i < intersects.length; i++) {
-            const hit = intersects[i];
-            if (hit.distance < 0.8) continue;
-            let parent = hit.object;
-            let isSelfOrEnemy = false;
-            let isCosmetic = false;
-            while (parent) {
-              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
-              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
-              parent = parent.parent;
+          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          if (!blocked) {
+            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+            const distToPlayerLen = direction.length();
+            direction.normalize();
+
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const intersects = raycaster.intersectObjects(state.scene.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {
+              const hit = intersects[i];
+              if (hit.distance < 0.8) continue;
+              let parent = hit.object;
+              let isSelfOrEnemy = false;
+              let isCosmetic = false;
+              while (parent) {
+                if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+                if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
+                parent = parent.parent;
+              }
+              if (isSelfOrEnemy || isCosmetic) continue;
+              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
             }
-            if (isSelfOrEnemy || isCosmetic) continue;
-            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
           }
 
           if (!blocked && onThrowGrenade) {
@@ -2100,27 +2548,30 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
           const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
-          const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-          const distToPlayerLen = direction.length();
-          direction.normalize();
-
-          const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
-          const intersects = raycaster.intersectObjects(state.scene.children, true);
           
-          let blocked = false;
-          for (let i = 0; i < intersects.length; i++) {
-            const hit = intersects[i];
-            if (hit.distance < 0.8) continue;
-            let parent = hit.object;
-            let isSelfOrEnemy = false;
-            let isCosmetic = false;
-            while (parent) {
-              if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
-              if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
-              parent = parent.parent;
+          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          if (!blocked) {
+            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
+            const distToPlayerLen = direction.length();
+            direction.normalize();
+
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const intersects = raycaster.intersectObjects(state.scene.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {
+              const hit = intersects[i];
+              if (hit.distance < 0.8) continue;
+              let parent = hit.object;
+              let isSelfOrEnemy = false;
+              let isCosmetic = false;
+              while (parent) {
+                if (parent.userData && (parent.userData.isEnemy || parent.userData.isDummy)) { isSelfOrEnemy = true; break; }
+                if (parent.name === 'weapon' || parent.name === 'player' || parent.name === 'bullet_hole' || parent.name === 'tracer' || parent.name === 'casing' || parent.name === 'magazine') { isCosmetic = true; break; }
+                parent = parent.parent;
+              }
+              if (isSelfOrEnemy || isCosmetic) continue;
+              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
             }
-            if (isSelfOrEnemy || isCosmetic) continue;
-            if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
           }
 
           if (!blocked) {
@@ -2313,6 +2764,13 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade }) {
             </group>
           )}
         </group>
+
+        {/* 戰術閃光彈致盲眩暈特效 */}
+        {localStunnedTimer.current > 0 && (
+          <group position={[0, 2.15, 0]}>
+            <DizzyStars />
+          </group>
+        )}
 
         <group ref={healthBarRef}>
           <EnemyHealthBar hp={data.hp} maxHp={stats.hp} barColor={stats.hpBarColor} />
@@ -3122,20 +3580,22 @@ function TacticalAssets() {
 // ==========================================
 // 4. 第一人稱突擊步槍組件 (採用中空反射式紅點瞄準鏡，完全防遮擋)
 // ==========================================
-function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeWeaponId, isHealing }) {
+function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeWeaponId, isHealing, isMeleeing = false, meleeProgress, attachments }) {
   const medkitRef = useRef();
   const medkitLerp = useRef(0);
+  const knifeRef = useRef();
+  const knifeLerp = useRef(0);
 
   useFrame((state, delta) => {
     const safeDelta = Math.min(delta, 0.1);
     medkitLerp.current = THREE.MathUtils.lerp(medkitLerp.current, isHealing ? 1.0 : 0.0, 10.0 * safeDelta);
+    knifeLerp.current = THREE.MathUtils.lerp(knifeLerp.current, isMeleeing ? 1.0 : 0.0, 15.0 * safeDelta);
     
     if (medkitRef.current) {
       const time = state.clock.getElapsedTime();
       const bobY = Math.sin(time * 5.0) * 0.02 * medkitLerp.current;
       const bobRotZ = Math.cos(time * 3.0) * 0.03 * medkitLerp.current;
       
-      // 當 medkitLerp 為 1.0 時，醫療包將移至中心可見位置
       medkitRef.current.position.x = 0.05;
       medkitRef.current.position.y = THREE.MathUtils.lerp(-1.2, -0.28, medkitLerp.current) + bobY;
       medkitRef.current.position.z = THREE.MathUtils.lerp(-0.2, -0.65, medkitLerp.current);
@@ -3143,6 +3603,23 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
       medkitRef.current.rotation.y = THREE.MathUtils.lerp(-0.5, 0.1, medkitLerp.current);
       medkitRef.current.rotation.z = bobRotZ;
       medkitRef.current.visible = medkitLerp.current > 0.01;
+    }
+
+    if (knifeRef.current) {
+      const p = meleeProgress ? meleeProgress.current : 0;
+      // 近戰軍刀弧形揮舞軌跡：由右下向左上/前快速斜切
+      const swingX = Math.sin(p * Math.PI) * 0.45;
+      const swingY = -Math.cos(p * Math.PI) * 0.25;
+      const swingRotZ = Math.sin(p * Math.PI) * -1.8;
+      
+      knifeRef.current.position.x = THREE.MathUtils.lerp(0.5, 0.1, knifeLerp.current) - swingX;
+      knifeRef.current.position.y = THREE.MathUtils.lerp(-1.0, -0.22, knifeLerp.current) + swingY;
+      knifeRef.current.position.z = THREE.MathUtils.lerp(-0.2, -0.42, knifeLerp.current);
+      
+      knifeRef.current.rotation.x = THREE.MathUtils.lerp(0.8, -0.1, knifeLerp.current);
+      knifeRef.current.rotation.y = THREE.MathUtils.lerp(-0.4, 0.4, knifeLerp.current);
+      knifeRef.current.rotation.z = THREE.MathUtils.lerp(0.2, 0, knifeLerp.current) + swingRotZ;
+      knifeRef.current.visible = knifeLerp.current > 0.01;
     }
   });
 
@@ -3152,7 +3629,7 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
       <group 
         rotation={[0, Math.PI, 0]} 
         scale={[0.13, 0.13, 0.13]} 
-        position={[0, -1.5 * medkitLerp.current, 0]}
+        position={[0, -1.5 * Math.max(medkitLerp.current, knifeLerp.current), 0]}
         visible={!(activeWeaponId === 'awp' && isAds)}
       >
         
@@ -3680,6 +4157,30 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
         {/* 醫療包散發的綠色治癒光芒 */}
         <pointLight color="#00ff66" intensity={2.5} distance={3} />
       </group>
+
+      {/* 獨立的 3D 軍刀模型，只有在 isMeleeing 時顯示，並由 useFrame 動態控制 */}
+      <group ref={knifeRef} scale={[0.8, 0.8, 0.8]} visible={false}>
+        {/* 刀柄 Handle */}
+        <mesh castShadow>
+          <boxGeometry args={[0.03, 0.14, 0.03]} />
+          <meshStandardMaterial color="#18181c" roughness={0.8} />
+        </mesh>
+        {/* 護手 Guard */}
+        <mesh position={[0, 0.07, 0]} castShadow>
+          <boxGeometry args={[0.08, 0.012, 0.03]} />
+          <meshStandardMaterial color="#4a4d50" metalness={0.85} roughness={0.2} />
+        </mesh>
+        {/* 刀刃 Blade */}
+        <mesh position={[0, 0.20, 0]} castShadow>
+          <boxGeometry args={[0.036, 0.26, 0.008]} />
+          <meshStandardMaterial color="#b1b5b9" metalness={0.9} roughness={0.15} />
+        </mesh>
+        {/* 刀背鋸齒與細部 */}
+        <mesh position={[0.018, 0.20, 0]}>
+          <boxGeometry args={[0.004, 0.26, 0.006]} />
+          <meshStandardMaterial color="#8b8e91" metalness={0.9} />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -3808,7 +4309,7 @@ function DroppedMagazine({ position, velocity }) {
 }
 
 // 實體戰術手榴彈元件
-function Grenade({ position, velocity, onExplode }) {
+function Grenade({ position, velocity, onExplode, type = 'grenade' }) {
   const meshRef = useRef();
   const vel = useRef(velocity.clone());
   const timer = useRef(2.5); // 2.5 秒定時引信
@@ -3820,13 +4321,15 @@ function Grenade({ position, velocity, onExplode }) {
 
     timer.current -= delta;
     if (timer.current <= 0) {
-      onExplode(pos.clone());
+      onExplode(pos.clone(), type);
       return;
     }
 
-    // 紅色 LED 警示快閃
-    const flashIndex = Math.floor(state.clock.getElapsedTime() * 12) % 2;
-    setLedColor(flashIndex === 0 ? '#ff0000' : '#1a0000');
+    // 紅色 LED 警示快閃 (僅 HE 手榴彈)
+    if (type === 'grenade') {
+      const flashIndex = Math.floor(state.clock.getElapsedTime() * 12) % 2;
+      setLedColor(flashIndex === 0 ? '#ff0000' : '#1a0000');
+    }
 
     // 重力
     vel.current.y -= 9.8 * delta;
@@ -3866,23 +4369,67 @@ function Grenade({ position, velocity, onExplode }) {
 
   return (
     <group position={[position.x, position.y, position.z]} ref={meshRef}>
-      {/* 手榴彈墨綠球體 */}
-      <mesh castShadow>
-        <sphereGeometry args={[0.13, 10, 10]} />
-        <meshStandardMaterial color="#2d3b25" roughness={0.9} />
-      </mesh>
-      {/* 金屬保險栓 */}
-      <mesh position={[0, 0.12, 0]}>
-        <cylinderGeometry args={[0.025, 0.025, 0.05, 6]} />
-        <meshStandardMaterial color="#4f4f4f" metalness={0.7} />
-      </mesh>
-      {/* 紅色 LED 警示燈 */}
-      <mesh position={[0.08, 0.08, 0]}>
-        <sphereGeometry args={[0.016, 6, 6]} />
-        <meshBasicMaterial color={ledColor} />
-      </mesh>
-      {ledColor === '#ff0000' && (
-        <pointLight color="#ff0000" intensity={2} distance={4} />
+      {type === 'grenade' && (
+        <>
+          {/* 手榴彈墨綠球體 */}
+          <mesh castShadow>
+            <sphereGeometry args={[0.13, 10, 10]} />
+            <meshStandardMaterial color="#2d3b25" roughness={0.9} />
+          </mesh>
+          {/* 金屬保險栓 */}
+          <mesh position={[0, 0.12, 0]}>
+            <cylinderGeometry args={[0.025, 0.025, 0.05, 6]} />
+            <meshStandardMaterial color="#4f4f4f" metalness={0.7} />
+          </mesh>
+          {/* 紅色 LED 警示燈 */}
+          <mesh position={[0.08, 0.08, 0]}>
+            <sphereGeometry args={[0.016, 6, 6]} />
+            <meshBasicMaterial color={ledColor} />
+          </mesh>
+          {ledColor === '#ff0000' && (
+            <pointLight color="#ff0000" intensity={2} distance={4} />
+          )}
+        </>
+      )}
+
+      {type === 'flashbang' && (
+        <>
+          {/* 閃光彈銀色圓柱體 */}
+          <mesh castShadow>
+            <cylinderGeometry args={[0.04, 0.04, 0.18, 8]} />
+            <meshStandardMaterial color="#c0c0c0" metalness={0.9} roughness={0.1} />
+          </mesh>
+          {/* 藍色條紋環 */}
+          <mesh position={[0, 0.03, 0]}>
+            <cylinderGeometry args={[0.041, 0.041, 0.03, 8]} />
+            <meshBasicMaterial color="#0055ff" />
+          </mesh>
+          {/* 金屬頂蓋/拉環 */}
+          <mesh position={[0, 0.1, 0]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.02, 6]} />
+            <meshStandardMaterial color="#4f4f4f" metalness={0.7} />
+          </mesh>
+        </>
+      )}
+
+      {type === 'smoke' && (
+        <>
+          {/* 煙霧彈灰色圓柱體 */}
+          <mesh castShadow>
+            <cylinderGeometry args={[0.05, 0.05, 0.20, 8]} />
+            <meshStandardMaterial color="#7f8c8d" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {/* 黃色條紋環 */}
+          <mesh position={[0, 0.04, 0]}>
+            <cylinderGeometry args={[0.051, 0.051, 0.03, 8]} />
+            <meshBasicMaterial color="#f1c40f" />
+          </mesh>
+          {/* 金屬頂蓋/拉環 */}
+          <mesh position={[0, 0.11, 0]}>
+            <cylinderGeometry args={[0.025, 0.025, 0.02, 6]} />
+            <meshStandardMaterial color="#4f4f4f" metalness={0.7} />
+          </mesh>
+        </>
       )}
     </group>
   );
@@ -3907,6 +4454,11 @@ function PlayerController({
   fireMode,
   grenades,
   setGrenades,
+  flashbangs,
+  setFlashbangs,
+  smokes,
+  setSmokes,
+  activeThrowable,
   addCasing,
   addDroppedMag,
   addGrenade,
@@ -3940,6 +4492,8 @@ function PlayerController({
   setExtractionCountdown,
   setIsPlayerInExtractionZone,
   onExtractSuccess,
+  primaryConfig,
+  secondaryConfig,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -3981,6 +4535,8 @@ function PlayerController({
   const activeWeaponRef = useRef(activeWeapon);
   const primaryWeaponIdRef = useRef(primaryWeaponId);
   const secondaryWeaponIdRef = useRef(secondaryWeaponId);
+  const primaryConfigRef = useRef(primaryConfig);
+  const secondaryConfigRef = useRef(secondaryConfig);
  
   const isTutorialRef = useRef(isTutorial);
   const onTriggerTutorialRef = useRef(onTriggerTutorial);
@@ -3996,6 +4552,14 @@ function PlayerController({
   const nearContainerRef = useRef(nearContainer);
   const isAdsRef = useRef(isAds);
   const lootedContainersRef = useRef(lootedContainers);
+
+  useEffect(() => {
+    primaryConfigRef.current = primaryConfig;
+  }, [primaryConfig]);
+
+  useEffect(() => {
+    secondaryConfigRef.current = secondaryConfig;
+  }, [secondaryConfig]);
 
   useEffect(() => {
     isLootingRef.current = isLooting;
@@ -4105,11 +4669,10 @@ function PlayerController({
     isMouseDown.current = mobileFiring;
     if (mobileFiring && fireModeRef.current === 'semi') {
       const now = performance.now() / 1000;
-      const activeWeaponId = activeWeaponRef.current === 'primary' 
-        ? primaryWeaponIdRef.current 
-        : secondaryWeaponIdRef.current;
-      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
-      const fireInterval = weaponConfig.fireInterval / 1000;
+      const weaponConfig = activeWeaponRef.current === 'primary' 
+        ? primaryConfigRef.current 
+        : secondaryConfigRef.current;
+      const fireInterval = (weaponConfig?.fireInterval || 100) / 1000;
       if (now - lastFireTime.current >= fireInterval) {
         lastFireTime.current = now;
         fireOneBullet();
@@ -4211,54 +4774,51 @@ function PlayerController({
     }
   }, [isReloading, weaponRef, addDroppedMag, camera]);
 
+  const handleThrowThrowable = () => {
+    let hasQuantity = false;
+    if (activeThrowable === 'grenade' && grenades > 0) {
+      setGrenades((prev) => prev - 1);
+      hasQuantity = true;
+    } else if (activeThrowable === 'flashbang' && flashbangs > 0) {
+      setFlashbangs((prev) => prev - 1);
+      hasQuantity = true;
+    } else if (activeThrowable === 'smoke' && smokes > 0) {
+      setSmokes((prev) => prev - 1);
+      hasQuantity = true;
+    }
+
+    if (hasQuantity) {
+      const pos = camera.position.clone();
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      
+      const startPos = pos.clone().add(dir.clone().multiplyScalar(0.4));
+      const velocity = dir.clone().multiplyScalar(13.0);
+      velocity.y += 4.5;
+      
+      addGrenade(startPos, velocity, activeThrowable);
+
+      if (isTutorialRef.current) {
+        onTriggerTutorialRef.current('grenade');
+      }
+    }
+  };
+
   // 監聽 G 鍵拋擲手榴彈
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'KeyG' && gameStateRef.current === 'active' && (device === 'mobile' || document.pointerLockElement)) {
-        if (grenades > 0) {
-          setGrenades((prev) => prev - 1);
-          
-          const pos = camera.position.clone();
-          const dir = new THREE.Vector3();
-          camera.getWorldDirection(dir);
-          
-          // 起點置於相機前方少許，並依仰角方向飛出
-          const startPos = pos.clone().add(dir.clone().multiplyScalar(0.4));
-          const velocity = dir.clone().multiplyScalar(13.0);
-          velocity.y += 4.5; // 拋射角向上速度
-          
-          addGrenade(startPos, velocity);
-
-          if (isTutorialRef.current) {
-            onTriggerTutorialRef.current('grenade');
-          }
-        }
+        handleThrowThrowable();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [grenades, camera, addGrenade, setGrenades, device]);
+  }, [grenades, flashbangs, smokes, activeThrowable, camera]);
 
   // 監聽行動端按鈕拋擲手榴彈
   useEffect(() => {
     if (mobileGrenadeTrigger > 0 && gameStateRef.current === 'active') {
-      if (grenades > 0) {
-        setGrenades((prev) => prev - 1);
-        
-        const pos = camera.position.clone();
-        const dir = new THREE.Vector3();
-        camera.getWorldDirection(dir);
-        
-        const startPos = pos.clone().add(dir.clone().multiplyScalar(0.4));
-        const velocity = dir.clone().multiplyScalar(13.0);
-        velocity.y += 4.5;
-        
-        addGrenade(startPos, velocity);
-
-        if (isTutorialRef.current) {
-          onTriggerTutorialRef.current('grenade');
-        }
-      }
+      handleThrowThrowable();
     }
   }, [mobileGrenadeTrigger]);
 
@@ -4347,17 +4907,19 @@ function PlayerController({
     const activeWeaponId = activeWeaponRef.current === 'primary' 
       ? primaryWeaponIdRef.current 
       : secondaryWeaponIdRef.current;
-    const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+    const weaponConfig = activeWeaponRef.current === 'primary' 
+      ? primaryConfigRef.current 
+      : secondaryConfigRef.current;
 
     if (runStatsRef && runStatsRef.current) {
       runStatsRef.current.shotsFired += 1;
     }
 
     // 播放合成槍聲
-    if (weaponConfig.isPrimary) {
-      soundManager.playGunshot();
+    if (weaponConfig?.isPrimary) {
+      soundManager.playGunshot(weaponConfig?.silence);
     } else {
-      soundManager.playPistolGunshot();
+      soundManager.playPistolGunshot(weaponConfig?.silence);
     }
 
     setAmmoRef.current((prev) => {
@@ -4421,6 +4983,7 @@ function PlayerController({
       if (activeWeaponId === 'm870') {
         finalSpread = THREE.MathUtils.lerp(0.065, 0.024, adsLerp.current);
       }
+      finalSpread *= (weaponConfig?.spreadFactor || 1);
 
       const spreadX = (Math.random() - 0.5) * finalSpread;
       const spreadY = (Math.random() - 0.5) * finalSpread;
@@ -4503,11 +5066,10 @@ function PlayerController({
       isMouseDown.current = true;
 
       const now = performance.now() / 1000;
-      const activeWeaponId = activeWeaponRef.current === 'primary' 
-        ? primaryWeaponIdRef.current 
-        : secondaryWeaponIdRef.current;
-      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
-      const fireInterval = weaponConfig.fireInterval / 1000;
+      const weaponConfig = activeWeaponRef.current === 'primary' 
+        ? primaryConfigRef.current 
+        : secondaryConfigRef.current;
+      const fireInterval = (weaponConfig?.fireInterval || 100) / 1000;
       if (fireModeRef.current === 'semi') {
         if (now - lastFireTime.current >= fireInterval) {
           lastFireTime.current = now;
@@ -4743,11 +5305,10 @@ function PlayerController({
     // ------------------------------------------
     if (fireModeRef.current === 'auto' && isMouseDown.current) {
       const now = performance.now() / 1000;
-      const activeWeaponId = activeWeaponRef.current === 'primary' 
-        ? primaryWeaponIdRef.current 
-        : secondaryWeaponIdRef.current;
-      const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
-      const fireInterval = weaponConfig.fireInterval / 1000;
+      const weaponConfig = activeWeaponRef.current === 'primary' 
+        ? primaryConfigRef.current 
+        : secondaryConfigRef.current;
+      const fireInterval = (weaponConfig?.fireInterval || 100) / 1000;
       if (now - lastFireTime.current >= fireInterval) {
         if (isHealingRef.current) return;
         lastFireTime.current = now;
@@ -4769,12 +5330,17 @@ function PlayerController({
     // ------------------------------------------
     // 6.1 開鏡平滑插值 (ADS Lerp) 與鏡頭 FOV 更新
     // ------------------------------------------
-    adsLerp.current = THREE.MathUtils.lerp(adsLerp.current, isAdsRef.current ? 1 : 0, 0.16);
-    
     const activeWeaponId = activeWeaponRef.current === 'primary' 
       ? primaryWeaponIdRef.current 
       : secondaryWeaponIdRef.current;
-    const targetFov = activeWeaponId === 'awp' ? 18 : 45;
+    const weaponConfig = activeWeaponRef.current === 'primary' 
+      ? primaryConfigRef.current 
+      : secondaryConfigRef.current;
+
+    const adsSpeed = 0.16 * (weaponConfig?.adsSpeedFactor || 1);
+    adsLerp.current = THREE.MathUtils.lerp(adsLerp.current, isAdsRef.current ? 1 : 0, adsSpeed);
+    
+    const targetFov = weaponConfig?.zoomFov || (activeWeaponId === 'awp' ? 18 : 45);
     camera.fov = THREE.MathUtils.lerp(70, targetFov, adsLerp.current);
     camera.updateProjectionMatrix();
 
@@ -5130,15 +5696,30 @@ export default function App() {
   const [primaryFireMode, setPrimaryFireMode] = useState('auto');
   const reloadTimeoutRef = useRef(null);
 
-  // 衍生狀態
+  // 衍生狀態 (配件改裝影響)
   const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
   const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
+
+  const primaryConfig = useMemo(() => {
+    return getModifiedWeaponConfig(WEAPON_CONFIGS[primaryWeaponId], currentUser?.equipped?.primaryAttachments);
+  }, [primaryWeaponId, currentUser?.equipped?.primaryAttachments]);
+
+  const secondaryConfig = useMemo(() => {
+    return getModifiedWeaponConfig(WEAPON_CONFIGS[secondaryWeaponId], currentUser?.equipped?.secondaryAttachments);
+  }, [secondaryWeaponId, currentUser?.equipped?.secondaryAttachments]);
+
   const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
-  const weaponConfig = activeWeaponId ? (WEAPON_CONFIGS[activeWeaponId] || null) : null;
+  const weaponConfig = activeWeapon === 'primary' ? primaryConfig : secondaryConfig;
 
   const fireMode = weaponConfig ? (weaponConfig.fireMode === 'auto' ? (activeWeapon === 'primary' ? primaryFireMode : 'semi') : 'semi') : 'semi';
   const ammo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
   const setAmmo = activeWeapon === 'primary' ? setPrimaryAmmo : setSecondaryAmmo;
+
+  // 改裝槍械與拖曳狀態 (Gunsmith & Drag-and-Drop Stash)
+  const [gunsmithWeapon, setGunsmithWeapon] = useState(null);
+  const [gunsmithActiveSlot, setGunsmithActiveSlot] = useState('sight');
+  const [dragOverCell, setDragOverCell] = useState(null); // { r, c }
+  const [draggedItem, setDraggedItem] = useState(null);
 
   // 戰術裝備與拋殼實體狀態
   const [grenades, setGrenades] = useState(2);
@@ -5155,6 +5736,22 @@ export default function App() {
   const [healProgress, setHealProgress] = useState(0);
   const healTimeoutRef = useRef(null);
   const healIntervalRef = useRef(null);
+
+  // 近戰與戰術投擲狀態
+  const [isMeleeing, setIsMeleeing] = useState(false);
+  const meleeProgress = useRef(0);
+  const meleeTimeoutRef = useRef(null);
+  const [activeThrowable, setActiveThrowable] = useState('grenade');
+  const [flashbangs, setFlashbangs] = useState(2);
+  const [smokes, setSmokes] = useState(2);
+  const [smokeClouds, setSmokeClouds] = useState([]);
+  const smokeCloudsRef = useRef([]);
+  useEffect(() => {
+    smokeCloudsRef.current = smokeClouds;
+  }, [smokeClouds]);
+  const [flashIntensity, setFlashIntensity] = useState(0);
+  const flashIntensityRef = useRef(0);
+
   const [eliminated, setEliminated] = useState(0);
 
   // 畫面閃紅受傷特效狀態
@@ -5164,20 +5761,30 @@ export default function App() {
   // 局內波次與物資搜刮狀態
   const [currentWave, setCurrentWave] = useState(1);
   const [waveCountdown, setWaveCountdown] = useState(0);
-  const [backpack, setBackpack] = useState({
-    goldBar: 0,
-    hardDrive: 0,
-    dogTag: 0,
-    grenade: 0,
-    medkit: 0,
-    coins: 0
-  });
+  const [backpackItems, setBackpackItems] = useState([]);
+  const [backpackCoins, setBackpackCoins] = useState(0);
+
+  const backpack = useMemo(() => {
+    const counts = { goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: backpackCoins };
+    backpackItems.forEach(item => {
+      if (counts[item.type] !== undefined) {
+        counts[item.type] += 1;
+      }
+    });
+    return counts;
+  }, [backpackItems, backpackCoins]);
+
   const [lootedContainers, setLootedContainers] = useState({});
   const [nearContainer, setNearContainer] = useState(null);
   const [isLooting, setIsLooting] = useState(false);
   const [lootProgress, setLootProgress] = useState(0);
   const [lootPopup, setLootPopup] = useState(null);
   const [medkits, setMedkits] = useState(2);
+
+  // 局內搜刮彈出視窗與物資狀態
+  const [isLootModalOpen, setIsLootModalOpen] = useState(false);
+  const [containerLootItems, setContainerLootItems] = useState([]);
+  const [containerLootCoins, setContainerLootCoins] = useState(0);
 
   const nearContainerRef = useRef(nearContainer);
   useEffect(() => {
@@ -5274,6 +5881,32 @@ export default function App() {
     }
   }, [waveCountdown]);
 
+  // 戰術煙霧彈氣體消散倒數
+  useEffect(() => {
+    if (smokeClouds.length === 0) return;
+    const interval = setInterval(() => {
+      setSmokeClouds((prev) => {
+        return prev
+          .map((cloud) => ({ ...cloud, timeLeft: cloud.timeLeft - 0.5 }))
+          .filter((cloud) => cloud.timeLeft > 0);
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [smokeClouds.length]);
+
+  // 戰術閃光彈致盲消退
+  useEffect(() => {
+    if (flashIntensity === 0) return;
+    const interval = setInterval(() => {
+      setFlashIntensity((prev) => {
+        const next = Math.max(0, prev - 0.05);
+        flashIntensityRef.current = next;
+        return next;
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [flashIntensity]);
+
   const controlsRef = useRef();
   const gunRef = useRef();
   const muzzleFlashRef = useRef();
@@ -5318,18 +5951,20 @@ export default function App() {
     const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
     const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
     if (!activeWeaponId) return; // cannot reload if no weapon!
-    const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+    const weaponConfig = activeWeapon === 'primary' ? primaryConfig : secondaryConfig;
 
     const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
-    const maxAmmo = weaponConfig.maxAmmo;
+    const maxAmmo = weaponConfig?.maxAmmo || 30;
 
     if (currentAmmo < maxAmmo) {
       setIsReloading(true);
-      if (weaponConfig.isPrimary) {
+      if (weaponConfig?.isPrimary) {
         soundManager.playReload();
       } else {
         soundManager.playPistolReload();
       }
+      const baseTime = weaponConfig?.isPrimary ? 1500 : 1000;
+      const reloadTime = baseTime * (weaponConfig?.reloadTimeFactor || 1);
       reloadTimeoutRef.current = setTimeout(() => {
         if (activeWeapon === 'primary') {
           setPrimaryAmmo(maxAmmo);
@@ -5337,7 +5972,7 @@ export default function App() {
           setSecondaryAmmo(maxAmmo);
         }
         setIsReloading(false);
-      }, weaponConfig.isPrimary ? 1500 : 1000);
+      }, reloadTime);
     }
   };
 
@@ -5386,13 +6021,34 @@ export default function App() {
 
   const startLooting = () => {
     if (isLooting || isHealing || isReloading || !nearContainer) return;
+
+    // 檢查鑰匙卡鎖定機制 (Check Keycard Locks)
+    if (nearContainer.requiresKeycard) {
+      const hasKeycard = currentUser?.gridStashItems?.some(item => item.type === 'keycard') || (currentUser?.stash?.keycard > 0);
+      if (!hasKeycard) {
+        setLootPopup({
+          title: '⚠️ 容器已鎖定 LOCKED',
+          content: '需要 [安全實驗室鑰匙卡] 才能開啟此保險箱！'
+        });
+        setTimeout(() => setLootPopup(null), 3500);
+        return;
+      }
+    }
+
     setIsLooting(true);
     setLootProgress(0);
     
     if (lootIntervalRef.current) clearInterval(lootIntervalRef.current);
     
     let progress = 0;
-    const duration = 2500; // 2.5 seconds
+    // 依容器類型決定不同搜刮時長
+    let duration = 2500; // 預設 2.5s
+    if (nearContainer.type === 'pc') duration = 3000;
+    else if (nearContainer.type === 'locked_safe') duration = 4500;
+    else if (nearContainer.type === 'safe') duration = 3500;
+    else if (nearContainer.type === 'weapon') duration = 3000;
+    else if (nearContainer.type === 'med') duration = 2000;
+
     const intervalTime = 50;
     const step = (intervalTime / duration) * 100;
     
@@ -5428,60 +6084,191 @@ export default function App() {
       [containerId]: true
     }));
     
-    let rewards = {};
-    let popupMessage = '';
+    let items = [];
+    let coins = 0;
     
     if (containerId === 1) {
-      const coinsEarned = Math.floor(100 + Math.random() * 150);
+      // 武器箱
+      coins = Math.floor(100 + Math.random() * 150);
       const grenadeCount = Math.random() < 0.6 ? 1 : 2;
-      rewards = { coins: coinsEarned, grenade: grenadeCount };
-      popupMessage = `獲得：手榴彈 x${grenadeCount}，Delta 幣 x${coinsEarned}`;
-      setGrenades((prev) => prev + grenadeCount);
+      for (let i = 0; i < grenadeCount; i++) {
+        items.push({ uid: generateUid(), type: 'grenade' });
+      }
+      // 機率掉落彈藥/配件/槍枝！
+      if (Math.random() < 0.3) {
+        const weaponTypes = ['m4a1', 'mp5', 'm9'];
+        const wType = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+        items.push({ uid: generateUid(), type: wType });
+      }
     } else if (containerId === 2) {
+      // 醫療箱
       const medCount = Math.random() < 0.6 ? 1 : 2;
       const dogTagCount = Math.floor(1 + Math.random() * 2);
-      rewards = { medkit: medCount, dogTag: dogTagCount };
-      popupMessage = `獲得：醫療包 x${medCount}，敵軍軍籍牌 x${dogTagCount}`;
-      setMedkits((prev) => prev + medCount);
+      for (let i = 0; i < medCount; i++) {
+        items.push({ uid: generateUid(), type: 'medkit' });
+      }
+      for (let i = 0; i < dogTagCount; i++) {
+        items.push({ uid: generateUid(), type: 'dogTag' });
+      }
     } else if (containerId === 3) {
+      // 保險箱
       const hasGold = Math.random() < 0.5;
       const hasDrive = Math.random() < 0.5;
-      const coinsEarned = Math.floor(200 + Math.random() * 300);
-      rewards = {
-        goldBar: hasGold ? 1 : 0,
-        hardDrive: hasDrive ? 1 : 0,
-        coins: coinsEarned
-      };
-      popupMessage = `獲得：${hasGold ? '黃金金條 x1，' : ''}${hasDrive ? '加密硬碟 x1，' : ''}Delta 幣 x${coinsEarned}`;
+      coins = Math.floor(200 + Math.random() * 300);
+      if (hasGold) items.push({ uid: generateUid(), type: 'goldBar' });
+      if (hasDrive) items.push({ uid: generateUid(), type: 'hardDrive' });
+    } else if (containerId === 5) {
+      // 電腦主機
+      coins = Math.floor(50 + Math.random() * 100);
+      if (Math.random() < 0.6) items.push({ uid: generateUid(), type: 'hardDrive' });
+      if (Math.random() < 0.15) items.push({ uid: generateUid(), type: 'keycard' }); // 電腦機率刷出實驗室鑰匙卡！
+    } else if (containerId === 6) {
+      // 實驗室密室保險箱
+      coins = Math.floor(400 + Math.random() * 400);
+      if (Math.random() < 0.8) items.push({ uid: generateUid(), type: 'goldBar' });
+      if (Math.random() < 0.6) items.push({ uid: generateUid(), type: 'hardDrive' });
+      const tagCount = Math.random() < 0.5 ? 1 : 2;
+      for (let i = 0; i < tagCount; i++) {
+        items.push({ uid: generateUid(), type: 'dogTag' });
+      }
+      // 極低機率掉落一把 AWP 狙擊槍！
+      if (Math.random() < 0.15) {
+        items.push({ uid: generateUid(), type: 'awp' });
+      }
     } else {
+      // 預設箱
       const hasTag = Math.random() < 0.4;
-      const coinsEarned = Math.floor(80 + Math.random() * 120);
+      coins = Math.floor(80 + Math.random() * 120);
       const medCount = Math.random() < 0.5 ? 1 : 0;
-      rewards = {
-        dogTag: hasTag ? 1 : 0,
-        medkit: medCount,
-        coins: coinsEarned
-      };
-      popupMessage = `獲得：${hasTag ? '敵軍軍籍牌 x1，' : ''}${medCount ? '醫療包 x1，' : ''}Delta 幣 x${coinsEarned}`;
-      if (medCount > 0) setMedkits((prev) => prev + medCount);
+      if (hasTag) items.push({ uid: generateUid(), type: 'dogTag' });
+      if (medCount > 0) items.push({ uid: generateUid(), type: 'medkit' });
     }
     
-    setBackpack((prev) => {
-      const updated = { ...prev };
-      Object.keys(rewards).forEach((key) => {
-        updated[key] = (updated[key] || 0) + rewards[key];
-      });
-      return updated;
-    });
+    setContainerLootItems(items);
+    setContainerLootCoins(coins);
+    setIsLootModalOpen(true);
     
-    setLootPopup({
-      title: `${container.name} 搜刮完成`,
-      content: popupMessage
-    });
+    // 解鎖滑鼠指標控制以利拖曳
+    if (device === 'pc' && controlsRef.current) {
+      controlsRef.current.unlock();
+    } else {
+      setIsLocked(false);
+    }
     
     soundManager.playSuccessChime();
     addKillFeedEntry(`玩家搜刮了 ${container.name}`, 'system');
     setNearContainer(null);
+  };
+
+  const handleTakeItem = (item) => {
+    setBackpackItems(prev => [...prev, item]);
+    setContainerLootItems(prev => prev.filter(i => i.uid !== item.uid));
+    soundManager.playSuccessChime();
+  };
+
+  const handleTakeCoins = () => {
+    setBackpackCoins(prev => prev + containerLootCoins);
+    setContainerLootCoins(0);
+    soundManager.playSuccessChime();
+  };
+
+  const handleTakeAll = () => {
+    if (containerLootItems.length > 0) {
+      setBackpackItems(prev => [...prev, ...containerLootItems]);
+    }
+    setBackpackCoins(prev => prev + containerLootCoins);
+    setContainerLootItems([]);
+    setContainerLootCoins(0);
+    soundManager.playSuccessChime();
+  };
+
+  const handleCloseLootModal = () => {
+    setIsLootModalOpen(false);
+    setTimeout(() => {
+      if (device === 'pc' && controlsRef.current) {
+        controlsRef.current.lock();
+      } else if (device === 'mobile') {
+        setIsLocked(true);
+      }
+    }, 100);
+  };
+
+  const triggerMelee = () => {
+    if (gameState !== 'active' || isHealing || isReloading || isMeleeing || !isLocked) return;
+    setIsMeleeing(true);
+    
+    // 播放合成揮刀音效
+    soundManager.playMeleeSwipe();
+    
+    // 近戰判定：2.8 米距離以內且在扇形夾角內的敵人
+    const playerPos = cameraRef.current ? cameraRef.current.position.clone() : new THREE.Vector3(0, 1.6, 95);
+    const dir = new THREE.Vector3();
+    if (cameraRef.current) {
+      cameraRef.current.getWorldDirection(dir);
+    } else {
+      dir.set(0, 0, -1);
+    }
+    
+    let hitAny = false;
+    
+    setEnemies((prevEnemies) => {
+      return prevEnemies.map((enemy) => {
+        if (enemy.state === 'alive') {
+          const enemyPos = enemy.position.clone();
+          enemyPos.y = 1.0; // 假設軀幹高度為 1.0
+          const dist = playerPos.distanceTo(enemyPos);
+          
+          if (dist < 2.8) {
+            // 計算夾角點積
+            const toEnemy = enemyPos.clone().sub(playerPos).normalize();
+            const dot = dir.dot(toEnemy);
+            if (dot > 0.5) { // 約為正面 60 度範圍
+              hitAny = true;
+              const newHp = Math.max(0, enemy.hp - 120); // 120 點傷害 (一般 AI 為 100 點)
+              const isDead = newHp <= 0;
+              
+              triggerHitMarker(isDead);
+              
+              const enemyTypeName = enemy.enemyType ? enemy.enemyType.toUpperCase() : 'ENEMY';
+              const enemyName = `${enemyTypeName}_0${enemy.id}`;
+              
+              if (isDead) {
+                soundManager.playEnemyDeath();
+                addKillFeedEntry(`PLAYER ➔ [KNIFE] ${enemyName}`, 'normal');
+              } else {
+                soundManager.playPlayerHurt();
+              }
+              
+              return {
+                ...enemy,
+                hp: newHp,
+                state: isDead ? 'dying' : 'alive'
+              };
+            }
+          }
+        }
+        return enemy;
+      });
+    });
+
+    if (hitAny) {
+      soundManager.playKnifeHit();
+    }
+
+    // 啟動近戰揮刀 LERP
+    meleeProgress.current = 0;
+    const interval = setInterval(() => {
+      meleeProgress.current += 0.1;
+      if (meleeProgress.current >= 1.0) {
+        clearInterval(interval);
+      }
+    }, 30);
+
+    if (meleeTimeoutRef.current) clearTimeout(meleeTimeoutRef.current);
+    meleeTimeoutRef.current = setTimeout(() => {
+      setIsMeleeing(false);
+      meleeProgress.current = 0;
+    }, 400);
   };
 
   const triggerFireMode = () => {
@@ -5509,6 +6296,26 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState, isLocked, activeWeapon, isHealing]);
 
+  // 監聽 4 鍵切換戰術投擲物 (HE手榴彈 ➔ 戰術閃光彈 ➔ 戰術煙霧彈)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'active' || !isLocked) return;
+      if (e.code === 'Digit4') {
+        setActiveThrowable((prev) => {
+          let next = 'grenade';
+          if (prev === 'grenade') next = 'flashbang';
+          else if (prev === 'flashbang') next = 'smoke';
+          
+          soundManager.playWeaponSwitch();
+          addKillFeedEntry(`戰術投擲物已切換為：${next === 'grenade' ? 'HE 手榴彈' : next === 'flashbang' ? '戰術閃光彈' : '戰術煙霧彈'}`, 'system');
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, isLocked]);
+
   // 監聽 R 鍵重新裝彈，播放合成重新裝彈聲
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -5520,6 +6327,18 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gameState, isLocked, isReloading, isHealing, activeWeapon, primaryAmmo, secondaryAmmo]);
+
+  // 監聽 V 鍵觸發戰術近戰攻擊 (Melee Knife Attack)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'active' || !isLocked || isHealing || isReloading || isMeleeing) return;
+      if (e.code === 'KeyV') {
+        triggerMelee();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, isLocked, isHealing, isReloading, isMeleeing]);
 
   // 單獨的 useEffect 確保 App 元件卸載時清除 reload/heal timeout
   useEffect(() => {
@@ -5658,7 +6477,7 @@ export default function App() {
     if (currentUser.isGuest) {
       const updatedUser = { ...currentUser };
       if (!updatedUser.stash) {
-        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
       }
       if (!updatedUser.equipped) {
         updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
@@ -5709,7 +6528,7 @@ export default function App() {
     if (currentUser.isGuest) {
       const updatedUser = { ...currentUser };
       if (!updatedUser.stash) {
-        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
       }
       if (!updatedUser.equipped) {
         updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
@@ -5759,7 +6578,7 @@ export default function App() {
     if (currentUser.isGuest) {
       const updatedUser = { ...currentUser };
       if (!updatedUser.stash) {
-        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
       }
       updatedUser.coins = currentCoins - price;
       updatedUser.stash[itemId] = (updatedUser.stash[itemId] || 0) + 1;
@@ -5849,19 +6668,45 @@ export default function App() {
       
       if (victory) {
         if (!updatedUser.stash) {
-          updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+          updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
         }
-        updatedUser.stash.goldBar = (updatedUser.stash.goldBar || 0) + bp.goldBar;
-        updatedUser.stash.hardDrive = (updatedUser.stash.hardDrive || 0) + bp.hardDrive;
-        updatedUser.stash.dogTag = (updatedUser.stash.dogTag || 0) + bp.dogTag;
-        updatedUser.stash.grenade = (updatedUser.stash.grenade || 0) + bp.grenade;
-        updatedUser.stash.medkit = (updatedUser.stash.medkit || 0) + bp.medkit;
-        updatedUser.coins = (updatedUser.coins || 0) + bp.coins;
+        // 將背包網格道具移至倉庫網格
+        backpackItems.forEach(bpItem => {
+          const [w, h] = getItemSize(bpItem.type);
+          const space = findEmptySpace(updatedUser.gridStashItems, w, h);
+          if (space) {
+            const itemObj = {
+              uid: generateUid(),
+              type: bpItem.type,
+              r: space.r,
+              c: space.c
+            };
+            if (['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(bpItem.type)) {
+              itemObj.attachments = { sight: null, muzzle: null, grip: null, magazine: null };
+            }
+            updatedUser.gridStashItems.push(itemObj);
+          }
+        });
+        updatedUser.coins = (updatedUser.coins || 0) + backpackCoins;
+        
+        // 同步為舊數量格式維持相容
+        Object.keys(updatedUser.stash).forEach(k => {
+          updatedUser.stash[k] = 0;
+        });
+        updatedUser.gridStashItems.forEach(item => {
+          if (updatedUser.stash[item.type] !== undefined) {
+            updatedUser.stash[item.type] += 1;
+          } else {
+            updatedUser.stash[item.type] = 1;
+          }
+        });
       } else {
         // 戰死懲罰：丟裝
         updatedUser.equipped = {
           primaryWeapon: null,
+          primaryAttachments: { sight: null, muzzle: null, grip: null, magazine: null },
           secondaryWeapon: null,
+          secondaryAttachments: { sight: null, muzzle: null, grip: null, magazine: null },
           bodyArmor: false,
           opsHelmet: false,
           grenades: 0,
@@ -5878,7 +6723,11 @@ export default function App() {
     }
 
     // 實體帳號：使用 saveMatchLoot 進行存檔、物資併入倉庫、死亡丢裝懲罰
-    const resultUser = saveMatchLoot(currentUser.username, runStats, bp, victory);
+    const bpItemsForSave = [
+      ...backpackItems.map(item => ({ type: item.type })),
+      { type: 'coins', count: backpackCoins }
+    ];
+    const resultUser = saveMatchLoot(currentUser.username, runStats, bpItemsForSave, victory);
     if (resultUser) {
       setCurrentUser(resultUser);
       setEndgameStats({
@@ -5927,7 +6776,11 @@ export default function App() {
     // 重置波次、搜刮與背包狀態
     setCurrentWave(1);
     setWaveCountdown(0);
-    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setBackpackItems([]);
+    setBackpackCoins(0);
+    setIsLootModalOpen(false);
+    setContainerLootItems([]);
+    setContainerLootCoins(0);
     setLootedContainers({});
     setNearContainer(null);
     setIsLooting(false);
@@ -5945,13 +6798,18 @@ export default function App() {
     // 套用戰術裝備升級
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
+    const initialFlashbangs = currentUser?.equipped?.flashbangs !== undefined ? currentUser.equipped.flashbangs : 2;
+    const initialSmokes = currentUser?.equipped?.smokes !== undefined ? currentUser.equipped.smokes : 2;
     setHealth(hasArmor ? 150 : 100);
     setGrenades(equippedGrenades);
+    setFlashbangs(initialFlashbangs);
+    setSmokes(initialSmokes);
+    setActiveThrowable('grenade');
 
     const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
     const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
-    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
-    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    setPrimaryAmmo(primaryWeaponId ? (primaryConfig?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (secondaryConfig?.maxAmmo || 0) : 0);
     if (primaryWeaponId) {
       setActiveWeapon('primary');
     } else if (secondaryWeaponId) {
@@ -5992,9 +6850,9 @@ export default function App() {
     });
   };
 
-  const addGrenade = (position, velocity) => {
+  const addGrenade = (position, velocity, type = 'grenade') => {
     const id = Math.random();
-    setGrenadeEntities((prev) => [...prev, { id, position, velocity }]);
+    setGrenadeEntities((prev) => [...prev, { id, position, velocity, type }]);
     if (isTutorial) triggerTutorialStep('grenade');
   };
 
@@ -6046,92 +6904,175 @@ export default function App() {
   };
 
   // 手榴彈倒數結束爆炸判定
-  const handleExplodeGrenade = (id, explosionPoint) => {
-    // 1. 播放合成爆炸音效
-    soundManager.playExplosion();
-
-    // 2. 移除該手榴彈實體
+  const handleExplodeGrenade = (id, explosionPoint, type = 'grenade') => {
+    // 移除該手榴彈實體
     setGrenadeEntities((prev) => prev.filter((g) => g.id !== id));
 
-    // 3. 生成大範圍橘灰相間火焰與塵土微粒
-    const explosionParticles = [];
-    for (let i = 0; i < 35; i++) {
-      const pId = Math.random();
-      const velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 8.5,
-        Math.random() * 8.5,
-        (Math.random() - 0.5) * 8.5
-      );
-      explosionParticles.push({
-        id: pId,
-        position: explosionPoint.clone(),
-        velocity,
-        color: Math.random() > 0.45 ? '#d97706' : '#6b7280', // 橘色火焰或灰色塵土
+    if (type === 'grenade') {
+      // 1. HE 手榴彈爆炸：爆炸音效 + 火焰沙塵粒子 + 相機震動 + 範圍傷害
+      soundManager.playExplosion();
+
+      const explosionParticles = [];
+      for (let i = 0; i < 35; i++) {
+        const pId = Math.random();
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 8.5,
+          Math.random() * 8.5,
+          (Math.random() - 0.5) * 8.5
+        );
+        explosionParticles.push({
+          id: pId,
+          position: explosionPoint.clone(),
+          velocity,
+          color: Math.random() > 0.45 ? '#d97706' : '#6b7280', // 橘色火焰或灰色塵土
+        });
+      }
+
+      setParticles((prev) => {
+        const combined = [...prev, ...explosionParticles];
+        if (combined.length > 80) combined.splice(0, combined.length - 80);
+        return combined;
       });
-    }
 
-    setParticles((prev) => {
-      const combined = [...prev, ...explosionParticles];
-      if (combined.length > 80) combined.splice(0, combined.length - 80);
-      return combined;
-    });
+      setTimeout(() => {
+        const pIds = explosionParticles.map((p) => p.id);
+        setParticles((prev) => prev.filter((p) => !pIds.includes(p.id)));
+      }, 1200);
 
-    setTimeout(() => {
-      const pIds = explosionParticles.map((p) => p.id);
-      setParticles((prev) => prev.filter((p) => !pIds.includes(p.id)));
-    }, 1200);
+      // 觸發鏡頭劇烈抖動
+      setShakeTrigger((prev) => prev + 1);
 
-    // 4. 觸發鏡頭劇烈抖動
-    setShakeTrigger((prev) => prev + 1);
-
-    // 5. 範圍傷害判定：敵軍與玩家
-    // 敵軍傷害 (半徑 8 米，距離越近傷害越高)
-    setEnemies((prev) => {
-      return prev.map((enemy) => {
-        if (enemy.state === 'alive') {
-          const dist = enemy.position.distanceTo(explosionPoint);
-          if (dist < 8.0) {
-            const damage = Math.max(0, Math.round(100 * (1 - dist / 8.0)));
-            const newHp = Math.max(0, enemy.hp - damage);
-            const isDead = newHp <= 0;
-            if (isDead) {
-              soundManager.playEnemyDeath(); // 播放敵軍死亡聲音
-              addKillFeedEntry(`PLAYER ➔ [GRENADE] ENEMY_0${enemy.id}`, 'grenade');
+      // 範圍傷害判定：敵軍與玩家
+      setEnemies((prev) => {
+        return prev.map((enemy) => {
+          if (enemy.state === 'alive') {
+            const dist = enemy.position.distanceTo(explosionPoint);
+            if (dist < 8.0) {
+              const damage = Math.max(0, Math.round(100 * (1 - dist / 8.0)));
+              const newHp = Math.max(0, enemy.hp - damage);
+              const isDead = newHp <= 0;
+              if (isDead) {
+                soundManager.playEnemyDeath();
+                const enemyTypeName = enemy.enemyType ? enemy.enemyType.toUpperCase() : 'ENEMY';
+                addKillFeedEntry(`PLAYER ➔ [GRENADE] ${enemyTypeName}_0${enemy.id}`, 'grenade');
+              }
+              return {
+                ...enemy,
+                hp: newHp,
+                state: isDead ? 'dying' : 'alive',
+              };
             }
-            return {
-              ...enemy,
-              hp: newHp,
-              state: isDead ? 'dying' : 'alive',
-            };
+          }
+          return enemy;
+        });
+      });
+
+      // 玩家自傷判定
+      if (cameraRef.current) {
+        const playerPos = cameraRef.current.position;
+        const distToPlayer = playerPos.distanceTo(explosionPoint);
+        if (distToPlayer < 6.0) {
+          const damage = Math.max(0, Math.round(80 * (1 - distToPlayer / 6.0)));
+          if (damage > 0) {
+            setHealth((prev) => {
+              const newHp = Math.max(0, prev - damage);
+              if (newHp <= 0) {
+                setGameState('failed');
+                soundManager.stopAmbient();
+                if (controlsRef.current) {
+                  controlsRef.current.unlock();
+                }
+                saveEndgameStats(false);
+              }
+              return newHp;
+            });
+            setHurtActive(true);
+            soundManager.playPlayerHurt();
           }
         }
-        return enemy;
-      });
-    });
+      }
+    } 
+    else if (type === 'flashbang') {
+      // 2. 戰術閃光彈爆炸：閃光音效 + 白色閃光粒子 + 玩家致盲點積判定 + 敵軍致盲 Stun
+      soundManager.playFlashbangExplosion();
 
-    // 玩家自傷判定 (半徑 6 米)
-    if (gunRef.current) {
-      const playerPos = gunRef.current.position;
-      const distToPlayer = playerPos.distanceTo(explosionPoint);
-      if (distToPlayer < 6.0) {
-        const damage = Math.max(0, Math.round(80 * (1 - distToPlayer / 6.0)));
-        if (damage > 0) {
-          setHealth((prev) => {
-            const newHp = Math.max(0, prev - damage);
-            if (newHp <= 0) {
-              setGameState('failed');
-              soundManager.stopAmbient(); // 停止基地背景音
-              if (controlsRef.current) {
-                controlsRef.current.unlock();
-              }
-              saveEndgameStats(false); // 儲存自爆失敗戰績
-            }
-            return newHp;
-          });
-          setHurtActive(true);
-          soundManager.playPlayerHurt(); // 播放受傷聲音
+      const explosionParticles = [];
+      for (let i = 0; i < 20; i++) {
+        const pId = Math.random();
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 6.0,
+          Math.random() * 5.0,
+          (Math.random() - 0.5) * 6.0
+        );
+        explosionParticles.push({
+          id: pId,
+          position: explosionPoint.clone(),
+          velocity,
+          color: '#ffffff', // 純白閃光微粒
+        });
+      }
+
+      setParticles((prev) => {
+        const combined = [...prev, ...explosionParticles];
+        if (combined.length > 80) combined.splice(0, combined.length - 80);
+        return combined;
+      });
+
+      setTimeout(() => {
+        const pIds = explosionParticles.map((p) => p.id);
+        setParticles((prev) => prev.filter((p) => !pIds.includes(p.id)));
+      }, 800);
+
+      // 玩家致盲判定
+      if (cameraRef.current) {
+        const playerPos = cameraRef.current.position.clone();
+        const dir = new THREE.Vector3();
+        cameraRef.current.getWorldDirection(dir);
+        const toFlash = explosionPoint.clone().sub(playerPos);
+        const dist = toFlash.length();
+        toFlash.normalize();
+        const dot = dir.dot(toFlash);
+
+        // 如果玩家正面面向閃光彈 (dot > -0.25) 且距離在 25 米內，或者距離在 8 米內（即使背對也會被強光散射影響）
+        if (dist < 25.0 && (dot > -0.25 || dist < 8.0)) {
+          // 點積越大、距離越近，閃光強度越強
+          const distFactor = 1.0 - dist / 25.0;
+          const angleFactor = dist < 8.0 ? 1.0 : (dot + 0.25) / 1.25;
+          const finalIntensity = Math.min(1.0, Math.max(0.2, distFactor * angleFactor));
+          setFlashIntensity(finalIntensity);
+          flashIntensityRef.current = finalIntensity;
         }
       }
+
+      // 敵軍致盲 Stun 判定 (半徑 18.0 米以內的敵軍均受致盲影響)
+      setEnemies((prev) => {
+        return prev.map((enemy) => {
+          if (enemy.state === 'alive') {
+            const dist = enemy.position.distanceTo(explosionPoint);
+            if (dist < 18.0) {
+              const enemyTypeName = enemy.enemyType ? enemy.enemyType.toUpperCase() : 'ENEMY';
+              const enemyName = `${enemyTypeName}_0${enemy.id}`;
+              addKillFeedEntry(`✨ ${enemyName} 被閃光彈致盲！`, 'system');
+              return {
+                ...enemy,
+                stunnedTimer: 5.0, // 盲目 5 秒，無法開火或旋轉
+              };
+            }
+          }
+          return enemy;
+        });
+      });
+    } 
+    else if (type === 'smoke') {
+      // 3. 戰術煙霧彈：氣體噴射音效 + 註冊局內煙霧雲物件
+      soundManager.playSmokeHiss();
+
+      const smokeId = Math.random();
+      setSmokeClouds((prev) => [
+        ...prev,
+        { id: smokeId, position: explosionPoint.clone(), radius: 10.0, timeLeft: 12.0 }
+      ]);
+      addKillFeedEntry(`💨 煙霧彈已在戰區釋放，阻擋敵軍視線`, 'system');
     }
   };
 
@@ -6465,7 +7406,11 @@ export default function App() {
     // 重置波次、搜刮與背包狀態
     setCurrentWave(1);
     setWaveCountdown(0);
-    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setBackpackItems([]);
+    setBackpackCoins(0);
+    setIsLootModalOpen(false);
+    setContainerLootItems([]);
+    setContainerLootCoins(0);
     setLootedContainers({});
     setNearContainer(null);
     setIsLooting(false);
@@ -6484,11 +7429,17 @@ export default function App() {
     // 套用戰術裝備升級
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
+    const initialFlashbangs = currentUser?.equipped?.flashbangs !== undefined ? currentUser.equipped.flashbangs : 2;
+    const initialSmokes = currentUser?.equipped?.smokes !== undefined ? currentUser.equipped.smokes : 2;
     setHealth(hasArmor ? 150 : 100);
+    setGrenades(equippedGrenades);
+    setFlashbangs(initialFlashbangs);
+    setSmokes(initialSmokes);
+    setActiveThrowable('grenade');
     const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
     const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
-    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
-    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    setPrimaryAmmo(primaryWeaponId ? (primaryConfig?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (secondaryConfig?.maxAmmo || 0) : 0);
     if (primaryWeaponId) {
       setActiveWeapon('primary');
     } else if (secondaryWeaponId) {
@@ -6600,7 +7551,11 @@ export default function App() {
     // 重置波次、搜刮與背包狀態
     setCurrentWave(1);
     setWaveCountdown(0);
-    setBackpack({ goldBar: 0, hardDrive: 0, dogTag: 0, grenade: 0, medkit: 0, coins: 0 });
+    setBackpackItems([]);
+    setBackpackCoins(0);
+    setIsLootModalOpen(false);
+    setContainerLootItems([]);
+    setContainerLootCoins(0);
     setLootedContainers({});
     setNearContainer(null);
     setIsLooting(false);
@@ -6618,11 +7573,17 @@ export default function App() {
     // 重啟進入正式實戰模式
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
+    const initialFlashbangs = currentUser?.equipped?.flashbangs !== undefined ? currentUser.equipped.flashbangs : 2;
+    const initialSmokes = currentUser?.equipped?.smokes !== undefined ? currentUser.equipped.smokes : 2;
     setHealth(hasArmor ? 150 : 100);
+    setGrenades(equippedGrenades);
+    setFlashbangs(initialFlashbangs);
+    setSmokes(initialSmokes);
+    setActiveThrowable('grenade');
     const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
     const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
-    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
-    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    setPrimaryAmmo(primaryWeaponId ? (primaryConfig?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (secondaryConfig?.maxAmmo || 0) : 0);
     if (primaryWeaponId) {
       setActiveWeapon('primary');
     } else if (secondaryWeaponId) {
@@ -8124,13 +9085,22 @@ export default function App() {
             <div className="hud-status-card">
               <div className="hud-label">TACTICAL EQ</div>
               <div className="hud-status-row">
-                <span className="hud-large-num" style={{ color: grenades === 0 ? '#ffaa00' : 'inherit' }}>
-                  {grenades}
+                <span className="hud-large-num" style={{ 
+                  color: (activeThrowable === 'grenade' && grenades === 0) || 
+                         (activeThrowable === 'flashbang' && flashbangs === 0) || 
+                         (activeThrowable === 'smoke' && smokes === 0) ? '#ffaa00' : 'inherit' 
+                }}>
+                  {activeThrowable === 'grenade' ? grenades : activeThrowable === 'flashbang' ? flashbangs : smokes}
                 </span>
                 <span className="hud-small-label">/ 2 {device === 'pc' ? '(G)' : ''}</span>
               </div>
-              <div className="hud-sys-status">
-                GRENADE: <span className="sys-active" style={{ color: grenades === 0 ? '#ffaa00' : '#00ff66' }}>{grenades === 0 ? 'DEPLETED' : 'READY'}</span>
+              <div className="hud-sys-status" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div>TYPE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>
+                  {activeThrowable === 'grenade' ? '💣 HE GREN' : activeThrowable === 'flashbang' ? '✨ FLASH' : '💨 SMOKE'}
+                </span></div>
+                <div style={{ fontSize: '0.72rem', color: '#88a888' }}>
+                  {device === 'pc' ? 'PRESS [4] TO CYCLE' : 'TAP GND TO THROW'}
+                </div>
               </div>
             </div>
 
@@ -8166,6 +9136,101 @@ export default function App() {
         <div className="loot-popup-container">
           <div className="loot-popup-header">{lootPopup.title}</div>
           <div className="loot-popup-content">{lootPopup.content}</div>
+        </div>
+      )}
+
+      {/* 搜刮彈出物資移轉視窗 (Loot Modal) */}
+      {isLootModalOpen && (
+        <div className="loot-modal-overlay">
+          <div className="loot-modal-container">
+            <div className="loot-modal-header">
+              <h3>📦 搜刮物資 - {nearContainerRef.current?.name || '容器'}</h3>
+              <button className="loot-modal-close-btn" onClick={handleCloseLootModal}>×</button>
+            </div>
+            
+            <div className="loot-modal-body">
+              {/* 左邊：容器物資 */}
+              <div className="loot-modal-side container-side">
+                <h4>容器物品 CONTAINER CONTENTS</h4>
+                <div className="loot-modal-items">
+                  {containerLootCoins > 0 && (
+                    <div className="loot-modal-item-row coin-row" onClick={handleTakeCoins}>
+                      <span className="loot-item-icon">🪙</span>
+                      <div className="loot-item-info">
+                        <div className="loot-item-name">Delta 金幣</div>
+                        <div className="loot-item-desc">Delta Force 戰區通行貨幣</div>
+                      </div>
+                      <div className="loot-item-action">🪙 {containerLootCoins}</div>
+                    </div>
+                  )}
+                  {containerLootItems.length === 0 && containerLootCoins === 0 ? (
+                    <div className="loot-modal-empty">容器已被清空</div>
+                  ) : (
+                    containerLootItems.map(item => (
+                      <div key={item.uid} className="loot-modal-item-row" onClick={() => handleTakeItem(item)}>
+                        <span className="loot-item-icon">
+                          {item.type === 'keycard' ? '💳' :
+                           item.type === 'goldBar' ? '🪙' :
+                           item.type === 'hardDrive' ? '💾' :
+                           item.type === 'dogTag' ? '🪖' :
+                           item.type === 'medkit' ? '➕' :
+                           item.type === 'grenade' ? '💣' :
+                           item.type === 'flashbang' ? '✨' :
+                           item.type === 'smoke' ? '💨' : '🔫'}
+                        </span>
+                        <div className="loot-item-info">
+                          <div className="loot-item-name">{ITEM_NAMES[item.type] || item.type}</div>
+                          <div className="loot-item-desc">
+                            {item.type === 'keycard' ? '用來開啟地圖中特定鎖定房的特殊卡片。' :
+                             item.type === 'goldBar' ? '純度極高的金條，能在黑市高價售出。' :
+                             item.type === 'hardDrive' ? '儲存有機密資料的加密硬碟，很有價值。' :
+                             item.type === 'dogTag' ? '刻有陣亡軍人資訊的軍牌，可在黑市售出。' : '戰地實用物資。'}
+                          </div>
+                        </div>
+                        <button className="loot-item-take-btn">拾取 TAKE</button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 右邊：個人戰術背包 */}
+              <div className="loot-modal-side backpack-side">
+                <h4>戰術背包 TACTICAL BACKPACK</h4>
+                <div className="loot-modal-backpack-summary">
+                  <div className="bp-stat-row">
+                    <span>Delta 金幣:</span>
+                    <span>🪙 {backpackCoins}</span>
+                  </div>
+                  <div className="bp-items-list">
+                    {backpackItems.length === 0 ? (
+                      <div className="loot-modal-empty">背包目前是空的</div>
+                    ) : (
+                      backpackItems.map((item, idx) => (
+                        <div key={idx} className="bp-item-row">
+                          <span>
+                            {item.type === 'keycard' ? '💳' :
+                             item.type === 'goldBar' ? '🪙' :
+                             item.type === 'hardDrive' ? '💾' :
+                             item.type === 'dogTag' ? '🪖' :
+                             item.type === 'medkit' ? '➕' :
+                             item.type === 'grenade' ? '💣' :
+                             item.type === 'flashbang' ? '✨' :
+                             item.type === 'smoke' ? '💨' : '🔫'} {ITEM_NAMES[item.type] || item.type}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="loot-modal-footer">
+              <button className="loot-modal-btn take-all-btn" onClick={handleTakeAll}>全部拾取 TAKE ALL</button>
+              <button className="loot-modal-btn close-btn" onClick={handleCloseLootModal}>關閉視窗 CLOSE</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -8243,6 +9308,11 @@ export default function App() {
         </div>
       )}
 
+      {/* 閃光彈全螢幕致盲特效疊加層 */}
+      {flashIntensity > 0 && (
+        <div className="flashbang-blind-overlay" style={{ opacity: flashIntensity }} />
+      )}
+
       {/* 3D Canvas 容器 */}
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
@@ -8283,6 +9353,7 @@ export default function App() {
               key={container.id}
               position={container.position}
               name={container.name}
+              type={container.type}
               isLooted={!!lootedContainers[container.id]}
             />
           ))}
@@ -8313,7 +9384,18 @@ export default function App() {
               key={g.id}
               position={g.position}
               velocity={g.velocity}
-              onExplode={(point) => handleExplodeGrenade(g.id, point)}
+              type={g.type}
+              onExplode={(point) => handleExplodeGrenade(g.id, point, g.type)}
+            />
+          ))}
+
+          {/* 渲染戰術煙霧彈生成的煙霧雲 */}
+          {smokeClouds.map((smoke) => (
+            <SmokeCloud
+              key={smoke.id}
+              position={smoke.position}
+              radius={smoke.radius}
+              timeLeft={smoke.timeLeft}
             />
           ))}
 
@@ -8343,12 +9425,13 @@ export default function App() {
                 onShootPlayer={handleShootPlayer}
                 onKilled={handleEnemyKilled}
                 onThrowGrenade={addEnemyGrenade}
+                smokeClouds={smokeClouds}
               />
             )
           ))}
 
           {/* 突擊步槍與手槍模型 */}
-          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} activeWeaponId={activeWeaponId} isHealing={isHealing} />
+          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} activeWeaponId={activeWeaponId} isHealing={isHealing} isMeleeing={isMeleeing} meleeProgress={meleeProgress} attachments={activeWeapon === 'primary' ? currentUser?.equipped?.primaryAttachments : currentUser?.equipped?.secondaryAttachments} />
 
           {/* 玩家與開火 Raycaster 控制器 */}
           <PlayerController
@@ -8367,6 +9450,11 @@ export default function App() {
             fireMode={fireMode}
             grenades={grenades}
             setGrenades={setGrenades}
+            flashbangs={flashbangs}
+            setFlashbangs={setFlashbangs}
+            smokes={smokes}
+            setSmokes={setSmokes}
+            activeThrowable={activeThrowable}
             addCasing={addCasing}
             addDroppedMag={addDroppedMag}
             addGrenade={addGrenade}
@@ -8400,6 +9488,8 @@ export default function App() {
             setExtractionCountdown={setExtractionCountdown}
             setIsPlayerInExtractionZone={setIsPlayerInExtractionZone}
             onExtractSuccess={handleExtractSuccess}
+            primaryConfig={primaryConfig}
+            secondaryConfig={secondaryConfig}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}

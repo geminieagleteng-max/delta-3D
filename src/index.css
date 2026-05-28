@@ -2128,3 +2128,687 @@ html, body {
     opacity: 1;
   }
 }
+
+/* ==========================================
+   塔科夫網格倉庫 & 配件改裝系統樣式
+   ========================================== */
+.stash-grid-container {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 204, 0, 0.25);
+  box-shadow: inset 0 0 15px rgba(255, 204, 0, 0.05), 0 4px 20px rgba(0,0,0,0.5);
+  border-radius: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  max-height: 360px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.stash-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 35px);
+  grid-auto-rows: 35px;
+  gap: 1px;
+  background: rgba(255, 204, 0, 0.05);
+  width: fit-content;
+  position: relative;
+}
+
+.grid-cell {
+  background: rgba(10, 10, 10, 0.75);
+  border: 1px solid rgba(255, 204, 0, 0.04);
+  box-sizing: border-box;
+  width: 35px;
+  height: 35px;
+  transition: background 0.15s ease;
+}
+
+.grid-cell.drag-over {
+  background: rgba(0, 255, 102, 0.12);
+  border: 1px dashed #00ff66;
+}
+
+.grid-item {
+  box-sizing: border-box;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.1s ease;
+  z-index: 2;
+}
+
+.grid-item:active {
+  cursor: grabbing;
+}
+
+.grid-item-inner {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-align: center;
+  position: relative;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  text-shadow: 0 1px 2px #000;
+}
+
+/* 物品類別邊框與背景調色 */
+.item-weapon .grid-item-inner {
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.15);
+  color: #d1f7ff;
+}
+.item-weapon:hover .grid-item-inner {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.15);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.item-armor .grid-item-inner {
+  border: 1px solid rgba(0, 255, 102, 0.4);
+  background: rgba(0, 255, 102, 0.08);
+  box-shadow: inset 0 0 8px rgba(0, 255, 102, 0.15);
+  color: #d6ffd8;
+}
+.item-armor:hover .grid-item-inner {
+  border-color: #00ff66;
+  background: rgba(0, 255, 102, 0.15);
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.3);
+}
+
+.item-consumable .grid-item-inner {
+  border: 1px solid rgba(255, 59, 59, 0.4);
+  background: rgba(255, 59, 59, 0.08);
+  box-shadow: inset 0 0 6px rgba(255, 59, 59, 0.12);
+  color: #ffdddd;
+}
+.item-consumable:hover .grid-item-inner {
+  border-color: #ff3b3b;
+  background: rgba(255, 59, 59, 0.18);
+  box-shadow: 0 0 8px rgba(255, 59, 59, 0.3);
+}
+
+.item-valuable .grid-item-inner {
+  border: 1px solid rgba(255, 204, 0, 0.4);
+  background: rgba(255, 204, 0, 0.08);
+  box-shadow: inset 0 0 8px rgba(255, 204, 0, 0.15);
+  color: #fff9e6;
+}
+.item-valuable:hover .grid-item-inner {
+  border-color: #ffcc00;
+  background: rgba(255, 204, 0, 0.18);
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
+}
+
+.item-attachment .grid-item-inner {
+  border: 1px solid rgba(224, 64, 251, 0.4);
+  background: rgba(224, 64, 251, 0.08);
+  box-shadow: inset 0 0 8px rgba(224, 64, 251, 0.15);
+  color: #fce4ff;
+}
+.item-attachment:hover .grid-item-inner {
+  border-color: #e040fb;
+  background: rgba(224, 64, 251, 0.18);
+  box-shadow: 0 0 10px rgba(224, 64, 251, 0.3);
+}
+
+.item-icon-lbl {
+  font-size: 1.1rem;
+  margin-bottom: 2px;
+}
+
+.item-name-lbl {
+  font-size: 0.52rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  width: 95%;
+  opacity: 0.85;
+}
+
+.grid-item-qty {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.52rem;
+  color: #ffcc00;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0px 3px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 204, 0, 0.3);
+}
+
+/* 改裝槍械選單 (Gunsmith Modal) */
+.gunsmith-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 5, 2, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.gunsmith-modal {
+  width: 860px;
+  height: 520px;
+  background: rgba(8, 15, 10, 0.95);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  box-shadow: 0 0 35px rgba(0, 229, 255, 0.15), inset 0 0 30px rgba(0, 229, 255, 0.05);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-sizing: border-box;
+  color: #fff;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+.gunsmith-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.gunsmith-header h3 {
+  margin: 0;
+  color: #00e5ff;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+.gunsmith-body {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.gunsmith-preview-panel {
+  flex: 1.3;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 6px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 15px;
+}
+
+.gunsmith-schematic {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  font-size: 3.5rem;
+  filter: drop-shadow(0 0 15px rgba(0,229,255,0.25));
+  gap: 10px;
+}
+
+.gunsmith-slots-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.gunsmith-slot-btn {
+  flex: 1;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.gunsmith-slot-btn:hover {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.05);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+}
+
+.gunsmith-slot-btn.active {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+}
+
+.gunsmith-stats-panel {
+  margin-top: 15px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: 10px;
+}
+
+.gunsmith-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+}
+
+.gunsmith-stat-label {
+  color: #88a888;
+}
+
+.gunsmith-stat-bar-container {
+  width: 140px;
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.gunsmith-stat-bar {
+  height: 100%;
+  background: #00e5ff;
+  box-shadow: 0 0 6px #00e5ff;
+  transition: width 0.3s ease;
+}
+
+.gunsmith-list-panel {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.gunsmith-list-title {
+  color: #ffcc00;
+  font-size: 0.8rem;
+  border-bottom: 1px solid rgba(255,204,0,0.2);
+  padding-bottom: 6px;
+  margin: 0 0 10px 0;
+  letter-spacing: 1px;
+}
+
+.gunsmith-att-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gunsmith-att-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  padding: 8px 12px;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.gunsmith-att-card:hover {
+  background: rgba(0,229,255,0.03);
+  border-color: rgba(0,229,255,0.2);
+}
+
+.gunsmith-close-btn {
+  background: rgba(255, 59, 59, 0.1);
+  border: 1px solid #ff3b3b;
+  color: #ff3b3b;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.gunsmith-close-btn:hover {
+  background: #ff3b3b;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(255,59,59,0.4);
+}
+
+/* ==========================================
+   戰術閃光彈與搜刮物資 (Loot Crate & Flashbang UI)
+   ========================================== */
+
+/* 全螢幕致盲特效 */
+.flashbang-blind-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ffffff;
+  pointer-events: none;
+  z-index: 95;
+  mix-blend-mode: normal;
+  transition: opacity 0.05s linear;
+}
+
+/* 搜刮物資彈窗遮罩 */
+.loot-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(2, 6, 4, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* 搜刮物資主視窗 */
+.loot-modal-container {
+  width: 720px;
+  max-width: 90vw;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-primary);
+  box-shadow: 0 0 30px rgba(0, 255, 102, 0.15), inset 0 0 15px rgba(0, 255, 102, 0.05);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  color: var(--hud-primary);
+  text-shadow: 0 0 4px var(--hud-glow);
+  clip-path: polygon(
+    0 12px, 12px 0, 
+    calc(100% - 12px) 0, 100% 12px, 
+    100% calc(100% - 12px), calc(100% - 12px) 100%, 
+    12px 100%, 0 calc(100% - 12px)
+  );
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.loot-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hud-bg-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 255, 102, 0.03);
+}
+
+.loot-modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.loot-modal-close-btn {
+  background: none;
+  border: none;
+  color: var(--hud-primary);
+  font-size: 1.6rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, transform 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+}
+
+.loot-modal-close-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.loot-modal-body {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+  padding: 20px;
+  height: 380px;
+}
+
+.loot-modal-side {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 255, 102, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.loot-modal-side h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  color: #88a888;
+  border-bottom: 1px solid rgba(0, 255, 102, 0.1);
+  padding-bottom: 6px;
+  font-weight: normal;
+}
+
+/* 物品列表滾動 */
+.loot-modal-items {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.loot-modal-items::-webkit-scrollbar,
+.bp-items-list::-webkit-scrollbar {
+  width: 4px;
+}
+.loot-modal-items::-webkit-scrollbar-thumb,
+.bp-items-list::-webkit-scrollbar-thumb {
+  background: var(--hud-bg-border);
+  border-radius: 2px;
+}
+
+.loot-modal-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 80px;
+  font-size: 0.85rem;
+  color: rgba(0, 255, 102, 0.4);
+  font-style: italic;
+  border: 1px dashed rgba(0, 255, 102, 0.1);
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+/* 物品行項目 */
+.loot-modal-item-row {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 255, 102, 0.02);
+  border: 1px solid rgba(0, 255, 102, 0.08);
+  border-radius: 3px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.loot-modal-item-row:hover {
+  background: rgba(0, 255, 102, 0.08);
+  border-color: var(--hud-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 102, 0.1);
+  transform: translateX(2px);
+}
+
+.coin-row {
+  border-color: var(--hud-amber);
+  background: rgba(255, 170, 0, 0.02);
+}
+.coin-row:hover {
+  background: rgba(255, 170, 0, 0.08);
+  border-color: var(--hud-amber);
+  box-shadow: 0 0 8px rgba(255, 170, 0, 0.1);
+}
+
+.loot-item-icon {
+  font-size: 1.4rem;
+  margin-right: 12px;
+  filter: drop-shadow(0 0 3px var(--hud-glow));
+}
+
+.loot-item-info {
+  flex: 1;
+  text-align: left;
+}
+
+.loot-item-name {
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.loot-item-desc {
+  font-size: 0.7rem;
+  color: #88a888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.loot-item-action {
+  font-size: 0.85rem;
+  color: var(--hud-amber);
+  font-weight: bold;
+}
+
+.loot-item-take-btn {
+  background: transparent;
+  border: 1px solid var(--hud-primary);
+  color: var(--hud-primary);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  pointer-events: none; /* 讓點擊事件穿透到外層整行觸發 handleTakeItem */
+}
+
+.loot-modal-item-row:hover .loot-item-take-btn {
+  background: var(--hud-primary);
+  color: #050805;
+}
+
+/* 戰術背包右側 */
+.loot-modal-backpack-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bp-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: 6px 4px;
+  border-bottom: 1px dashed rgba(0, 255, 102, 0.15);
+  margin-bottom: 10px;
+}
+
+.bp-stat-row span:last-child {
+  color: var(--hud-amber);
+  font-weight: bold;
+}
+
+.bp-items-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bp-item-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 255, 102, 0.05);
+  border-radius: 3px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+/* 底部按鈕區 */
+.loot-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--hud-bg-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  background: rgba(0, 255, 102, 0.01);
+}
+
+.loot-modal-btn {
+  font-family: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  padding: 8px 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.take-all-btn {
+  background: var(--hud-primary);
+  border: 1px solid var(--hud-primary);
+  color: #050805;
+  font-weight: bold;
+}
+
+.take-all-btn:hover {
+  background: transparent;
+  color: var(--hud-primary);
+  box-shadow: 0 0 12px var(--hud-glow);
+}
+
+.close-btn {
+  background: transparent;
+  border: 1px solid var(--hud-bg-border);
+  color: #88a888;
+}
+
+.close-btn:hover {
+  border-color: var(--hud-primary);
+  color: var(--hud-primary);
+}
+
+/* 動畫效果 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+

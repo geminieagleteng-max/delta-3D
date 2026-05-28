@@ -12,7 +12,11 @@ export const MARKET_PRICES = {
     bodyArmor: 500,
     opsHelmet: 400,
     grenade: 100,
-    medkit: 100
+    medkit: 100,
+    keycard: 1500,
+    flashbang: 100,
+    smoke: 100,
+    knife: 200
   },
   // Recycle prices sold back to market
   sell: {
@@ -29,7 +33,11 @@ export const MARKET_PRICES = {
     medkit: 50,
     goldBar: 1200,
     hardDrive: 600,
-    dogTag: 250
+    dogTag: 250,
+    keycard: 750,
+    flashbang: 50,
+    smoke: 50,
+    knife: 100
   }
 };
 
@@ -48,5 +56,10 @@ export const ITEM_NAMES = {
   medkit: '戰地醫療包',
   goldBar: '純金金條',
   hardDrive: '機密加密硬碟',
-  dogTag: '敵軍軍籍牌'
+  dogTag: '敵軍軍籍牌',
+  keycard: '安全實驗室鑰匙卡',
+  flashbang: '戰術閃光彈',
+  smoke: '戰術煙霧彈',
+  knife: '特種作戰軍刀'
 };
+
