@@ -3,9 +3,9 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, SHOP_ITEMS, purchaseItem, equipItem, unequipItem } from './utils/account';
+import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, equipItem, unequipItem, buyMarketItem, sellMarketItem } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
-import { ITEM_NAMES } from './config/marketConfig';
+import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
 
 
 // ==========================================
@@ -3852,34 +3852,60 @@ export default function App() {
     }
   };
 
-  // 購買裝備商品
-  const handleBuyItem = (itemId) => {
+  // 黑市購入物資
+  const handleBuyMarketItem = (itemId) => {
     if (!currentUser) return;
-    if (currentUser.isGuest) {
-      const item = SHOP_ITEMS.find(i => i.id === itemId);
-      if (!item) return;
-      const currentCoins = currentUser.coins !== undefined ? currentUser.coins : 0;
-      if (currentCoins < item.cost) {
-        alert('遊客 Delta 金幣不足！（您可以透過實戰演練賺取金幣）');
-        return;
-      }
-      const updatedUser = {
-        ...currentUser,
-        coins: currentCoins - item.cost,
-        inventory: {
-          ...(currentUser.inventory || { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false }),
-          [itemId]: true
-        }
-      };
-      setCurrentUser(updatedUser);
+    const price = MARKET_PRICES.buy[itemId];
+    if (price === undefined) return;
+
+    const currentCoins = currentUser.coins !== undefined ? currentUser.coins : 0;
+    if (currentCoins < price) {
+      alert('Delta 金幣不足，黑市拒絕交易！');
       return;
     }
 
-    try {
-      const updated = purchaseItem(currentUser.username, itemId);
-      setCurrentUser(updated);
-    } catch (err) {
-      alert(err.message);
+    if (currentUser.isGuest) {
+      const updatedUser = { ...currentUser };
+      if (!updatedUser.stash) {
+        updatedUser.stash = { m4a1: 0, m9: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0 };
+      }
+      updatedUser.coins = currentCoins - price;
+      updatedUser.stash[itemId] = (updatedUser.stash[itemId] || 0) + 1;
+      setCurrentUser(updatedUser);
+    } else {
+      try {
+        const updated = buyMarketItem(currentUser.username, itemId, price);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  };
+
+  // 黑市售出物資
+  const handleSellMarketItem = (itemId) => {
+    if (!currentUser) return;
+    const value = MARKET_PRICES.sell[itemId];
+    if (value === undefined) return;
+
+    const stashCount = currentUser.stash ? (currentUser.stash[itemId] || 0) : 0;
+    if (stashCount <= 0) {
+      alert('倉庫中無此物品可供售出！');
+      return;
+    }
+
+    if (currentUser.isGuest) {
+      const updatedUser = { ...currentUser };
+      updatedUser.stash[itemId] -= 1;
+      updatedUser.coins = (updatedUser.coins !== undefined ? updatedUser.coins : 0) + value;
+      setCurrentUser(updatedUser);
+    } else {
+      try {
+        const updated = sellMarketItem(currentUser.username, itemId, value);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
+      }
     }
   };
 
@@ -5069,7 +5095,7 @@ export default function App() {
                           }}
                           onClick={() => setLobbyTab('shop')}
                         >
-                          🛒 戰術軍火庫 SHOP
+                          🛒 黑市商店 MARKET
                         </button>
                       </div>
 
@@ -5441,84 +5467,122 @@ export default function App() {
                           </div>
                         </div>
                       ) : (
-                        /* 戰術商店分頁 */
-                        <div className="shop-section" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                          <h4 style={{ margin: '0 0 5px 0', color: '#ffcc00', textShadow: '0 0 5px rgba(255,204,0,0.4)', letterSpacing: '1px' }}>戰術軍火庫 TACTICAL ARMORY</h4>
-                          <div className="shop-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto', paddingRight: '5px' }}>
-                            {SHOP_ITEMS.map((item) => {
-                              const isOwned = currentUser.inventory && currentUser.inventory[item.id];
-                              return (
-                                <div 
-                                  key={item.id} 
-                                  className={`shop-item-card ${isOwned ? 'owned' : ''}`}
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    background: isOwned ? 'rgba(0, 255, 102, 0.05)' : 'rgba(255, 255, 255, 0.02)',
-                                    border: '1px solid',
-                                    borderColor: isOwned ? 'rgba(0, 255, 102, 0.2)' : 'rgba(136, 168, 136, 0.15)',
-                                    borderRadius: '6px',
-                                    padding: '12px 15px',
-                                    transition: 'all 0.2s'
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, marginRight: '15px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <span style={{ fontWeight: 'bold', color: isOwned ? '#00ff66' : '#fff', fontSize: '0.9rem' }}>{item.name}</span>
-                                      <span style={{ fontSize: '0.7rem', color: '#88a888', letterSpacing: '1px' }}>{item.englishName}</span>
+                        /* 黑市商店分頁 */
+                        <div className="market-container" style={{ display: 'flex', gap: '20px', flex: 1, maxHeight: '420px', overflow: 'hidden' }}>
+                          {/* 左側：黑市採購 Buy Panel */}
+                          <div className="market-column buy-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h5 style={{ color: '#ffcc00', margin: '0 0 5px 0', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                              黑市物資採購 BUY GEAR
+                            </h5>
+                            <div className="market-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px' }}>
+                              {Object.keys(MARKET_PRICES.buy).map((itemId) => {
+                                const cost = MARKET_PRICES.buy[itemId];
+                                const descriptions = {
+                                  m4a1: 'M4A1 突擊步槍 - 主力全自動武器，威力強大',
+                                  m9: 'M9 戰術手槍 - 輕便好用的副手防身武器',
+                                  bodyArmor: '重型防彈衣 - 出擊生命上限 +50 點防護',
+                                  opsHelmet: '特種作戰頭盔 - 頭部減傷 25%，防爆頭',
+                                  grenade: '戰術手榴彈 - 高爆物理破片，大範圍傷害',
+                                  medkit: '戰地醫療包 - 局內受傷時可按 [5] 鍵包紮治療'
+                                };
+                                return (
+                                  <div 
+                                    key={itemId} 
+                                    className="market-item-card buy-card"
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      background: 'rgba(255, 255, 255, 0.02)',
+                                      border: '1px solid rgba(255, 204, 0, 0.1)',
+                                      borderRadius: '4px',
+                                      padding: '10px 12px',
+                                      fontSize: '0.8rem',
+                                      textAlign: 'left'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, marginRight: '10px' }}>
+                                      <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
+                                      <span style={{ fontSize: '0.68rem', color: '#a0b0a0' }}>{descriptions[itemId] || ''}</span>
                                     </div>
-                                    <span style={{ fontSize: '0.75rem', color: '#a0b0a0', lineHeight: '1.4' }}>{item.description}</span>
+                                    <button 
+                                      className="loadout-action-btn"
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        padding: '5px 10px',
+                                        border: '1px solid #ffcc00',
+                                        color: '#ffcc00',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                        borderRadius: '3px',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                      onClick={() => handleBuyMarketItem(itemId)}
+                                    >
+                                      購買 {cost} 🪙
+                                    </button>
                                   </div>
-                                  <div>
-                                    {isOwned ? (
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* 右側：回收物資 Sell Panel */}
+                          <div className="market-column sell-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h5 style={{ color: '#00ff66', margin: '0 0 5px 0', borderBottom: '1px solid rgba(0,255,102,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                              黑市物資回收 SELL STASH
+                            </h5>
+                            <div className="market-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px' }}>
+                              {Object.keys(currentUser.stash || {}).filter(key => (currentUser.stash[key] || 0) > 0).length === 0 ? (
+                                <div style={{ color: '#88a888', fontSize: '0.8rem', padding: '30px 10px', textAlign: 'center' }}>
+                                  ⚠️ 倉庫目前沒有任何可回收的物資
+                                </div>
+                              ) : (
+                                Object.keys(currentUser.stash || {}).map((itemId) => {
+                                  const count = currentUser.stash[itemId] || 0;
+                                  if (count <= 0) return null;
+                                  const value = MARKET_PRICES.sell[itemId] || 0;
+                                  return (
+                                    <div 
+                                      key={itemId} 
+                                      className="market-item-card sell-card"
+                                      style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        background: 'rgba(0, 255, 102, 0.02)',
+                                        border: '1px solid rgba(0, 255, 102, 0.1)',
+                                        borderRadius: '4px',
+                                        padding: '10px 12px',
+                                        fontSize: '0.8rem',
+                                        textAlign: 'left'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', flex: 1, marginRight: '15px' }}>
+                                        <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
+                                        <span style={{ color: '#00ff66', fontWeight: 'bold' }}>x{count}</span>
+                                      </div>
                                       <button 
-                                        type="button" 
-                                        disabled
+                                        className="loadout-action-btn"
                                         style={{
-                                          background: 'rgba(0, 255, 102, 0.1)',
+                                          fontSize: '0.7rem',
+                                          padding: '5px 10px',
                                           border: '1px solid #00ff66',
                                           color: '#00ff66',
-                                          fontSize: '0.75rem',
-                                          padding: '6px 12px',
-                                          borderRadius: '4px',
-                                          cursor: 'default',
-                                          textShadow: '0 0 3px rgba(0,255,102,0.3)'
-                                        }}
-                                      >
-                                        已裝備 EQUIPPED
-                                      </button>
-                                    ) : (
-                                      <button 
-                                        type="button" 
-                                        onClick={() => handleBuyItem(item.id)}
-                                        style={{
-                                          background: 'rgba(255, 204, 0, 0.1)',
-                                          border: '1px solid #ffcc00',
-                                          color: '#ffcc00',
-                                          fontSize: '0.75rem',
-                                          padding: '6px 12px',
-                                          borderRadius: '4px',
+                                          background: 'transparent',
                                           cursor: 'pointer',
-                                          transition: 'all 0.2s',
-                                          textShadow: '0 0 3px rgba(255,204,0,0.3)'
+                                          borderRadius: '3px',
+                                          whiteSpace: 'nowrap'
                                         }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.background = 'rgba(255, 204, 0, 0.2)';
-                                          e.currentTarget.style.boxShadow = '0 0 8px rgba(255,204,0,0.3)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.background = 'rgba(255, 204, 0, 0.1)';
-                                          e.currentTarget.style.boxShadow = 'none';
-                                        }}
+                                        onClick={() => handleSellMarketItem(itemId)}
                                       >
-                                        購買 {item.cost} 🪙
+                                        出售 +{value} 🪙
                                       </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
