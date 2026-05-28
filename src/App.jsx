@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls, Sky, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats } from './utils/account';
+import { getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats, SHOP_ITEMS, purchaseItem } from './utils/account';
 
 
 // ==========================================
@@ -3296,6 +3296,7 @@ export default function App() {
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [newNickname, setNewNickname] = useState('');
   const [endgameStats, setEndgameStats] = useState(null);
+  const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop'
 
   // 載入與同步本機排行榜
   const leaderboard = useMemo(() => {
@@ -3660,6 +3661,38 @@ export default function App() {
     setCurrentUser(null);
     setNewNickname('');
     setIsEditingNickname(false);
+    setLobbyTab('stats');
+  };
+
+  // 購買裝備商品
+  const handleBuyItem = (itemId) => {
+    if (!currentUser) return;
+    if (currentUser.isGuest) {
+      const item = SHOP_ITEMS.find(i => i.id === itemId);
+      if (!item) return;
+      const currentCoins = currentUser.coins !== undefined ? currentUser.coins : 0;
+      if (currentCoins < item.cost) {
+        alert('遊客 Delta 金幣不足！（您可以透過實戰演練賺取金幣）');
+        return;
+      }
+      const updatedUser = {
+        ...currentUser,
+        coins: currentCoins - item.cost,
+        inventory: {
+          ...(currentUser.inventory || { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false }),
+          [itemId]: true
+        }
+      };
+      setCurrentUser(updatedUser);
+      return;
+    }
+
+    try {
+      const updated = purchaseItem(currentUser.username, itemId);
+      setCurrentUser(updated);
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   // 儲存結算數據至本機資料庫
@@ -3675,13 +3708,56 @@ export default function App() {
       playTimeSeconds
     };
     
-    // 儲存至 React state，避免在 render 時直接讀取 useRef.current 導致 Linter 報錯
-    setEndgameStats(runStats);
+    // 計算金幣（適用於遊客/登入用戶顯示）
+    const killsCoins = finalKills * 50;
+    const victoryCoins = victory ? 300 : 0;
+    const headshotsCoins = runStatsRef.current.headshots * 20;
+    const accuracyPct = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0;
+    const accuracyCoins = Math.round(accuracyPct * 100);
+    const totalCoins = killsCoins + victoryCoins + headshotsCoins + accuracyCoins;
+    
+    const coinsEarnedDetails = {
+      killsCoins,
+      victoryCoins,
+      headshotsCoins,
+      accuracyCoins,
+      total: totalCoins
+    };
 
-    if (!currentUser || isTutorial || currentUser.isGuest) return;
-    const updatedUser = updateStats(currentUser.username, runStats);
-    if (updatedUser) {
+    if (!currentUser || isTutorial) {
+      setEndgameStats({
+        ...runStats,
+        coinsEarnedDetails
+      });
+      return;
+    }
+
+    if (currentUser.isGuest) {
+      // 遊客模式：也累積金幣（暫存於 State，登出消失）
+      const updatedUser = {
+        ...currentUser,
+        coins: (currentUser.coins !== undefined ? currentUser.coins : 0) + totalCoins
+      };
       setCurrentUser(updatedUser);
+      setEndgameStats({
+        ...runStats,
+        coinsEarnedDetails
+      });
+      return;
+    }
+
+    const result = updateStats(currentUser.username, runStats);
+    if (result) {
+      setCurrentUser(result.user);
+      setEndgameStats({
+        ...runStats,
+        coinsEarnedDetails: result.coinsEarnedDetails
+      });
+    } else {
+      setEndgameStats({
+        ...runStats,
+        coinsEarnedDetails
+      });
     }
   };
 
@@ -3689,6 +3765,13 @@ export default function App() {
   const handleDeploy = () => {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
+    
+    // 套用戰術裝備升級
+    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
+    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    setHealth(hasArmor ? 150 : 100);
+    setGrenades(hasGrenadePouch ? 3 : 2);
+
     setGameState('active');
     soundManager.startAmbient();
 
@@ -3919,7 +4002,11 @@ export default function App() {
     setEnemies((prev) => {
       return prev.map((enemy) => {
         if (enemy.id === enemyId && enemy.state === 'alive') {
-          const damage = isHeadshot ? 100 : (activeWeapon === 'primary' ? 25 : 15); // 爆頭一擊必殺，普通造成對應武器傷害
+          const hasLaser = currentUser && currentUser.inventory && currentUser.inventory.laserSight;
+          const hasSuppressor = currentUser && currentUser.inventory && currentUser.inventory.suppressor;
+          const primaryDmg = hasLaser ? 30 : 25;
+          const secondaryDmg = hasSuppressor ? 20 : 15;
+          const damage = isHeadshot ? 100 : (activeWeapon === 'primary' ? primaryDmg : secondaryDmg);
           const newHp = Math.max(0, enemy.hp - damage);
           const isDead = newHp <= 0;
           if (isDead) {
@@ -3979,8 +4066,11 @@ export default function App() {
   const handleShootPlayer = (damage = 10) => {
     if (gameState !== 'active') return;
 
+    const hasHelmet = currentUser && currentUser.inventory && currentUser.inventory.opsHelmet;
+    const finalDamage = hasHelmet ? Math.max(1, Math.round(damage * 0.75)) : damage;
+
     setHealth((prev) => {
-      const newHp = Math.max(0, prev - damage);
+      const newHp = Math.max(0, prev - finalDamage);
       
       if (newHp <= 0) {
         setGameState('failed');
@@ -4001,7 +4091,11 @@ export default function App() {
   const handleRestart = () => {
     setEndgameStats(null);
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
-    setHealth(100);
+    
+    // 套用戰術裝備升級
+    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
+    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    setHealth(hasArmor ? 150 : 100);
     setPrimaryAmmo(30);
     setSecondaryAmmo(15);
     setActiveWeapon('primary');
@@ -4017,7 +4111,7 @@ export default function App() {
     setParticles([]);
     setIsAds(false);
     setPrimaryFireMode('auto');
-    setGrenades(2);
+    setGrenades(hasGrenadePouch ? 3 : 2);
     setGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
@@ -4104,7 +4198,9 @@ export default function App() {
     runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
     setIsTutorial(false);
     // 重啟進入正式實戰模式
-    setHealth(100);
+    const hasArmor = currentUser && currentUser.inventory && currentUser.inventory.bodyArmor;
+    const hasGrenadePouch = currentUser && currentUser.inventory && currentUser.inventory.grenadePouch;
+    setHealth(hasArmor ? 150 : 100);
     setPrimaryAmmo(30);
     setSecondaryAmmo(15);
     setActiveWeapon('primary');
@@ -4116,7 +4212,7 @@ export default function App() {
     setParticles([]);
     setIsAds(false);
     setPrimaryFireMode('auto');
-    setGrenades(2);
+    setGrenades(hasGrenadePouch ? 3 : 2);
     setGrenadeEntities([]);
     setCasings([]);
     setDroppedMags([]);
@@ -4625,19 +4721,69 @@ export default function App() {
                           </div>
                           
                           {!currentUser.isGuest ? (
-                            <div className="profile-rank-info" style={{ color: getRank(currentUser.stats.kills).color }}>
-                              軍階：{getRank(currentUser.stats.kills).zhTitle} ({getRank(currentUser.stats.kills).title})
+                            <div className="profile-rank-info" style={{ color: getRank(currentUser.stats.kills).color, display: 'flex', gap: '15px', alignItems: 'center' }}>
+                              <span>軍階：{getRank(currentUser.stats.kills).zhTitle} ({getRank(currentUser.stats.kills).title})</span>
+                              <span style={{ color: '#ffcc00', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                🪙 {currentUser.coins !== undefined ? currentUser.coins : 0} Delta 幣
+                              </span>
                             </div>
                           ) : (
-                            <div className="profile-rank-info" style={{ color: '#ffaa00' }}>
-                              遊客模式 (戰績不予儲存)
+                            <div className="profile-rank-info" style={{ color: '#ffaa00', display: 'flex', gap: '15px', alignItems: 'center' }}>
+                              <span>遊客模式 (戰績不予儲存)</span>
+                              <span style={{ color: '#ffcc00', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                🪙 {currentUser.coins !== undefined ? currentUser.coins : 0} Delta 幣
+                              </span>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* 升級進度條 */}
-                      {!currentUser.isGuest && currentUser.stats && (
+                      {/* 大廳子分頁分頁切換 */}
+                      <div className="lobby-tabs" style={{ display: 'flex', gap: '10px', margin: '15px 0 10px 0', borderBottom: '1px solid var(--hud-bg-border)', paddingBottom: '10px' }}>
+                        <button
+                          type="button"
+                          className={`lobby-tab-btn ${lobbyTab === 'stats' ? 'active' : ''}`}
+                          style={{
+                            background: lobbyTab === 'stats' ? 'rgba(0, 255, 102, 0.15)' : 'transparent',
+                            color: lobbyTab === 'stats' ? '#00ff66' : '#88a888',
+                            border: '1px solid',
+                            borderColor: lobbyTab === 'stats' ? '#00ff66' : 'rgba(136, 168, 136, 0.3)',
+                            padding: '6px 15px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            borderRadius: '4px',
+                            textShadow: lobbyTab === 'stats' ? '0 0 5px rgba(0,255,102,0.5)' : 'none',
+                            transition: 'all 0.2s',
+                            fontWeight: 'bold'
+                          }}
+                          onClick={() => setLobbyTab('stats')}
+                        >
+                          📊 個人數據 STATS
+                        </button>
+                        <button
+                          type="button"
+                          className={`lobby-tab-btn ${lobbyTab === 'shop' ? 'active' : ''}`}
+                          style={{
+                            background: lobbyTab === 'shop' ? 'rgba(255, 204, 0, 0.15)' : 'transparent',
+                            color: lobbyTab === 'shop' ? '#ffcc00' : '#88a888',
+                            border: '1px solid',
+                            borderColor: lobbyTab === 'shop' ? '#ffcc00' : 'rgba(136, 168, 136, 0.3)',
+                            padding: '6px 15px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            borderRadius: '4px',
+                            textShadow: lobbyTab === 'shop' ? '0 0 5px rgba(255,204,0,0.5)' : 'none',
+                            transition: 'all 0.2s',
+                            fontWeight: 'bold'
+                          }}
+                          onClick={() => setLobbyTab('shop')}
+                        >
+                          🛒 戰術軍火庫 SHOP
+                        </button>
+                      </div>
+
+                      {/* 升級進度條 (僅在數據頁顯示) */}
+                      {lobbyTab === 'stats' && !currentUser.isGuest && currentUser.stats && (
                         <div className="rank-progress-container">
                           <div className="rank-progress-labels">
                             <span>生涯擊殺：{currentUser.stats.kills}</span>
@@ -4655,116 +4801,200 @@ export default function App() {
                         </div>
                       )}
 
-                      {!currentUser.isGuest && currentUser.stats ? (
-                        <>
-                          {/* 生涯數據網格 */}
-                          <div className="stats-grid">
-                            <div className="stat-item">
-                              <div className="stat-item-label">場次 GAMES</div>
-                              <div className="stat-item-val">{currentUser.stats.gamesPlayed}</div>
-                            </div>
-                            <div className="stat-item">
-                              <div className="stat-item-label">勝率 WIN RATE</div>
-                              <div className="stat-item-val">
-                                {currentUser.stats.gamesPlayed > 0 
-                                  ? `${Math.round((currentUser.stats.wins / currentUser.stats.gamesPlayed) * 100)}%` 
-                                  : '0%'}
-                              </div>
-                            </div>
-                            <div className="stat-item">
-                              <div className="stat-item-label">命中率 ACC</div>
-                              <div className="stat-item-val">
-                                {currentUser.stats.shotsFired > 0 
-                                  ? `${Math.round((currentUser.stats.shotsHit / currentUser.stats.shotsFired) * 100)}%` 
-                                  : '0%'}
-                              </div>
-                            </div>
-                            <div className="stat-item">
-                              <div className="stat-item-label">總擊殺 KILLS</div>
-                              <div className="stat-item-val">{currentUser.stats.kills}</div>
-                            </div>
-                            <div className="stat-item">
-                              <div className="stat-item-label">爆頭率 HS %</div>
-                              <div className="stat-item-val">
-                                {currentUser.stats.kills > 0 
-                                  ? `${Math.round((currentUser.stats.headshots / currentUser.stats.kills) * 100)}%` 
-                                  : '0%'}
-                              </div>
-                            </div>
-                            <div className="stat-item">
-                              <div className="stat-item-label">遊玩時間 TIME</div>
-                              <div className="stat-item-val">
-                                {currentUser.stats.playTimeSeconds >= 60 
-                                  ? `${Math.floor(currentUser.stats.playTimeSeconds / 60)}m${currentUser.stats.playTimeSeconds % 60}s`
-                                  : `${currentUser.stats.playTimeSeconds}s`}
-                              </div>
+                      {/* 分頁內容 */}
+                      {lobbyTab === 'stats' ? (
+                        currentUser.isGuest ? (
+                          <div className="guest-notice" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffaa00', border: '1px dashed rgba(255, 170, 0, 0.2)', padding: '20px', borderRadius: '4px' }}>
+                            <div>
+                              ⚠️ <strong>您目前以遊客身份登入</strong><br/>
+                              遊客帳號僅能進行實戰演練與新手教學。您的擊殺數、勝率、射擊精準度以及時間將不會計入本機資料庫與排行榜中。<br/>
+                              如需記錄戰績，請登出並註冊一個永久軍籍帳號。
                             </div>
                           </div>
-
-                          {/* 成就系統 */}
-                          <div className="achievements-section">
-                            <h4>榮譽徽章 BADGES</h4>
-                            <div className="badges-grid">
-                              <div className={`badge-card ${currentUser.achievements.firstBlood ? 'unlocked' : ''}`}>
-                                <div className="badge-icon">🩸</div>
-                                <div className="badge-name">First Blood</div>
-                                <div className="badge-desc-tooltip">獲得生涯首次擊殺。</div>
+                        ) : (
+                          <>
+                            {/* 生涯數據網格 */}
+                            <div className="stats-grid">
+                              <div className="stat-item">
+                                <div className="stat-item-label">場次 GAMES</div>
+                                <div className="stat-item-val">{currentUser.stats.gamesPlayed}</div>
                               </div>
-                              <div className={`badge-card ${currentUser.achievements.deadeye ? 'unlocked' : ''}`}>
-                                <div className="badge-icon">🎯</div>
-                                <div className="badge-name">Deadeye</div>
-                                <div className="badge-desc-tooltip">累計達成 5 次爆頭擊殺。</div>
+                              <div className="stat-item">
+                                <div className="stat-item-label">勝率 WIN RATE</div>
+                                <div className="stat-item-val">
+                                  {currentUser.stats.gamesPlayed > 0 
+                                    ? `${Math.round((currentUser.stats.wins / currentUser.stats.gamesPlayed) * 100)}%` 
+                                    : '0%'}
+                                </div>
                               </div>
-                              <div className={`badge-card ${currentUser.achievements.survivor ? 'unlocked' : ''}`}>
-                                <div className="badge-icon">🛡</div>
-                                <div className="badge-name">Survivor</div>
-                                <div className="badge-desc-tooltip">成功生存並贏得一場戰役。</div>
+                              <div className="stat-item">
+                                <div className="stat-item-label">命中率 ACC</div>
+                                <div className="stat-item-val">
+                                  {currentUser.stats.shotsFired > 0 
+                                    ? `${Math.round((currentUser.stats.shotsHit / currentUser.stats.shotsFired) * 100)}%` 
+                                    : '0%'}
+                                </div>
                               </div>
-                              <div className={`badge-card ${currentUser.achievements.heavyGunner ? 'unlocked' : ''}`}>
-                                <div className="badge-icon">⚙</div>
-                                <div className="badge-name">Gunner</div>
-                                <div className="badge-desc-tooltip">生涯累計擊發 500 發子彈。</div>
+                              <div className="stat-item">
+                                <div className="stat-item-label">總擊殺 KILLS</div>
+                                <div className="stat-item-val">{currentUser.stats.kills}</div>
+                              </div>
+                              <div className="stat-item">
+                                <div className="stat-item-label">爆頭率 HS %</div>
+                                <div className="stat-item-val">
+                                  {currentUser.stats.kills > 0 
+                                    ? `${Math.round((currentUser.stats.headshots / currentUser.stats.kills) * 100)}%` 
+                                    : '0%'}
+                                </div>
+                              </div>
+                              <div className="stat-item">
+                                <div className="stat-item-label">遊玩時間 TIME</div>
+                                <div className="stat-item-val">
+                                  {currentUser.stats.playTimeSeconds >= 60 
+                                    ? `${Math.floor(currentUser.stats.playTimeSeconds / 60)}m${currentUser.stats.playTimeSeconds % 60}s`
+                                    : `${currentUser.stats.playTimeSeconds}s`}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* 本機排行榜 */}
-                          <div className="leaderboard-section">
-                            <h4>本機特種排行榜 LEADERBOARD</h4>
-                            <div className="leaderboard-wrapper">
-                              <table className="leaderboard-table">
-                                <thead>
-                                  <tr>
-                                    <th>排名</th>
-                                    <th>特種隊員</th>
-                                    <th>軍銜</th>
-                                    <th>總擊殺</th>
-                                    <th>勝場</th>
-                                    <th>生涯積分</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {leaderboard.map((player, index) => (
-                                    <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
-                                      <td className="leaderboard-rank">#{index + 1}</td>
-                                      <td>{player.nickname}</td>
-                                      <td>{getRank(player.kills).zhTitle}</td>
-                                      <td>{player.kills}</td>
-                                      <td>{player.wins}</td>
-                                      <td>{player.totalScore}</td>
+                            {/* 成就系統 */}
+                            <div className="achievements-section">
+                              <h4>榮譽徽章 BADGES</h4>
+                              <div className="badges-grid">
+                                <div className={`badge-card ${currentUser.achievements.firstBlood ? 'unlocked' : ''}`}>
+                                  <div className="badge-icon">🩸</div>
+                                  <div className="badge-name">First Blood</div>
+                                  <div className="badge-desc-tooltip">獲得生涯首次擊殺。</div>
+                                </div>
+                                <div className={`badge-card ${currentUser.achievements.deadeye ? 'unlocked' : ''}`}>
+                                  <div className="badge-icon">🎯</div>
+                                  <div className="badge-name">Deadeye</div>
+                                  <div className="badge-desc-tooltip">累計達成 5 次爆頭擊殺。</div>
+                                </div>
+                                <div className={`badge-card ${currentUser.achievements.survivor ? 'unlocked' : ''}`}>
+                                  <div className="badge-icon">🛡</div>
+                                  <div className="badge-name">Survivor</div>
+                                  <div className="badge-desc-tooltip">成功生存並贏得一場戰役。</div>
+                                </div>
+                                <div className={`badge-card ${currentUser.achievements.heavyGunner ? 'unlocked' : ''}`}>
+                                  <div className="badge-icon">⚙</div>
+                                  <div className="badge-name">Gunner</div>
+                                  <div className="badge-desc-tooltip">生涯累計擊發 500 發子彈。</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 本機排行榜 */}
+                            <div className="leaderboard-section">
+                              <h4>本機特種排行榜 LEADERBOARD</h4>
+                              <div className="leaderboard-wrapper">
+                                <table className="leaderboard-table">
+                                  <thead>
+                                    <tr>
+                                      <th>排名</th>
+                                      <th>特種隊員</th>
+                                      <th>軍銜</th>
+                                      <th>總擊殺</th>
+                                      <th>勝場</th>
+                                      <th>生涯積分</th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody>
+                                    {leaderboard.map((player, index) => (
+                                      <tr key={player.username} className={player.username === currentUser.username ? 'current-user' : ''}>
+                                        <td className="leaderboard-rank">#{index + 1}</td>
+                                        <td>{player.nickname}</td>
+                                        <td>{getRank(player.kills).zhTitle}</td>
+                                        <td>{player.kills}</td>
+                                        <td>{player.wins}</td>
+                                        <td>{player.totalScore}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
-                          </div>
-                        </>
+                          </>
+                        )
                       ) : (
-                        <div className="guest-notice" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffaa00', border: '1px dashed rgba(255, 170, 0, 0.2)', padding: '20px', borderRadius: '4px' }}>
-                          <div>
-                            ⚠️ <strong>您目前以遊客身份登入</strong><br/>
-                            遊客帳號僅能進行實戰演練與新手教學。您的擊殺數、勝率、射擊精準度以及時間將不會計入本機資料庫與排行榜中。<br/>
-                            如需記錄戰績，請登出並註冊一個永久軍籍帳號。
+                        /* 戰術商店分頁 */
+                        <div className="shop-section" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                          <h4 style={{ margin: '0 0 5px 0', color: '#ffcc00', textShadow: '0 0 5px rgba(255,204,0,0.4)', letterSpacing: '1px' }}>戰術軍火庫 TACTICAL ARMORY</h4>
+                          <div className="shop-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto', paddingRight: '5px' }}>
+                            {SHOP_ITEMS.map((item) => {
+                              const isOwned = currentUser.inventory && currentUser.inventory[item.id];
+                              return (
+                                <div 
+                                  key={item.id} 
+                                  className={`shop-item-card ${isOwned ? 'owned' : ''}`}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    background: isOwned ? 'rgba(0, 255, 102, 0.05)' : 'rgba(255, 255, 255, 0.02)',
+                                    border: '1px solid',
+                                    borderColor: isOwned ? 'rgba(0, 255, 102, 0.2)' : 'rgba(136, 168, 136, 0.15)',
+                                    borderRadius: '6px',
+                                    padding: '12px 15px',
+                                    transition: 'all 0.2s'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, marginRight: '15px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ fontWeight: 'bold', color: isOwned ? '#00ff66' : '#fff', fontSize: '0.9rem' }}>{item.name}</span>
+                                      <span style={{ fontSize: '0.7rem', color: '#88a888', letterSpacing: '1px' }}>{item.englishName}</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.75rem', color: '#a0b0a0', lineHeight: '1.4' }}>{item.description}</span>
+                                  </div>
+                                  <div>
+                                    {isOwned ? (
+                                      <button 
+                                        type="button" 
+                                        disabled
+                                        style={{
+                                          background: 'rgba(0, 255, 102, 0.1)',
+                                          border: '1px solid #00ff66',
+                                          color: '#00ff66',
+                                          fontSize: '0.75rem',
+                                          padding: '6px 12px',
+                                          borderRadius: '4px',
+                                          cursor: 'default',
+                                          textShadow: '0 0 3px rgba(0,255,102,0.3)'
+                                        }}
+                                      >
+                                        已裝備 EQUIPPED
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        type="button" 
+                                        onClick={() => handleBuyItem(item.id)}
+                                        style={{
+                                          background: 'rgba(255, 204, 0, 0.1)',
+                                          border: '1px solid #ffcc00',
+                                          color: '#ffcc00',
+                                          fontSize: '0.75rem',
+                                          padding: '6px 12px',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s',
+                                          textShadow: '0 0 3px rgba(255,204,0,0.3)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.background = 'rgba(255, 204, 0, 0.2)';
+                                          e.currentTarget.style.boxShadow = '0 0 8px rgba(255,204,0,0.3)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.background = 'rgba(255, 204, 0, 0.1)';
+                                          e.currentTarget.style.boxShadow = 'none';
+                                        }}
+                                      >
+                                        購買 {item.cost} 🪙
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -4833,7 +5063,39 @@ export default function App() {
                   </div>
                 </div>
 
-                <button className="deploy-button" onClick={handleRestart}>
+                {endgameStats && endgameStats.coinsEarnedDetails && (
+                  <div className="endgame-stats-panel" style={{ marginTop: '15px', borderColor: 'rgba(255, 204, 0, 0.3)' }}>
+                    <div className="endgame-stats-title" style={{ color: '#ffcc00', borderColor: 'rgba(255, 204, 0, 0.4)' }}>
+                      🪙 金幣獲得獎勵 DELTA COINS EARNED
+                    </div>
+                    <div className="endgame-stats-row">
+                      <span>敵軍擊殺 Kills Bonus</span>
+                      <span>+{endgameStats.coinsEarnedDetails.killsCoins}</span>
+                    </div>
+                    {endgameStats.coinsEarnedDetails.victoryCoins > 0 && (
+                      <div className="endgame-stats-row">
+                        <span>任務成功 Win Bonus</span>
+                        <span>+{endgameStats.coinsEarnedDetails.victoryCoins}</span>
+                      </div>
+                    )}
+                    {endgameStats.coinsEarnedDetails.headshotsCoins > 0 && (
+                      <div className="endgame-stats-row">
+                        <span>爆頭獎勵 Headshot Bonus</span>
+                        <span>+{endgameStats.coinsEarnedDetails.headshotsCoins}</span>
+                      </div>
+                    )}
+                    <div className="endgame-stats-row">
+                      <span>精準度加成 Accuracy Bonus</span>
+                      <span>+{endgameStats.coinsEarnedDetails.accuracyCoins}</span>
+                    </div>
+                    <div className="endgame-stats-row" style={{ borderTop: '1px dashed rgba(255,204,0,0.3)', paddingTop: '8px', marginTop: '5px', fontWeight: 'bold' }}>
+                      <span style={{ color: '#ffcc00' }}>獲得總額 Total Coins</span>
+                      <span style={{ color: '#ffcc00' }}>+{endgameStats.coinsEarnedDetails.total} 🪙</span>
+                    </div>
+                  </div>
+                )}
+
+                <button className="deploy-button" onClick={handleRestart} style={{ marginTop: '15px' }}>
                   RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>
@@ -4878,7 +5140,39 @@ export default function App() {
                   </div>
                 </div>
 
-                <button className="deploy-button" onClick={handleRestart}>
+                {endgameStats && endgameStats.coinsEarnedDetails && (
+                  <div className="endgame-stats-panel" style={{ marginTop: '15px', borderColor: 'rgba(255, 204, 0, 0.3)' }}>
+                    <div className="endgame-stats-title" style={{ color: '#ffcc00', borderColor: 'rgba(255, 204, 0, 0.4)' }}>
+                      🪙 金幣獲得獎勵 DELTA COINS EARNED
+                    </div>
+                    <div className="endgame-stats-row">
+                      <span>敵軍擊殺 Kills Bonus</span>
+                      <span>+{endgameStats.coinsEarnedDetails.killsCoins}</span>
+                    </div>
+                    {endgameStats.coinsEarnedDetails.victoryCoins > 0 && (
+                      <div className="endgame-stats-row">
+                        <span>任務成功 Win Bonus</span>
+                        <span>+{endgameStats.coinsEarnedDetails.victoryCoins}</span>
+                      </div>
+                    )}
+                    {endgameStats.coinsEarnedDetails.headshotsCoins > 0 && (
+                      <div className="endgame-stats-row">
+                        <span>爆頭獎勵 Headshot Bonus</span>
+                        <span>+{endgameStats.coinsEarnedDetails.headshotsCoins}</span>
+                      </div>
+                    )}
+                    <div className="endgame-stats-row">
+                      <span>精準度加成 Accuracy Bonus</span>
+                      <span>+{endgameStats.coinsEarnedDetails.accuracyCoins}</span>
+                    </div>
+                    <div className="endgame-stats-row" style={{ borderTop: '1px dashed rgba(255,204,0,0.3)', paddingTop: '8px', marginTop: '5px', fontWeight: 'bold' }}>
+                      <span style={{ color: '#ffcc00' }}>獲得總額 Total Coins</span>
+                      <span style={{ color: '#ffcc00' }}>+{endgameStats.coinsEarnedDetails.total} 🪙</span>
+                    </div>
+                  </div>
+                )}
+
+                <button className="deploy-button" onClick={handleRestart} style={{ marginTop: '15px' }}>
                   RE-DEPLOY {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>

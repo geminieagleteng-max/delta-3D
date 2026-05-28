@@ -34,6 +34,14 @@ export function registerAccount(username, nickname, password) {
     username,
     nickname,
     password, // 基於展示目的採用明文比對
+    coins: 1000, // 初始給予 1000 金幣
+    inventory: {
+      laserSight: false,
+      suppressor: false,
+      bodyArmor: false,
+      grenadePouch: false,
+      opsHelmet: false
+    },
     stats: {
       gamesPlayed: 0,
       wins: 0,
@@ -54,7 +62,14 @@ export function registerAccount(username, nickname, password) {
 
   accounts.push(newAccount);
   saveAccounts(accounts);
-  return { username: newAccount.username, nickname: newAccount.nickname, stats: newAccount.stats, achievements: newAccount.achievements };
+  return { 
+    username: newAccount.username, 
+    nickname: newAccount.nickname, 
+    stats: newAccount.stats, 
+    achievements: newAccount.achievements,
+    coins: newAccount.coins,
+    inventory: newAccount.inventory
+  };
 }
 
 // 登入帳號
@@ -67,7 +82,14 @@ export function loginAccount(username, password) {
   if (!user || user.password !== password) {
     throw new Error('帳號或密碼錯誤！');
   }
-  return { username: user.username, nickname: user.nickname, stats: user.stats, achievements: user.achievements };
+  return { 
+    username: user.username, 
+    nickname: user.nickname, 
+    stats: user.stats, 
+    achievements: user.achievements,
+    coins: user.coins !== undefined ? user.coins : 0,
+    inventory: user.inventory || { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false }
+  };
 }
 
 // 修改暱稱
@@ -86,7 +108,9 @@ export function updateNickname(username, newNickname) {
     username: accounts[idx].username, 
     nickname: accounts[idx].nickname, 
     stats: accounts[idx].stats, 
-    achievements: accounts[idx].achievements 
+    achievements: accounts[idx].achievements,
+    coins: accounts[idx].coins !== undefined ? accounts[idx].coins : 0,
+    inventory: accounts[idx].inventory || { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false }
   };
 }
 
@@ -119,8 +143,126 @@ export function updateStats(username, runStats) {
   if (user.stats.wins >= 1) user.achievements.survivor = true;
   if (user.stats.shotsFired >= 500) user.achievements.heavyGunner = true;
 
+  // 計算本場獲得金幣
+  const killsCoins = runStats.kills * 50;
+  const victoryCoins = runStats.victory ? 300 : 0;
+  const headshotsCoins = runStats.headshots * 20;
+  const accuracyPct = runStats.shotsFired > 0 ? (runStats.shotsHit / runStats.shotsFired) : 0;
+  const accuracyCoins = Math.round(accuracyPct * 100);
+  const coinsEarned = killsCoins + victoryCoins + headshotsCoins + accuracyCoins;
+
+  // 累加金幣
+  user.coins = (user.coins !== undefined ? user.coins : 0) + coinsEarned;
+  if (!user.inventory) {
+    user.inventory = { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false };
+  }
+
   saveAccounts(accounts);
-  return { username: user.username, nickname: user.nickname, stats: user.stats, achievements: user.achievements };
+
+  return {
+    user: {
+      username: user.username,
+      nickname: user.nickname,
+      stats: user.stats,
+      achievements: user.achievements,
+      coins: user.coins,
+      inventory: user.inventory
+    },
+    coinsEarnedDetails: {
+      killsCoins,
+      victoryCoins,
+      headshotsCoins,
+      accuracyCoins,
+      total: coinsEarned
+    }
+  };
+}
+
+// 商店裝備清單
+export const SHOP_ITEMS = [
+  {
+    id: 'laserSight',
+    name: 'M4A1 雷射瞄準器',
+    englishName: 'M4A1 Laser Sight',
+    cost: 800,
+    description: '提升主武器 M4A1 的威力，普通射擊傷害由 25 提升至 30。',
+    category: 'weapon'
+  },
+  {
+    id: 'suppressor',
+    name: 'M9 戰術消音器',
+    englishName: 'M9 Tactical Suppressor',
+    cost: 500,
+    description: '提升副武器 M9 手槍的威力，普通射擊傷害由 15 提升至 20。',
+    category: 'weapon'
+  },
+  {
+    id: 'bodyArmor',
+    name: '重型防彈衣',
+    englishName: 'Heavy Body Armor',
+    cost: 1000,
+    description: '出擊時初始生命值（Health）由 100 提升至 150。',
+    category: 'armor'
+  },
+  {
+    id: 'grenadePouch',
+    name: '戰術手榴彈袋',
+    englishName: 'Tactical Grenade Pouch',
+    cost: 600,
+    description: '出擊時初始攜帶手榴彈數量由 2 顆提升至 3 顆。',
+    category: 'gear'
+  },
+  {
+    id: 'opsHelmet',
+    name: '特種作戰頭盔',
+    englishName: 'Special Ops Helmet',
+    cost: 1200,
+    description: '提供頭部防護，使受到敵軍子彈射擊的傷害減少 25%。',
+    category: 'armor'
+  }
+];
+
+// 購買裝備
+export function purchaseItem(username, itemId) {
+  const accounts = getAccounts();
+  const idx = accounts.findIndex(a => a.username === username);
+  if (idx === -1) {
+    throw new Error('找不到該帳號！');
+  }
+
+  const user = accounts[idx];
+  const item = SHOP_ITEMS.find(i => i.id === itemId);
+  if (!item) {
+    throw new Error('找不到該商品！');
+  }
+
+  // 初始化預設值
+  if (user.coins === undefined) user.coins = 0;
+  if (!user.inventory) {
+    user.inventory = { laserSight: false, suppressor: false, bodyArmor: false, grenadePouch: false, opsHelmet: false };
+  }
+
+  if (user.inventory[itemId]) {
+    throw new Error('您已擁有此裝備！');
+  }
+
+  if (user.coins < item.cost) {
+    throw new Error('Delta 金幣不足！');
+  }
+
+  // 扣除金幣並加入庫存
+  user.coins -= item.cost;
+  user.inventory[itemId] = true;
+
+  saveAccounts(accounts);
+  return { 
+    username: user.username, 
+    nickname: user.nickname, 
+    stats: user.stats, 
+    achievements: user.achievements,
+    coins: user.coins,
+    inventory: user.inventory
+  };
 }
 
 // 軍階對照表
