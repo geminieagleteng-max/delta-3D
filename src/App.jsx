@@ -30,6 +30,93 @@ class ProceduralAudio {
     this.ambientOsc = null;
     this.ambientGain = null;
     this.ambientLfo = null;
+    this.heliOsc = null;
+    this.heliLfo = null;
+    this.heliNoise = null;
+    this.heliGain = null;
+  }
+
+  startHelicopterSound() {
+    this.resume();
+    if (!this.ctx) return;
+    if (this.heliOsc) return;
+
+    try {
+      const humOsc = this.ctx.createOscillator();
+      const humFilter = this.ctx.createBiquadFilter();
+      humOsc.type = 'triangle';
+      humOsc.frequency.setValueAtTime(50, this.ctx.currentTime);
+      humFilter.type = 'lowpass';
+      humFilter.frequency.setValueAtTime(120, this.ctx.currentTime);
+      
+      const bufferSize = this.ctx.sampleRate * 2.0;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noiseSource = this.ctx.createBufferSource();
+      noiseSource.buffer = buffer;
+      noiseSource.loop = true;
+      
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(180, this.ctx.currentTime);
+      noiseFilter.Q.setValueAtTime(1.5, this.ctx.currentTime);
+
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      lfo.type = 'sawtooth';
+      lfo.frequency.setValueAtTime(10.5, this.ctx.currentTime);
+      lfoGain.gain.setValueAtTime(0.55, this.ctx.currentTime);
+
+      const modGain = this.ctx.createGain();
+      modGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(modGain.gain);
+
+      humOsc.connect(humFilter);
+      humFilter.connect(modGain);
+      
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(modGain);
+
+      const mainGain = this.ctx.createGain();
+      mainGain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+      mainGain.gain.linearRampToValueAtTime(0.18, this.ctx.currentTime + 10.0); // 10s fade in
+      
+      modGain.connect(mainGain);
+      mainGain.connect(this.ctx.destination);
+
+      lfo.start();
+      humOsc.start();
+      noiseSource.start();
+
+      this.heliOsc = humOsc;
+      this.heliLfo = lfo;
+      this.heliNoise = noiseSource;
+      this.heliGain = mainGain;
+    } catch (e) {
+      console.warn('Failed to start helicopter sound:', e);
+    }
+  }
+
+  stopHelicopterSound() {
+    if (this.heliOsc) {
+      try {
+        this.heliOsc.stop();
+        this.heliLfo.stop();
+        this.heliNoise.stop();
+        if (this.heliGain) {
+          this.heliGain.disconnect();
+        }
+      } catch (e) {}
+      this.heliOsc = null;
+      this.heliLfo = null;
+      this.heliNoise = null;
+      this.heliGain = null;
+    }
   }
 
   init() {
@@ -1145,6 +1232,233 @@ export function LootCrate({ position, name, isLooted, rotation = [0, 0, 0] }) {
         <boxGeometry args={[0.08, 0.16, 0.04]} />
         <meshStandardMaterial color="#222" roughness={0.3} metalness={0.9} />
       </mesh>
+    </group>
+  );
+}
+
+export function LandingPad({ active }) {
+  const [blinkOn, setBlinkOn] = useState(true);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      setBlinkOn((prev) => !prev);
+    }, 400);
+    return () => clearInterval(timer);
+  }, [active]);
+
+  if (!active) return null;
+
+  const lights = [];
+  const radius = 7.9;
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * Math.PI) / 4;
+    const x = radius * Math.cos(angle);
+    const z = radius * Math.sin(angle);
+    lights.push(
+      <group key={i} position={[x, 0.05, z]}>
+        <mesh>
+          <sphereGeometry args={[0.15, 8, 8]} />
+          <meshBasicMaterial color={blinkOn ? "#00ff66" : "#ff3333"} />
+        </mesh>
+        <pointLight color={blinkOn ? "#00ff66" : "#ff3333"} intensity={blinkOn ? 1.5 : 0.2} distance={3} />
+      </group>
+    );
+  }
+
+  return (
+    <group position={[0, 0.01, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <ringGeometry args={[0, 8.2, 32]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+      </mesh>
+
+      <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[7.8, 8.0, 32]} />
+        <meshBasicMaterial color="#ffcc00" />
+      </mesh>
+
+      <group position={[0, 0.006, 0]}>
+        <mesh position={[-1.3, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.6, 3.2]} />
+          <meshBasicMaterial color="#ffcc00" doubleSide />
+        </mesh>
+        <mesh position={[1.3, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.6, 3.2]} />
+          <meshBasicMaterial color="#ffcc00" doubleSide />
+        </mesh>
+        <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[2.0, 0.6]} />
+          <meshBasicMaterial color="#ffcc00" doubleSide />
+        </mesh>
+      </group>
+
+      {lights}
+    </group>
+  );
+}
+
+export function ExtractionHelicopter({ active, onLanded }) {
+  const groupRef = useRef();
+  const rotorRef = useRef();
+  const tailRotorRef = useRef();
+  
+  const flightProgress = useRef(0);
+  const landedCalled = useRef(false);
+
+  const startPos = new THREE.Vector3(-120, 80, -120);
+  const targetPos = new THREE.Vector3(0, 1.35, 0);
+
+  const [spotlightTarget] = useState(() => {
+    const obj = new THREE.Object3D();
+    obj.position.set(0, 0, 0);
+    return obj;
+  });
+
+  useEffect(() => {
+    if (!active) {
+      flightProgress.current = 0;
+      landedCalled.current = false;
+    }
+  }, [active]);
+
+  useFrame((state, delta) => {
+    if (!active) return;
+
+    const safeDelta = Math.min(delta, 0.1);
+
+    const rotorSpeed = 22.0;
+    if (rotorRef.current) {
+      rotorRef.current.rotation.y += rotorSpeed * safeDelta;
+    }
+    if (tailRotorRef.current) {
+      tailRotorRef.current.rotation.x += rotorSpeed * safeDelta;
+    }
+
+    if (flightProgress.current < 1.0) {
+      flightProgress.current = Math.min(1.0, flightProgress.current + safeDelta / 10.0);
+      
+      const t = flightProgress.current;
+      const easeT = t * (2 - t);
+      
+      const currentPos = new THREE.Vector3().lerpVectors(startPos, targetPos, easeT);
+      if (groupRef.current) {
+        groupRef.current.position.copy(currentPos);
+        
+        const tilt = (1.0 - easeT) * 0.15;
+        groupRef.current.rotation.x = tilt;
+        
+        const yaw = (1.0 - easeT) * (Math.PI / 4);
+        groupRef.current.rotation.y = yaw;
+      }
+
+      if (flightProgress.current >= 1.0 && !landedCalled.current) {
+        landedCalled.current = true;
+        onLanded();
+      }
+    } else {
+      if (groupRef.current) {
+        groupRef.current.position.copy(targetPos);
+        groupRef.current.rotation.set(0, 0, 0);
+        
+        const time = state.clock.getElapsedTime();
+        groupRef.current.position.y = targetPos.y + Math.sin(time * 20.0) * 0.008;
+      }
+    }
+  });
+
+  if (!active) return null;
+
+  return (
+    <group ref={groupRef}>
+      <primitive object={spotlightTarget} />
+      
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.8, 1.8, 5.2]} />
+        <meshStandardMaterial color="#2d3829" roughness={0.8} metalness={0.2} />
+      </mesh>
+
+      <mesh position={[0, 0.25, 2.3]} castShadow>
+        <boxGeometry args={[1.5, 1.1, 1.4]} />
+        <meshStandardMaterial color="#00ffdd" transparent opacity={0.5} roughness={0.1} metalness={0.9} />
+      </mesh>
+
+      <mesh position={[0, 0.3, -3.2]} castShadow>
+        <cylinderGeometry args={[0.2, 0.45, 3.6, 8]} rotation={[Math.PI / 2, 0, 0]} />
+        <meshStandardMaterial color="#2d3829" roughness={0.8} />
+      </mesh>
+
+      <mesh position={[0, 1.0, -4.8]} castShadow>
+        <boxGeometry args={[0.15, 1.5, 0.8]} />
+        <meshStandardMaterial color="#222b1e" />
+      </mesh>
+
+      <mesh position={[0, 1.05, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.08, 0.5, 8]} />
+        <meshStandardMaterial color="#111" metalness={0.8} />
+      </mesh>
+
+      <group ref={rotorRef} position={[0, 1.3, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[6.5, 0.02, 0.25]} />
+          <meshStandardMaterial color="#151515" roughness={0.9} />
+        </mesh>
+        <mesh castShadow rotation={[0, Math.PI / 2, 0]}>
+          <boxGeometry args={[6.5, 0.02, 0.25]} />
+          <meshStandardMaterial color="#151515" roughness={0.9} />
+        </mesh>
+      </group>
+
+      <group ref={tailRotorRef} position={[0.22, 1.3, -4.8]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.02, 1.4, 0.12]} />
+          <meshStandardMaterial color="#111" />
+        </mesh>
+        <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
+          <boxGeometry args={[0.02, 1.4, 0.12]} />
+          <meshStandardMaterial color="#111" />
+        </mesh>
+      </group>
+
+      <group position={[-1.0, -1.0, 0]}>
+        <mesh position={[0, 0.2, 1.2]} rotation={[0, 0, -0.2]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.7]} />
+          <meshStandardMaterial color="#1a1a1a" />
+        </mesh>
+        <mesh position={[0, 0.2, -1.2]} rotation={[0, 0, -0.2]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.7]} />
+          <meshStandardMaterial color="#1a1a1a" />
+        </mesh>
+        <mesh position={[0, -0.15, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.08, 0.08, 4.8]} />
+          <meshStandardMaterial color="#111" metalness={0.7} />
+        </mesh>
+      </group>
+
+      <group position={[1.0, -1.0, 0]}>
+        <mesh position={[0, 0.2, 1.2]} rotation={[0, 0, 0.2]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.7]} />
+          <meshStandardMaterial color="#1a1a1a" />
+        </mesh>
+        <mesh position={[0, 0.2, -1.2]} rotation={[0, 0, 0.2]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.7]} />
+          <meshStandardMaterial color="#1a1a1a" />
+        </mesh>
+        <mesh position={[0, -0.15, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.08, 0.08, 4.8]} />
+          <meshStandardMaterial color="#111" metalness={0.7} />
+        </mesh>
+      </group>
+
+      <spotLight
+        position={[0, -0.8, 1.5]}
+        angle={0.5}
+        penumbra={0.6}
+        intensity={6.0}
+        color="#00ffdd"
+        castShadow
+        target={spotlightTarget}
+      />
     </group>
   );
 }
@@ -3154,6 +3468,11 @@ function PlayerController({
   lootedContainers,
   startLooting,
   stopLooting,
+  extractionActive,
+  extractionState,
+  setExtractionCountdown,
+  setIsPlayerInExtractionZone,
+  onExtractSuccess,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -3216,6 +3535,29 @@ function PlayerController({
   useEffect(() => {
     nearContainerRef.current = nearContainer;
   }, [nearContainer]);
+
+  const extractionActiveRef = useRef(extractionActive);
+  const extractionStateRef = useRef(extractionState);
+  const extractionCountdownRef = useRef(5.0);
+  const onExtractSuccessRef = useRef(onExtractSuccess);
+
+  useEffect(() => {
+    extractionActiveRef.current = extractionActive;
+  }, [extractionActive]);
+
+  useEffect(() => {
+    extractionStateRef.current = extractionState;
+  }, [extractionState]);
+
+  useEffect(() => {
+    onExtractSuccessRef.current = onExtractSuccess;
+  }, [onExtractSuccess]);
+
+  useEffect(() => {
+    if (!extractionActive) {
+      extractionCountdownRef.current = 5.0;
+    }
+  }, [extractionActive]);
  
   // 行動端滑動看視角 Refs
   const lookTouchId = useRef(null);
@@ -3787,6 +4129,73 @@ function PlayerController({
     }
 
     // ------------------------------------------
+    // 6.X 受到傷害後的環形方向指示器實時更新
+    // ------------------------------------------
+    const damageArrows = document.querySelectorAll('.damage-indicator-arrow');
+    if (damageArrows.length > 0) {
+      damageArrows.forEach((el) => {
+        const xStr = el.getAttribute('data-x');
+        const zStr = el.getAttribute('data-z');
+        if (xStr && zStr) {
+          const ax = parseFloat(xStr);
+          const az = parseFloat(zStr);
+          
+          const fwd = new THREE.Vector3();
+          state.camera.getWorldDirection(fwd);
+          fwd.y = 0;
+          fwd.normalize();
+          
+          const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+          
+          const playerPos = state.camera.position.clone();
+          playerPos.y = 0;
+          
+          const toAttacker = new THREE.Vector3(ax, 0, az).sub(playerPos);
+          toAttacker.y = 0;
+          toAttacker.normalize();
+          
+          const fwdDot = toAttacker.dot(fwd);
+          const rightDot = toAttacker.dot(right);
+          
+          const relativeAngle = Math.atan2(rightDot, fwdDot);
+          const angleDeg = (relativeAngle * 180) / Math.PI;
+          
+          el.style.transform = `translate(-50%, -50%) rotate(${angleDeg}deg) translateY(-100px)`;
+        }
+      });
+    }
+
+    // ------------------------------------------
+    // 6.X 直升機撤離 LZ 範圍與倒數計時判定
+    // ------------------------------------------
+    if (extractionActiveRef.current && extractionStateRef.current === 'landed') {
+      const distToLZ = Math.sqrt(state.camera.position.x * state.camera.position.x + state.camera.position.z * state.camera.position.z);
+      if (distToLZ < 6.0) {
+        setIsPlayerInExtractionZone(true);
+        extractionCountdownRef.current = Math.max(0, extractionCountdownRef.current - safeDelta);
+        setExtractionCountdown(Math.max(0, Math.ceil(extractionCountdownRef.current * 10) / 10));
+        
+        if (extractionCountdownRef.current <= 0) {
+          if (onExtractSuccessRef.current) {
+            onExtractSuccessRef.current();
+          }
+        }
+      } else {
+        setIsPlayerInExtractionZone(false);
+        if (extractionCountdownRef.current !== 5.0) {
+          extractionCountdownRef.current = 5.0;
+          setExtractionCountdown(5.0);
+        }
+      }
+    } else {
+      setIsPlayerInExtractionZone(false);
+      if (extractionCountdownRef.current !== 5.0) {
+        extractionCountdownRef.current = 5.0;
+        setExtractionCountdown(5.0);
+      }
+    }
+
+    // ------------------------------------------
     // 連發射擊邏輯 (全自動模式下按住滑鼠)
     // ------------------------------------------
     if (fireModeRef.current === 'auto' && isMouseDown.current) {
@@ -4179,12 +4588,12 @@ export default function App() {
   const reloadTimeoutRef = useRef(null);
 
   // 衍生狀態
-  const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
-  const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+  const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
+  const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
   const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
-  const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
+  const weaponConfig = activeWeaponId ? (WEAPON_CONFIGS[activeWeaponId] || null) : null;
 
-  const fireMode = weaponConfig.fireMode === 'auto' ? (activeWeapon === 'primary' ? primaryFireMode : 'semi') : 'semi';
+  const fireMode = weaponConfig ? (weaponConfig.fireMode === 'auto' ? (activeWeapon === 'primary' ? primaryFireMode : 'semi') : 'semi') : 'semi';
   const ammo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
   const setAmmo = activeWeapon === 'primary' ? setPrimaryAmmo : setSecondaryAmmo;
 
@@ -4234,6 +4643,12 @@ export default function App() {
   useEffect(() => {
     backpackRef.current = backpack;
   }, [backpack]);
+
+  // 戰術直升機撤離狀態
+  const [extractionActive, setExtractionActive] = useState(false);
+  const [extractionState, setExtractionState] = useState('idle'); // 'idle' | 'incoming' | 'landed' | 'extracting' | 'extracted'
+  const [extractionCountdown, setExtractionCountdown] = useState(5.0);
+  const [isPlayerInExtractionZone, setIsPlayerInExtractionZone] = useState(false);
 
   // 敵人、粒子特效、彈孔貼紙狀態
   const [enemies, setEnemies] = useState(() => spawnEnemies(false));
@@ -4339,6 +4754,10 @@ export default function App() {
   // ==========================================
   const triggerWeaponSwitch = () => {
     if (gameState !== 'active' || isHealing) return;
+    const primaryId = currentUser?.equipped?.primaryWeapon || null;
+    const secondaryId = currentUser?.equipped?.secondaryWeapon || null;
+    if (!primaryId || !secondaryId) return; // Cannot switch if one of the slots is empty!
+
     if (isReloading) {
       setIsReloading(false);
       if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
@@ -4350,9 +4769,10 @@ export default function App() {
   const triggerReload = () => {
     if (gameState !== 'active' || isReloading || isHealing) return;
 
-    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
-    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
     const activeWeaponId = activeWeapon === 'primary' ? primaryWeaponId : secondaryWeaponId;
+    if (!activeWeaponId) return; // cannot reload if no weapon!
     const weaponConfig = WEAPON_CONFIGS[activeWeaponId] || WEAPON_CONFIGS.m4a1;
 
     const currentAmmo = activeWeapon === 'primary' ? primaryAmmo : secondaryAmmo;
@@ -4522,6 +4942,7 @@ export default function App() {
   const triggerFireMode = () => {
     if (gameState !== 'active') return;
     if (activeWeapon === 'secondary') return; // M9 鎖定半自動
+    if (!currentUser?.equipped?.primaryWeapon) return; // Cannot switch if no primary weapon!
     setPrimaryFireMode((prev) => {
       const next = prev === 'auto' ? 'semi' : 'auto';
       if (isTutorial) triggerTutorialStep('fireMode');
@@ -4939,6 +5360,20 @@ export default function App() {
     }
   };
 
+  // 成功撤離處理
+  const handleExtractSuccess = () => {
+    setExtractionState('extracted');
+    soundManager.stopHelicopterSound();
+    soundManager.stopAmbient();
+    if (device === 'mobile') {
+      setIsLocked(false);
+    } else if (controlsRef.current) {
+      controlsRef.current.unlock();
+    }
+    saveEndgameStats(true, eliminated); // 勝利，儲存戰績
+    setGameState('victory');
+  };
+
   // 點擊「DEPLOY」按鈕進入遊戲並鎖定滑鼠
   const handleDeploy = () => {
     setEndgameStats(null);
@@ -4953,6 +5388,11 @@ export default function App() {
     setIsLooting(false);
     setLootProgress(0);
     setLootPopup(null);
+    setDamageIndicators([]);
+    setExtractionActive(false);
+    setExtractionState('idle');
+    setExtractionCountdown(5.0);
+    setIsPlayerInExtractionZone(false);
 
     const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
     setMedkits(initialMedkits);
@@ -4963,10 +5403,17 @@ export default function App() {
     setHealth(hasArmor ? 150 : 100);
     setGrenades(equippedGrenades);
 
-    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
-    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
-    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
-    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
+    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    if (primaryWeaponId) {
+      setActiveWeapon('primary');
+    } else if (secondaryWeaponId) {
+      setActiveWeapon('secondary');
+    } else {
+      setActiveWeapon('primary');
+    }
     setEnemies(spawnEnemies(false));
 
     setGameState('active');
@@ -5261,14 +5708,12 @@ export default function App() {
           setWaveCountdown(5);
           addKillFeedEntry(`第 ${currentWave} 波已清除！下一波將在 5 秒後開始...`, 'system');
         } else {
-          setGameState('victory');
-          soundManager.stopAmbient(); // 勝利時關閉背景環境音
-          if (device === 'mobile') {
-            setIsLocked(false);
-          } else if (controlsRef.current) {
-            controlsRef.current.unlock();
-          }
-          saveEndgameStats(true, eliminated + 1); // 儲存勝利戰績
+          // Wave 3 cleared! Trigger helicopter evacuation
+          setExtractionActive(true);
+          setExtractionState('incoming');
+          setExtractionCountdown(5.0);
+          addKillFeedEntry('所有防守波次已清除！撤離直升機正在接近，趕往地圖中心 LZ 準備撤離！', 'system');
+          soundManager.startHelicopterSound();
         }
       }
       return remaining;
@@ -5324,6 +5769,7 @@ export default function App() {
       const newIndicator = {
         id: Math.random(),
         angle: angleDeg,
+        attackerPos: attackerPos.clone(),
         createdAt: Date.now()
       };
       setDamageIndicators((prev) => [...prev, newIndicator]);
@@ -5344,6 +5790,12 @@ export default function App() {
     setIsLooting(false);
     setLootProgress(0);
     setLootPopup(null);
+    setDamageIndicators([]);
+    setExtractionActive(false);
+    setExtractionState('idle');
+    setExtractionCountdown(5.0);
+    setIsPlayerInExtractionZone(false);
+    soundManager.stopHelicopterSound();
 
     const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
     setMedkits(initialMedkits);
@@ -5352,11 +5804,17 @@ export default function App() {
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
     setHealth(hasArmor ? 150 : 100);
-    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
-    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
-    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
-    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
-    setActiveWeapon('primary');
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
+    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    if (primaryWeaponId) {
+      setActiveWeapon('primary');
+    } else if (secondaryWeaponId) {
+      setActiveWeapon('secondary');
+    } else {
+      setActiveWeapon('primary');
+    }
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
@@ -5465,6 +5923,11 @@ export default function App() {
     setIsLooting(false);
     setLootProgress(0);
     setLootPopup(null);
+    setDamageIndicators([]);
+    setExtractionActive(false);
+    setExtractionState('idle');
+    setExtractionCountdown(5.0);
+    setIsPlayerInExtractionZone(false);
     
     const initialMedkits = currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2;
     setMedkits(initialMedkits);
@@ -5473,11 +5936,17 @@ export default function App() {
     const hasArmor = currentUser?.equipped?.bodyArmor;
     const equippedGrenades = currentUser?.equipped?.grenades !== undefined ? currentUser.equipped.grenades : 2;
     setHealth(hasArmor ? 150 : 100);
-    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || 'm4a1';
-    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || 'm9';
-    setPrimaryAmmo(WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0);
-    setSecondaryAmmo(WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0);
-    setActiveWeapon('primary');
+    const primaryWeaponId = currentUser?.equipped?.primaryWeapon || null;
+    const secondaryWeaponId = currentUser?.equipped?.secondaryWeapon || null;
+    setPrimaryAmmo(primaryWeaponId ? (WEAPON_CONFIGS[primaryWeaponId]?.maxAmmo || 0) : 0);
+    setSecondaryAmmo(secondaryWeaponId ? (WEAPON_CONFIGS[secondaryWeaponId]?.maxAmmo || 0) : 0);
+    if (primaryWeaponId) {
+      setActiveWeapon('primary');
+    } else if (secondaryWeaponId) {
+      setActiveWeapon('secondary');
+    } else {
+      setActiveWeapon('primary');
+    }
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     setEliminated(0);
@@ -5643,6 +6112,8 @@ export default function App() {
               <div
                 key={ind.id}
                 className="damage-indicator-arrow"
+                data-x={ind.attackerPos?.x}
+                data-z={ind.attackerPos?.z}
                 style={{
                   transform: `translate(-50%, -50%) rotate(${ind.angle}deg) translateY(-100px)`,
                   opacity: opacity,
@@ -6930,22 +7401,26 @@ export default function App() {
                   <span className="hud-large-num" style={{ color: '#ffaa00', fontSize: '1.25rem', height: '2.7rem', display: 'flex', alignItems: 'center' }}>
                     RELOADING...
                   </span>
-                ) : (
+                ) : weaponConfig ? (
                   <>
                     <span className="hud-large-num" style={{ color: ammo <= Math.ceil(weaponConfig.maxAmmo * 0.2) ? '#ffaa00' : 'inherit' }}>
                       {ammo}
                     </span>
                     <span className="hud-small-label">/ {weaponConfig.maxAmmo} {device === 'pc' ? '(R)' : ''}</span>
                   </>
+                ) : (
+                  <span className="hud-large-num" style={{ color: '#888' }}>
+                    0 / 0
+                  </span>
                 )}
               </div>
               <div className="hud-sys-status" style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                <span>WEAPON: <span className="sys-active" style={{ color: '#00ff66', fontWeight: 'bold' }}>{weaponConfig.name}</span> <span style={{ color: ammo === 0 ? '#ffaa00' : '#88a888', fontSize: '0.8rem' }}>({ammo === 0 ? 'EMPTY' : 'READY'})</span></span>
+                <span>WEAPON: <span className="sys-active" style={{ color: weaponConfig ? '#00ff66' : '#888', fontWeight: 'bold' }}>{weaponConfig ? weaponConfig.name : 'UNARMED'}</span> {weaponConfig && <span style={{ color: ammo === 0 ? '#ffaa00' : '#88a888', fontSize: '0.8rem' }}>({ammo === 0 ? 'EMPTY' : 'READY'})</span>}</span>
                 <span 
-                  onClick={device === 'mobile' ? triggerFireMode : undefined} 
-                  style={{ cursor: device === 'mobile' ? 'pointer' : 'default', userSelect: 'none' }}
+                  onClick={device === 'mobile' && weaponConfig ? triggerFireMode : undefined} 
+                  style={{ cursor: device === 'mobile' && weaponConfig ? 'pointer' : 'default', userSelect: 'none' }}
                 >
-                  MODE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{fireMode === 'auto' ? 'AUTO' : 'SEMI'}{device === 'pc' ? ' [B]' : ' ⇦'}</span>
+                  MODE: <span style={{ color: weaponConfig ? '#00ff66' : '#888', fontWeight: 'bold' }}>{weaponConfig ? (fireMode === 'auto' ? (activeWeapon === 'primary' ? primaryFireMode : 'semi') : 'semi') : 'N/A'}{weaponConfig && device === 'pc' ? ' [B]' : weaponConfig && device === 'mobile' ? ' ⇦' : ''}</span>
                 </span>
               </div>
             </div>
@@ -7004,6 +7479,34 @@ export default function App() {
           <div className="wave-countdown-title">NEXT WAVE IN</div>
           <div className="wave-countdown-number">{waveCountdown}</div>
           <div className="wave-countdown-subtitle">PREPARE FOR CONTACT</div>
+        </div>
+      )}
+
+      {/* 戰術撤離直升機 HUD 覆蓋層 */}
+      {gameState === 'active' && extractionActive && (
+        <div className="evac-countdown-overlay">
+          {extractionState === 'incoming' && (
+            <>
+              <div className="evac-countdown-title flashing-yellow">EVACUATION HELICOPTER INBOUND</div>
+              <div className="evac-countdown-subtitle">LZ CLEARANCE IN PROGRESS | PREPARE FOR EVAC</div>
+            </>
+          )}
+          {extractionState === 'landed' && (
+            !isPlayerInExtractionZone ? (
+              <>
+                <div className="evac-countdown-title flashing-green">LZ ESTABLISHED</div>
+                <div className="evac-countdown-subtitle">PROCEED TO THE EXTRACTION ZONE AT CENTER [0, 0]</div>
+              </>
+            ) : (
+              <>
+                <div className="evac-countdown-title">EXTRACTION IN PROGRESS</div>
+                <div className="evac-countdown-bar-container">
+                  <div className="evac-countdown-bar" style={{ width: `${((5.0 - extractionCountdown) / 5.0) * 100}%` }} />
+                </div>
+                <div className="evac-countdown-subtitle">HOLD POSITION FOR {extractionCountdown.toFixed(1)}s</div>
+              </>
+            )
+          )}
         </div>
       )}
 
@@ -7066,10 +7569,16 @@ export default function App() {
           {/* 地面與環境防禦工事 */}
           <Ground />
           <PerimeterWalls />
-          <TacticalAssets />
+          <TacticalAssets hideCenter={extractionActive} />
+
+          {/* 3D 戰術直升機撤離點 */}
+          <LandingPad active={extractionActive} />
+          <ExtractionHelicopter active={extractionActive} onLanded={() => setExtractionState('landed')} />
 
           {/* 3D 戰術補給站 */}
-          <AmmoSupplyStation position={[0, 0, -0.8]} active={ammoCooldown === 0} />
+          {!extractionActive && (
+            <AmmoSupplyStation position={[0, 0, -0.8]} active={ammoCooldown === 0} />
+          )}
           <MedicalSupplyStation position={[3.0, 0, 92.0]} active={medCooldown === 0} />
 
           {/* 3D 戰術物資搜刮箱 */}
@@ -7178,6 +7687,11 @@ export default function App() {
             lootedContainers={lootedContainers}
             startLooting={startLooting}
             stopLooting={stopLooting}
+            extractionActive={extractionActive}
+            extractionState={extractionState}
+            setExtractionCountdown={setExtractionCountdown}
+            setIsPlayerInExtractionZone={setIsPlayerInExtractionZone}
+            onExtractSuccess={handleExtractSuccess}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}

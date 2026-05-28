@@ -1949,3 +1949,72 @@ html, body {
   box-shadow: 0 0 15px var(--hud-amber);
 }
 
+/* ==========================================
+   直升機戰術撤離 HUD 樣式 Helicopter Evac
+   ========================================== */
+.evac-countdown-overlay {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+  font-family: inherit;
+  width: 90%;
+  max-width: 500px;
+}
+
+.evac-countdown-title {
+  font-size: 1.6rem;
+  letter-spacing: 4px;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(0, 255, 102, 0.4);
+}
+
+.evac-countdown-title.flashing-yellow {
+  color: #ffcc00;
+  text-shadow: 0 0 15px rgba(255, 204, 0, 0.6);
+  animation: flash-yellow-anim 1s infinite alternate;
+}
+
+.evac-countdown-title.flashing-green {
+  color: #00ff66;
+  text-shadow: 0 0 15px rgba(0, 255, 102, 0.6);
+  animation: flash-green-anim 1s infinite alternate;
+}
+
+.evac-countdown-subtitle {
+  font-size: 0.95rem;
+  letter-spacing: 2px;
+  color: #a8b8a8;
+  margin-top: 12px;
+}
+
+.evac-countdown-bar-container {
+  width: 100%;
+  height: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #00ff66;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 18px 0;
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+}
+
+.evac-countdown-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #009944, #00ff66);
+  box-shadow: 0 0 12px #00ff66;
+  transition: width 0.1s linear;
+}
+
+@keyframes flash-yellow-anim {
+  from { opacity: 0.5; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.02); }
+}
+
+@keyframes flash-green-anim {
+  from { opacity: 0.5; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.02); }
+}
