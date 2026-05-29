@@ -12,6 +12,11 @@
   user-select: none;
 }
 
+html, body, #root, .canvas-container, .mobile-controls {
+  touch-action: none !important;
+  -webkit-text-size-adjust: none;
+}
+
 html, body {
   margin: 0;
   padding: 0;

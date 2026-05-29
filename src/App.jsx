@@ -5799,6 +5799,23 @@ export default function App() {
   const [hurtActive, setHurtActive] = useState(false);
   const [shieldBlockActive, setShieldBlockActive] = useState(false);
 
+  // 阻止行動端瀏覽器預設的多指 pinch 縮放手勢
+  useEffect(() => {
+    const preventPinchZoom = (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchstart', preventPinchZoom, { passive: false });
+    document.addEventListener('touchmove', preventPinchZoom, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchstart', preventPinchZoom);
+      document.removeEventListener('touchmove', preventPinchZoom);
+    };
+  }, []);
+
   // 局內波次與物資搜刮狀態
   const [currentWave, setCurrentWave] = useState(1);
   const [waveCountdown, setWaveCountdown] = useState(0);
