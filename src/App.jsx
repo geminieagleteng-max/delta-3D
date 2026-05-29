@@ -10004,7 +10004,7 @@ export default function App() {
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
-          {device !== 'mobile' && gameState === 'active' && (
+          {device !== 'mobile' && gameState === 'active' && !isLootModalOpen && (
             <PointerLockControls
               ref={controlsRef}
               onLock={() => setIsLocked(true)}
