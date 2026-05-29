@@ -3046,8 +3046,8 @@ function SubwayFluorescentLight({ position }) {
         <boxGeometry args={[1.4, 0.02, 0.18]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
-      {/* 點光源 */}
-      <pointLight color="#ffffff" intensity={2.0} distance={18} decay={1.8} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+      {/* 點光源：關閉 shadow casting 以防崩潰，並提高強度 */}
+      <pointLight color="#ffffff" intensity={12.0} distance={20} decay={1.5} />
     </group>
   );
 }
@@ -10608,14 +10608,14 @@ export default function App() {
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
           <ambientLight 
-            intensity={selectedMap === 'facility' ? 0.15 : 0.5} 
-            color={selectedMap === 'facility' ? '#0c1015' : '#ffffff'} 
+            intensity={selectedMap === 'facility' ? 0.85 : 0.5} 
+            color={selectedMap === 'facility' ? '#f5f6fa' : '#ffffff'} 
           />
           <directionalLight
-            castShadow
+            castShadow={selectedMap !== 'facility'}
             position={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]}
-            intensity={selectedMap === 'facility' ? 0.1 : 1.5}
-            color={selectedMap === 'facility' ? '#6b829c' : '#ffffff'}
+            intensity={selectedMap === 'facility' ? 0.8 : 1.5}
+            color="#ffffff"
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
             shadow-camera-near={0.5}

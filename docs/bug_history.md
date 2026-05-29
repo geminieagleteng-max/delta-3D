@@ -138,11 +138,18 @@
 
 ### 12. 室內地圖全黑與 WebGL Context Lost 崩潰問題 (WebGL Context Lost & Black Screen Bug)
 *   **Bug 症狀**：選中地鐵通道（INDOOR FACILITY）地圖部署進入實戰後，畫面中央是一片死黑，看不到任何 3D 場景、日光燈管或磁磚，但 2D HUD 疊加層（血條、彈藥、控制台）顯示正常。
-*   **原因分析**：在地圖視覺元件「出口 8 指示牌 (`ExitSign`)」與「牆面海報 (`WallPoster`)」中使用了 Drei 庫的 `<Html transform>` 標籤。該 CSS3D 混合機制在特定瀏覽器環境或 Vite 熱更新中會發生底層衝突，直接導致 WebGL Context 丟失 (Context Lost) 或是 JS 渲染管道崩潰，使整個 Canvas 中斷渲染呈全黑。這也會導致日光燈管等點光源無法加載，場景無照明。
-*   **修復方案**：將 `ExitSign` 與 `WallPoster` 重構為 **100% 穩定的「純 3D Low-poly 幾何模型」版本**。利用 `torusGeometry` 和 `boxGeometry` 拼接出立體的指示牌箭頭「↑」與數字「8」，並在指示牌上使用 `emissive` 自發光材質；利用簡單的 3D 幾何色塊拼接在彩色面板表面模擬海報圖案，徹底移除了 Canvas 內部的 HTML 混合渲染。
+*   **原因分析**：
+    1.  **Drei HTML 標籤衝突**：在地圖視覺元件「出口 8 指示牌 (`ExitSign`)」與「牆面海報 (`WallPoster`)」中使用了 Drei 庫的 `<Html transform>` 標籤，與 Canvas 內部的 Three.js CSS3DRenderer 發生底層衝突，在某些瀏覽器環境或 Vite 熱更新中會直接導致 WebGL Context 丟失 (Context Lost) 或是 JS 渲染管道崩潰，Canvas 黑屏。
+    2.  **超額點光源陰影計算 (Shadow Map Exhaustion)**：在天花板上縱向渲染了 15 盞 `SubwayFluorescentLight` 日光燈管，且每盞燈的 `pointLight` 都啟用了 `castShadow`。**WebGL/Three.js 限制了硬體能同時渲染的 shadow-casting 光源數量**，15 個同時陰影投影的點光源直接擠爆了 GPU 的 shadow map 緩衝區，導致瀏覽器強制殺死 WebGL context。
+    3.  **天花板物理遮光**：地鐵加蓋天花板後，`directionalLight` 的影子投射會使太陽光被天花板完全遮蔽，而地鐵內部的點光源如果崩潰或強度太低（例如原先設為 2.0），在陰影籠罩下內部就呈現一片死黑。
+*   **修復方案**：
+    - **純 3D 幾何模型重構**：將 `ExitSign` 與 `WallPoster` 改寫為純 3D 模型，利用 `torusGeometry` 和 `boxGeometry` 拼出指示牌箭頭「↑」與數字「8」，並在指示牌上使用 `emissive` 自發光材質，徹底移除 HTML 標籤。
+    - **點光源陰影優化**：關閉 `SubwayFluorescentLight` 點光源的 `castShadow` 屬性，防範 context lost 崩潰並極大提升幀率；同時將其強度提升至物理光照模型下合理的 **`12.0`**（衰減 `decay` 設為 `1.5`），照亮地面。
+    - **全域光源優化**：在地鐵地圖下將 `ambientLight` 強度大幅提升至 **`0.85`**（暖灰白 `#f5f6fa`）；將 `directionalLight` 的 `castShadow` 設為 `false`，強度調整為 `0.8`，使環境光均勻穿透照射通道內部。
 *   **🛡️ 預防檢修清單 (Checklist)**：
     - [ ] 進入地鐵通道（INDOOR FACILITY）地圖後，3D 場景是否能正常加載，通道內是否明亮且可見磁磚牆面、發光日光燈管與 Exit 8 指示牌？
     - [ ] 為了保證 WebGL 的最高效能與穩定性，是否**嚴禁**在 R3F 的 `<Canvas>` 內部的常規靜態 3D 物件中混用帶有 `transform` 的 `<Html>` 元件（浮動文字如傷害飄字等非靜態物件除外）？
+    - [ ] 場景中若使用多個點光源 (pointLight)，是否已**關閉**它們的 `castShadow` 屬性？（全域 directionalLight 除外，以防止顯卡陰影貼圖緩衝區崩潰）。
 
 ---
 
