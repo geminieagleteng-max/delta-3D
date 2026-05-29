@@ -3037,13 +3037,6 @@ function Ground({ mapType }) {
           </mesh>
           {/* 地鐵地板磁磚網格 */}
           <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[0, 0.001, 0]} />
-          
-          {/* 天花板 (屋頂) */}
-          <mesh position={[0, 5, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[8, 240]} />
-            <meshStandardMaterial color="#eceff1" roughness={0.9} />
-          </mesh>
-          <gridHelper args={[240, 120, '#b0bec5', '#cfd8dc']} position={[0, 4.98, 0]} />
 
           {/* 兩側的白色磁磚牆壁 */}
           {/* 左磁磚牆 */}
@@ -3051,14 +3044,12 @@ function Ground({ mapType }) {
             <planeGeometry args={[240, 5]} />
             <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
           </mesh>
-          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[-3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
 
           {/* 右磁磚牆 */}
           <mesh position={[4, 2.5, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow castShadow>
             <planeGeometry args={[240, 5]} />
             <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
           </mesh>
-          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
         </>
       )}
 
@@ -3937,36 +3928,7 @@ function OutpostAssets() {
 function FacilityAssets({ hideCenter }) {
   return (
     <group>
-      {/* 天花板上的日光燈管 (一整排縱向排列，提供明亮光影) */}
-      {[-105, -90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90, 105].map((z, idx) => (
-        <SubwayFluorescentLight key={idx} position={[0, 4.9, z]} />
-      ))}
-
-      {/* 經典 Exit 8 黃色指示牌 */}
-      <ExitSign position={[0, 4.3, 0]} />
-
-      {/* 左右磁磚牆壁上的廣告海報 */}
-      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} bgColor="#2980b9" />
-      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} bgColor="#27ae60" />
-      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} bgColor="#c0392b" />
-      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} bgColor="#8e44ad" />
-      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} bgColor="#d35400" />
-      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} bgColor="#16a085" />
-
-      {/* 沿著通道兩側擺放自動販賣機與垃圾桶 (適度填充空間並作為戰術掩體) */}
-      <VendingMachine position={[-3.4, 1.0, -60]} rotation={[0, Math.PI / 2, 0]} />
-      <TrashCan position={[-3.4, 0.4, -58]} />
-
-      <VendingMachine position={[3.4, 1.0, -25]} rotation={[0, -Math.PI / 2, 0]} />
-      <TrashCan position={[3.4, 0.4, -27]} />
-
-      <VendingMachine position={[-3.4, 1.0, 30]} rotation={[0, Math.PI / 2, 0]} />
-      <TrashCan position={[-3.4, 0.4, 32]} />
-
-      <VendingMachine position={[3.4, 1.0, 70]} rotation={[0, -Math.PI / 2, 0]} />
-      <TrashCan position={[3.4, 0.4, 68]} />
-
-      {/* 通道中散落的軍事箱體與沙包掩體，提供額外的 CQB 槍戰遮擋 */}
+      {/* 僅渲染幾個軍事箱，簡化排查 */}
       <MilitaryCrate position={[-1.8, 0.6, -40]} rotation={[0, 0.3, 0]} />
       <MilitaryCrate position={[1.5, 0.6, -10]} rotation={[0, -0.2, 0]} />
       <MilitaryCrate position={[-1.2, 0.6, 15]} rotation={[0, 0.5, 0]} />
@@ -10693,14 +10655,11 @@ export default function App() {
       <div className="canvas-container">
         <CanvasErrorBoundary>
           <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
-          <ambientLight 
-            intensity={selectedMap === 'facility' ? 0.85 : 0.5} 
-            color={selectedMap === 'facility' ? '#f5f6fa' : '#ffffff'} 
-          />
+          <ambientLight intensity={0.6} color="#ffffff" />
           <directionalLight
-            castShadow={selectedMap !== 'facility'}
-            position={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]}
-            intensity={selectedMap === 'facility' ? 0.8 : 1.5}
+            castShadow
+            position={[50, 80, 50]}
+            intensity={1.5}
             color="#ffffff"
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
@@ -10712,10 +10671,10 @@ export default function App() {
             shadow-camera-bottom={-70}
           />
           <Sky 
-            sunPosition={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]} 
+            sunPosition={[50, 80, 50]} 
             distance={450000} 
-            turbidity={selectedMap === 'facility' ? 10 : 2}
-            rayleigh={selectedMap === 'facility' ? 4 : 1}
+            turbidity={2}
+            rayleigh={1}
           />
 
           {/* 地面與環境防禦工事 */}
