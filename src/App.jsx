@@ -3717,9 +3717,9 @@ function SubwayFluorescentLight({ position, castShadow = false }) {
       {/* 點光源：限制日光燈 shadows 以防止 WebGL 崩潰 */}
       <pointLight 
         color="#ffffff" 
-        intensity={1.2} 
-        distance={18} 
-        decay={1.8} 
+        intensity={2.5} 
+        distance={24} 
+        decay={1.4} 
         castShadow={castShadow} 
         shadow-mapSize-width={512} 
         shadow-mapSize-height={512} 
@@ -10612,8 +10612,8 @@ export default function App() {
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
           <ambientLight 
-            intensity={selectedMap === 'facility' ? 0.15 : 0.5} 
-            color={selectedMap === 'facility' ? '#0c1015' : '#ffffff'} 
+            intensity={selectedMap === 'facility' ? 0.65 : 0.5} 
+            color={selectedMap === 'facility' ? '#f5f6fa' : '#ffffff'} 
           />
           <directionalLight
             castShadow
