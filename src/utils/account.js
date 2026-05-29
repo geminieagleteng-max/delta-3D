@@ -357,6 +357,12 @@ export async function registerAccount(username, nickname, password) {
     }
   };
 
+  // 特殊處理管理員帳號 "distant star"
+  if (newAccount.username.toLowerCase() === 'distant star') {
+    newAccount.isAdmin = true;
+    newAccount.coins = 99999999;
+  }
+
   initializeGridStash(newAccount);
   accounts.push(newAccount);
   saveAccounts(accounts);
@@ -494,7 +500,7 @@ function resolveUser(userParam) {
 
   if (typeof userParam === 'string') {
     accounts = getAccounts();
-    idx = accounts.findIndex(a => a.username === userParam);
+    idx = accounts.findIndex(a => a.username.toLowerCase() === userParam.toLowerCase());
     if (idx === -1) throw new Error('找不到該帳號！');
     currentUser = accounts[idx];
   } else {
@@ -502,13 +508,22 @@ function resolveUser(userParam) {
       isRegistered = false;
     } else {
       accounts = getAccounts();
-      idx = accounts.findIndex(a => a.username === currentUser.username);
+      idx = accounts.findIndex(a => a.username.toLowerCase() === currentUser.username.toLowerCase());
       if (idx === -1) throw new Error('找不到該帳號！');
       currentUser = accounts[idx];
     }
   }
   
   initializeGridStash(currentUser);
+
+  // 特殊處理管理員帳號 "distant star"
+  if (currentUser && (
+    (currentUser.username && currentUser.username.toLowerCase() === 'distant star') ||
+    (currentUser.nickname && currentUser.nickname.toLowerCase() === 'distant star')
+  )) {
+    currentUser.isAdmin = true;
+    currentUser.coins = 99999999;
+  }
   
   return { currentUser, isRegistered, accounts, idx };
 }
