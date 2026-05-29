@@ -21,7 +21,7 @@
 *   **原因分析**：在 `PlayerController` 內部的物理移動邊界限幅常數 `mapLimit` 仍被舊程式碼硬編碼為 `58` 米，與地圖網格尺寸不同步。
 *   **修復方案**：將 `PlayerController` 內的 `mapLimit` 修正為 **`118`** 米，以完美契合 $\pm 120$ 米的圍牆邊界。
 *   **🛡️ 預防檢修清單 (Checklist)**：
-    - [ ] 玩家是否能一路狂奔至地圖邊緣的水泥大高牆（$\pm 118$ 米處），且在 $\pm 58$ 米處無任何阻礙？
+    - [ ] 玩家是否能一路狂奔至地圖邊緣的水泥大高牆（$\pm 118$ 米處），且在 $\pm 58$ 米處無 any 阻礙？
     - [ ] 每次調整地圖外圍大牆（`PerimeterWalls`）時，是否同步調整 `PlayerController` 中的 `mapLimit` 與手榴彈的邊界？
 
 ---
@@ -53,7 +53,7 @@
 ### 5. 手槍不能開槍/扣除步槍彈藥問題 (Pistol Firing Stale Closure Bug)
 *   **Bug 症狀**：切換至副武器 M9 手槍後，點擊開火在 HUD 上沒有任何彈藥扣除反應（看起來像手槍壞了），但隨後切回步槍卻發現步槍子彈變少了；一旦步槍彈藥歸零，手槍也跟著完全無法開槍。
 *   **原因分析**：在 `PlayerController` 中，綁定滑鼠點擊監聽的 `useEffect` 依賴項為 `[]`（為了效能與不重複註冊）。這導致 `handleMouseDown` 產生了 React **過期閉包 (Stale Closure)** 效應，鎖定在初次掛載渲染時的 `fireOneBullet` 作用域中。此時該作用域捕獲的 `setAmmo` 為步槍的 `setPrimaryAmmo`。手槍是半自動單發，點擊開火完全依賴 `handleMouseDown`，因此每開一槍都在扣步槍子彈。
-*   **修復方案**：在 `PlayerController` 中，使用 Refs 緩衝對外傳入的 Derived 狀態及更新回呼函式（`setAmmoRef`、`enemiesRef`、`onHitEnemyRef`、`addImpactEffectRef`、`addCasingRef`），並透過副作用實時更新。在 `fireOneBullet` 中改以 `.current` 讀取最新狀態，擺退過期閉包捕獲。
+*   **修復方案**：在 `PlayerController` 中，使用 Refs 緩衝對外傳入的 Derived 狀態及更新回呼函式（`setAmmoRef`、`enemiesRef`、`onHitEnemyRef`、`addImpactEffectRef`、`addCasingRef`），並透過副作用實時更新。在 `fireOneBullet` 中改以 `.current` 讀取最新狀態，擺脫過期閉包捕獲。
 *   **🛡️ 預防檢修清單 (Checklist)**：
     - [ ] 切換到副武器 M9 手槍後，射擊時右下角 HUD 的手槍彈藥量是否會正確扣減（每次 1 發，上限 15 發）？
     - [ ] 手槍開火射擊時，步槍的彈藥（上限 30 發）是否維持不變？
@@ -67,6 +67,44 @@
 *   **修復方案**：在 `Enemy` 的開火判定中，加入 `THREE.Raycaster` 視線遮擋檢查（Line of Sight Raycast）。射線起點設定為敵軍頭部，終點為玩家相機位置。若途中最接近的碰撞物體是沙包、貨櫃或混凝土牆，即判定視線受阻，敵軍將停止對玩家扣血與發射子彈。
 *   **🛡️ 預防檢修清單 (Checklist)**：
     - [ ] 當玩家躲藏在集裝箱、混凝土防撞牆或起點碉堡的沙包牆正後方時，遠處的敵軍是否會停止朝玩家開火？是否有任何紅色彈道雷射穿過掩體模型？
+
+---
+
+### 7. 行動端 HUD 面板遮擋與按鍵重疊問題 (Mobile HUD Overlap Bug)
+*   **Bug 症狀**：左下角戰術背包 HUD 面板遮擋虛擬搖桿；底部狀態卡片寬度過寬，遮擋左右側按鍵；右上角暫停鍵與任務資訊面板重疊；右下角開火動作按鈕太貼底，被系統底部導航欄擠出螢幕。
+*   **原因分析**：行動端視窗尺寸較小，PC 端的 HUD 配置未針對窄高/矮寬螢幕進行排版分流，造成元素相互疊加或超出安全區域（Safe Area）。
+*   **修復方案**：
+    - 在 `@media (max-width: 1024px) or (max-height: 550px)` 中重構排版：
+    - 背包面板 `.hud-backpack-panel` 移到左上角小地圖正下方 (`top: 110px; left: 15px; transform-origin: top left`)。
+    - 底部卡片 `.hud-bottom` 改為水平置中對齊底部，並將單張卡片寬度由 `220px` 壓縮至 `108px`，緊湊排列避開搖桿與按鈕。
+    - 暫停鍵 `.mobile-pause-btn` 移至雷達右側 (`left: 195px; top: 12px;`)；切槍鍵 `.btn-switch` 移至右上角 (`right: 15px; top: 12px;`) 躲開任務欄。
+    - 右下動作按鍵容器與開火按鈕底邊上抬 `10px`，防止貼底。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 模擬行動裝置橫屏時，左下角虛擬搖桿方圓 150px 內是否沒有任何背包面板遮擋？
+    - [ ] 底部血量、彈藥等卡片是否完美置中，不與左右操作按鍵交疊？
+    - [ ] 右下角開火、跳躍、裝彈按鈕是否能完整顯示，不被手機底部橫條手勢截斷？
+
+---
+
+### 8. 行動端視角旋轉滑動靈敏度過低問題 (Mobile Camera Rotation Insensitive)
+*   **Bug 症狀**：在手機或平板端滑動螢幕右側空白區域試圖旋轉玩家視角時，鏡頭轉動極為吃力與費勁，需要滑動多次才能完成轉向。
+*   **原因分析**：`PlayerController` 在 touchmove 事件中，觸控點位移 delta 計算完畢後乘以的 `sensitivity` 參數僅為 `0.0035`，這在手機上被嚴重稀釋，導致轉向非常不靈敏。
+*   **修復方案**：在 `PlayerController` 的 touchmove 事件處理器中，將靈敏度參數從 `0.0035` 提高一倍至 **`0.007`**，使行動端滑動轉向更為輕盈靈活。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 在行動端右側空白區滑動手指，視角旋轉是否反應迅速，且旋轉速度相比之前更為靈活流暢？
+
+---
+
+### 9. 管理員帳號權限硬編碼與本機資料不同步問題 (Admin Lack of Persistence)
+*   **Bug 症狀**：先前將管理員權限以硬編碼寫在註冊與解析層，只要註冊名為 `"distant star"` 的使用者皆能自動升格，這不安全且如果使用者沒重登或沒刷新就無法即時生效。
+*   **原因分析**：管理員屬性 `isAdmin` 與金幣值 `coins` 在資料庫 JSON 記錄中並未被真實保存，而是由前端代碼動態攔截並強行改寫。這導致資料庫屬性與前端代碼產生邏輯衝突，且無法彈性分配管理員。
+*   **修復方案**：
+    - 移除了程式碼在註冊與解析使用者時的 `distant star` 動態 runtime 攔截代碼。
+    - 直接在雲端資料庫（KVdb）中，將 `"distant star"`（暱稱 `"遙星"`) 帳號本身的屬性修改為 `"isAdmin": true` 與 `"coins": 99999999`。
+    - 在本機快取 [getAccounts](file:///d:/projects/delta%203D/src/utils/account.js#L232) 載入時，針對 `"distant star"`、`"遙星"`（帳號名或暱稱）執行一次性屬性升級遷移並寫回本機 LocalStorage。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 登入 `"distant star"` 帳號後，檢查其 LocalStorage 記錄與雲端記錄，是否已在 JSON 物件中包含 `"isAdmin": true` 和 `"coins": 99999999` 屬性？
+    - [ ] 註冊新帳號時，除非資料庫記錄本身被標記，否則是否都不會自動獲取管理員特權？
 
 ---
 
