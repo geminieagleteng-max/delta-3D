@@ -593,13 +593,14 @@ export function equipItem(userParam, slot, itemUid) {
     // 從倉庫網格中移除
     user.gridStashItems.splice(itemIdx, 1);
   } 
-  else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
+  else if (slot === 'bodyArmor' || slot === 'opsHelmet' || slot === 'laserSight' || slot === 'suppressor') {
     const itemIdx = user.gridStashItems.findIndex(i => i.type === slot);
-    if (itemIdx === -1) throw new Error('倉庫中無此防具！');
+    if (itemIdx === -1) throw new Error('倉庫中無此裝備或配件！');
     
-    // 卸下原防具
+    // 卸下原防具/配件
     if (user.equipped[slot]) {
-      const space = findEmptySpace(user.gridStashItems, 2, 2);
+      const [w, h] = getItemSize(slot);
+      const space = findEmptySpace(user.gridStashItems, w, h);
       if (!space) throw new Error('倉庫已滿，無法卸下原裝備！');
       user.gridStashItems.push({
         uid: generateUid(),
@@ -651,9 +652,10 @@ export function unequipItem(userParam, slot) {
       user.equipped[attsKey] = { sight: null, muzzle: null, grip: null, magazine: null };
     }
   } 
-  else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
+  else if (slot === 'bodyArmor' || slot === 'opsHelmet' || slot === 'laserSight' || slot === 'suppressor') {
     if (user.equipped[slot]) {
-      const space = findEmptySpace(user.gridStashItems, 2, 2);
+      const [w, h] = getItemSize(slot);
+      const space = findEmptySpace(user.gridStashItems, w, h);
       if (!space) throw new Error('倉庫已滿，請先整理出空間！');
       user.gridStashItems.push({
         uid: generateUid(),
@@ -1137,3 +1139,21 @@ export function getModifiedWeaponConfig(baseConfig, attachments) {
   });
   return config;
 }
+
+// 領取任務合約獎勵
+export function claimContractReward(userParam, contractId, reward) {
+  const data = resolveUser(userParam);
+  const user = data.currentUser;
+  
+  user.coins = (user.coins || 0) + reward;
+  
+  if (user.contracts) {
+    user.contracts = user.contracts.map(c => {
+      if (c.id === contractId) return { ...c, claimed: true };
+      return c;
+    });
+  }
+  
+  return finalizeUserSave(data);
+}
+

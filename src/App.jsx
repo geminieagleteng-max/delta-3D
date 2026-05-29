@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PointerLockControls, Sky, Line } from '@react-three/drei';
+import { PointerLockControls, Sky, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
 import {
@@ -8,7 +8,7 @@ import {
   equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot,
   initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace,
   getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
-  equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid
+  equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid, claimContractReward
 } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
@@ -1358,7 +1358,7 @@ export const LOOT_CONTAINERS = [
   { id: 6, name: '實驗室密室保險箱', position: new THREE.Vector3(-75, 0.4, 0), type: 'locked_safe', requiresKeycard: 'keycard' }
 ];
 
-export const spawnWave = (waveNumber) => {
+export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false) => {
   const composition = WAVE_COMPOSITIONS[waveNumber] || WAVE_COMPOSITIONS[3];
   const spawned = [];
   let idCounter = 0;
@@ -1384,14 +1384,19 @@ export const spawnWave = (waveNumber) => {
         pos = new THREE.Vector3(x, 0, z);
       }
 
+      // 伏擊事件會使精銳敵人的生命值加倍
+      const hpMultiplier = isAmbush ? 2.0 : 1.0;
+      const finalHp = Math.round(stats.hp * difficultyMultiplier * hpMultiplier);
+
       spawned.push({
         id: waveNumber * 100 + idCounter + 1,
         position: pos,
-        hp: stats.hp,
-        maxHp: stats.hp,
+        hp: finalHp,
+        maxHp: finalHp,
         enemyType: group.type,
         state: 'alive',
-        patrolCenter: pos.clone()
+        patrolCenter: pos.clone(),
+        isElite: isAmbush // 標記為精銳
       });
       idCounter++;
     }
@@ -1399,7 +1404,7 @@ export const spawnWave = (waveNumber) => {
   return spawned;
 };
 
-const spawnEnemies = (isTutorial = false) => {
+const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush = false) => {
   if (isTutorial) {
     return [
       {
@@ -1418,7 +1423,7 @@ const spawnEnemies = (isTutorial = false) => {
       }
     ];
   }
-  return spawnWave(1);
+  return spawnWave(1, difficultyMultiplier, isAmbush);
 };
 
 export function LootCrate({ position, name, isLooted, type = 'default', rotation = [0, 0, 0] }) {
@@ -2672,7 +2677,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         {/* 粗壯戰術頭盔 (狙擊手與其他兵種皆戴，顏色不同) */}
         <mesh position={[0, 1.9, 0]} castShadow>
           <sphereGeometry args={[0.28, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color={stats.helmetColor} roughness={0.9} />
+          <meshStandardMaterial color={data.isElite ? '#d4af37' : stats.helmetColor} roughness={data.isElite ? 0.2 : 0.9} metalness={data.isElite ? 0.8 : 0.0} />
         </mesh>
 
         {/* 戰術面罩 (突擊兵專屬) */}
@@ -5627,7 +5632,20 @@ export default function App() {
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [newNickname, setNewNickname] = useState('');
   const [endgameStats, setEndgameStats] = useState(null);
-  const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop'
+  const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop' or 'merchant'
+
+  // 遊戲心理學機制狀態
+  const [damagePopups, setDamagePopups] = useState([]);
+  const [isAmbushActive, setIsAmbushActive] = useState(false);
+  const [isAmbushAlertVisible, setIsAmbushAlertVisible] = useState(false);
+  const [secretMerchantActive, setSecretMerchantActive] = useState(false);
+  const [secretMerchantItems, setSecretMerchantItems] = useState([]);
+  const [contracts, setContracts] = useState([
+    { id: 'extract', desc: '成功戰術撤離 1 次', progress: 0, target: 1, reward: 500, done: false, claimed: false },
+    { id: 'kills', desc: '累積擊殺 15 名敵人', progress: 0, target: 15, reward: 400, done: false, claimed: false },
+    { id: 'headshots', desc: '達成 5 次爆頭擊殺', progress: 0, target: 5, reward: 300, done: false, claimed: false },
+    { id: 'loot_safe', desc: '搜刮 1 次加密保險箱', progress: 0, target: 1, reward: 250, done: false, claimed: false }
+  ]);
 
   const [leaderboardType, setLeaderboardType] = useState('global');
   const [cloudLeaderboard, setCloudLeaderboard] = useState([]);
@@ -5656,6 +5674,29 @@ export default function App() {
       loadCloudLeaderboard();
     }
   }, [gameState]);
+
+  // 登入時載入或初始化該使用者的合約進度
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.contracts) {
+        setContracts(currentUser.contracts);
+      } else {
+        setContracts([
+          { id: 'extract', desc: '成功戰術撤離 1 次', progress: 0, target: 1, reward: 500, done: false, claimed: false },
+          { id: 'kills', desc: '累積擊殺 15 名敵人', progress: 0, target: 15, reward: 400, done: false, claimed: false },
+          { id: 'headshots', desc: '達成 5 次爆頭擊殺', progress: 0, target: 5, reward: 300, done: false, claimed: false },
+          { id: 'loot_safe', desc: '搜刮 1 次加密保險箱', progress: 0, target: 1, reward: 250, done: false, claimed: false }
+        ]);
+      }
+    } else {
+      setContracts([
+        { id: 'extract', desc: '成功戰術撤離 1 次', progress: 0, target: 1, reward: 500, done: false, claimed: false },
+        { id: 'kills', desc: '累積擊殺 15 名敵人', progress: 0, target: 15, reward: 400, done: false, claimed: false },
+        { id: 'headshots', desc: '達成 5 次爆頭擊殺', progress: 0, target: 5, reward: 300, done: false, claimed: false },
+        { id: 'loot_safe', desc: '搜刮 1 次加密保險箱', progress: 0, target: 1, reward: 250, done: false, claimed: false }
+      ]);
+    }
+  }, [currentUser]);
 
   // 載入與同步本機排行榜
   const leaderboard = useMemo(() => {
@@ -5868,7 +5909,7 @@ export default function App() {
           if (prev <= 1) {
             setCurrentWave((w) => {
               const nextWave = w + 1;
-              setEnemies(spawnWave(nextWave));
+              setEnemies(spawnWave(nextWave, getDifficultyMultiplier(), isAmbushActive));
               addKillFeedEntry(`第 ${nextWave} 波敵軍已進入戰區！`, 'system');
               return nextWave;
             });
@@ -6158,6 +6199,10 @@ export default function App() {
     soundManager.playSuccessChime();
     addKillFeedEntry(`玩家搜刮了 ${container.name}`, 'system');
     setNearContainer(null);
+
+    if (container.id === 3 || container.id === 6) {
+      updateContractProgress('loot_safe');
+    }
   };
 
   const handleTakeItem = (item) => {
@@ -6565,6 +6610,101 @@ export default function App() {
     }
   };
 
+  // 領取任務合約獎勵
+  const handleClaimContractReward = (contractId) => {
+    if (!currentUser) return;
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
+    if (!contract.done || contract.claimed) return;
+
+    if (currentUser.isGuest) {
+      const reward = contract.reward;
+      const updatedUser = {
+        ...currentUser,
+        coins: (currentUser.coins || 0) + reward
+      };
+      const updatedContracts = contracts.map(c => {
+        if (c.id === contractId) return { ...c, claimed: true };
+        return c;
+      });
+      setContracts(updatedContracts);
+      updatedUser.contracts = updatedContracts;
+      setCurrentUser(updatedUser);
+      alert(`[遊客模式] 領取成功！獲得 ${reward} Delta 金幣！`);
+    } else {
+      try {
+        const reward = contract.reward;
+        const resultUser = claimContractReward(currentUser.username, contractId, reward);
+        if (resultUser) {
+          setCurrentUser(resultUser);
+          setContracts(resultUser.contracts || []);
+          alert(`領取成功！獲得 ${reward} Delta 金幣！`);
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  };
+
+  // 神秘商人購入折價商品
+  const handleBuySecretMerchantItem = (item) => {
+    if (!currentUser) return;
+    const currentCoins = currentUser.coins !== undefined ? currentUser.coins : 0;
+    if (currentCoins < item.cost) {
+      alert('Delta 金幣不足，神秘商人拒絕交易！');
+      return;
+    }
+
+    if (currentUser.isGuest) {
+      const updatedUser = { ...currentUser };
+      if (!updatedUser.stash) {
+        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
+      }
+      
+      const [w, h] = getItemSize(item.id);
+      const space = findEmptySpace(updatedUser.gridStashItems, w, h);
+      if (!space) {
+        alert('倉庫已滿，請先整理出空間！');
+        return;
+      }
+
+      updatedUser.coins = currentCoins - item.cost;
+      
+      const itemObj = {
+        uid: generateUid(),
+        type: item.id,
+        r: space.r,
+        c: space.c
+      };
+      if (['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(item.id)) {
+        itemObj.attachments = { sight: null, muzzle: null, grip: null, magazine: null };
+      }
+      updatedUser.gridStashItems.push(itemObj);
+      
+      Object.keys(updatedUser.stash).forEach(k => {
+        updatedUser.stash[k] = 0;
+      });
+      updatedUser.gridStashItems.forEach(stashItem => {
+        if (updatedUser.stash[stashItem.type] !== undefined) {
+          updatedUser.stash[stashItem.type] += 1;
+        } else {
+          updatedUser.stash[stashItem.type] = 1;
+        }
+      });
+
+      setCurrentUser(updatedUser);
+      alert(`[遊客模式] 成功購入 ${item.name}！已存入倉庫。`);
+    } else {
+      try {
+        const updated = buyMarketItem(currentUser.username, item.id, item.cost);
+        setCurrentUser(updated);
+        alert(`成功購入 ${item.name}！已存入倉庫。`);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  };
+
   // 黑市購入物資
   const handleBuyMarketItem = (itemId) => {
     if (!currentUser) return;
@@ -6636,11 +6776,12 @@ export default function App() {
     };
     
     // 計算金幣（適用於遊客/登入用戶顯示）
-    const killsCoins = finalKills * 50;
-    const victoryCoins = victory ? 300 : 0;
-    const headshotsCoins = runStatsRef.current.headshots * 20;
+    const ambushMultiplier = isAmbushActive ? 2 : 1;
+    const killsCoins = finalKills * 50 * ambushMultiplier;
+    const victoryCoins = (victory ? 300 : 0) * ambushMultiplier;
+    const headshotsCoins = runStatsRef.current.headshots * 20 * ambushMultiplier;
     const accuracyPct = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0;
-    const accuracyCoins = Math.round(accuracyPct * 100);
+    const accuracyCoins = Math.round(accuracyPct * 100) * ambushMultiplier;
     const totalCoins = killsCoins + victoryCoins + headshotsCoins + accuracyCoins;
     
     const coinsEarnedDetails = {
@@ -6727,7 +6868,7 @@ export default function App() {
     // 實體帳號：使用 saveMatchLoot 進行存檔、物資併入倉庫、死亡丢裝懲罰
     const bpItemsForSave = [
       ...backpackItems.map(item => ({ type: item.type })),
-      { type: 'coins', count: backpackCoins }
+      { type: 'coins', count: backpackCoins + totalCoins }
     ];
     const resultUser = saveMatchLoot(currentUser.username, runStats, bpItemsForSave, victory);
     if (resultUser) {
@@ -6754,6 +6895,15 @@ export default function App() {
         coinsEarnedDetails
       });
     }
+
+    // 隨機觸發神秘商人 (30% 機率)
+    const hasMerchant = Math.random() < 0.3;
+    if (hasMerchant) {
+      setSecretMerchantActive(true);
+      setSecretMerchantItems(generateSecretMerchantItems());
+    } else {
+      setSecretMerchantActive(false);
+    }
   };
 
   // 成功撤離處理
@@ -6768,6 +6918,7 @@ export default function App() {
     }
     saveEndgameStats(true, eliminated); // 勝利，儲存戰績
     setGameState('victory');
+    updateContractProgress('extract');
   };
 
   // 點擊「DEPLOY」按鈕進入遊戲並鎖定滑鼠
@@ -6819,7 +6970,19 @@ export default function App() {
     } else {
       setActiveWeapon('primary');
     }
-    setEnemies(spawnEnemies(false));
+    // 隨機判定精銳伏擊事件 (15% 機率)
+    const isAmbush = Math.random() < 0.15;
+    setIsAmbushActive(isAmbush);
+    setIsAmbushAlertVisible(isAmbush);
+    if (isAmbush) {
+      addKillFeedEntry(`⚠️ 注意：偵測到敵軍精銳伏擊小隊！`, 'headshot');
+      setTimeout(() => {
+        setIsAmbushAlertVisible(false);
+      }, 3500);
+    }
+
+    const diff = getDifficultyMultiplier();
+    setEnemies(spawnEnemies(false, diff, isAmbush));
 
     setGameState('active');
     soundManager.startAmbient();
@@ -7216,6 +7379,67 @@ export default function App() {
     }, 800);
   };
 
+  // 取得動態難度係數 (Dynamic Difficulty Multiplier)
+  const getDifficultyMultiplier = () => {
+    let multiplier = 1.0;
+    // 依玩家目前血量調整 (低血量敵軍削弱，維持邊界挑戰)
+    if (health < 40) {
+      multiplier -= 0.2;
+    } else if (health < 70) {
+      multiplier -= 0.1;
+    }
+    // 依玩家生涯戰績調整 (高手玩家難度提升，使其更有挑戰性)
+    if (currentUser && currentUser.stats) {
+      const totalScore = (currentUser.stats.kills * 100) + (currentUser.stats.wins * 500);
+      if (totalScore > 8000) multiplier += 0.25;
+      else if (totalScore > 4000) multiplier += 0.15;
+      else if (totalScore > 1500) multiplier += 0.08;
+    }
+    return Math.max(0.6, Math.min(1.4, multiplier));
+  };
+
+  // 生成漂浮傷害數字 (Floating Damage Numbers)
+  const addDamagePopup = (amount, position, isHeadshot) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setDamagePopups((prev) => [
+      ...prev,
+      { id, amount, position: position.clone(), isHeadshot, time: Date.now() }
+    ]);
+    setTimeout(() => {
+      setDamagePopups((prev) => prev.filter((p) => p.id !== id));
+    }, 800);
+  };
+
+  // 隨機生成神秘商人折價商品
+  const generateSecretMerchantItems = () => {
+    const pool = [
+      { id: 'laserSight', name: 'M4A1 雷射瞄準器', cost: 480, originalCost: 800, desc: '40% 折扣！提升 M4A1 威力 (傷害由 25 ➔ 30)' },
+      { id: 'suppressor', name: 'M9 戰術消音器', cost: 300, originalCost: 500, desc: '40% 折扣！提升 M9 威力 (傷害由 15 ➔ 20)' },
+      { id: 'bodyArmor', name: '重型防彈衣', cost: 600, originalCost: 1000, desc: '40% 折扣！生命值上限提升至 150' },
+      { id: 'opsHelmet', name: '特種作戰頭盔', cost: 720, originalCost: 1200, desc: '40% 折扣！降低受到頭部傷害 25%' },
+      { id: 'awp', name: 'AWP 狙擊步槍', cost: 3000, originalCost: 5000, desc: '40% 特惠！超高傷害重型阻擊槍 (傷害 100 ➔ 300 爆頭)' }
+    ];
+    return pool.sort(() => 0.5 - Math.random()).slice(0, 3);
+  };
+
+  // 更新任務合約進度
+  const updateContractProgress = (id, amount = 1) => {
+    setContracts((prevContracts) => {
+      const updated = prevContracts.map(c => {
+        if (c.id === id && !c.done) {
+          const newProgress = Math.min(c.target, c.progress + amount);
+          return { ...c, progress: newProgress, done: newProgress >= c.target };
+        }
+        return c;
+      });
+      // 同步更新至 currentUser 物件以便自動存檔
+      if (currentUser && !currentUser.isGuest) {
+        currentUser.contracts = updated;
+      }
+      return updated;
+    });
+  };
+
   // 擊中敵人時扣血與擊殺判定
   const handleHitEnemy = (enemyId, hitPoint, isHeadshot, enemyMesh = null) => {
     addImpactEffect(hitPoint, new THREE.Vector3(0, 1, 0));
@@ -7227,6 +7451,7 @@ export default function App() {
     if (isHeadshot) {
       soundManager.playHeadshotPing();
       if (isTutorial) triggerTutorialStep('headshot');
+      updateContractProgress('headshots'); // 增加爆頭合約進度
     }
 
     if (isTutorial) triggerTutorialStep('shoot');
@@ -7276,6 +7501,9 @@ export default function App() {
             }
           }
 
+          // 生成漂浮傷害數字
+          addDamagePopup(damage, hitPoint, isHeadshot);
+
           const newHp = Math.max(0, enemy.hp - damage);
           const isDead = newHp <= 0;
           
@@ -7292,6 +7520,9 @@ export default function App() {
             // 若為正面擊中但死於此槍，提示正面擊破
             const finalKillMsg = isBlocked ? `${killType} (BREAK)` : killType;
             addKillFeedEntry(`PLAYER ➔ [${finalKillMsg}] ${enemyName}`, isHeadshot ? 'headshot' : 'normal');
+
+            // 增加擊殺合約進度
+            updateContractProgress('kills');
           }
           return {
             ...enemy,
@@ -7351,7 +7582,11 @@ export default function App() {
     if (gameState !== 'active') return;
 
     const hasHelmet = currentUser?.equipped?.opsHelmet || (currentUser && currentUser.inventory && currentUser.inventory.opsHelmet);
-    const finalDamage = hasHelmet ? Math.max(1, Math.round(damage * 0.75)) : damage;
+    
+    // 套用動態難度
+    const diff = getDifficultyMultiplier();
+    const scaledDamage = Math.round(damage * diff);
+    const finalDamage = hasHelmet ? Math.max(1, Math.round(scaledDamage * 0.75)) : scaledDamage;
 
     setHealth((prev) => {
       const newHp = Math.max(0, prev - finalDamage);
@@ -7369,6 +7604,7 @@ export default function App() {
 
     setHurtActive(true);
     soundManager.playPlayerHurt(); // 播放玩家受傷聲音
+    setShakeTrigger((prev) => prev + 1); // 觸發受擊鏡頭震動
 
     // 計算受擊方向指示器 (Directional Damage Indicator)
     if (attackerPos && cameraRef.current) {
@@ -8251,6 +8487,29 @@ export default function App() {
                         >
                           🛒 黑市商店 MARKET
                         </button>
+                        {secretMerchantActive && (
+                          <button
+                            type="button"
+                            className={`lobby-tab-btn secret-merchant-btn ${lobbyTab === 'merchant' ? 'active' : ''}`}
+                            style={{
+                              background: lobbyTab === 'merchant' ? 'rgba(224, 64, 251, 0.25)' : 'rgba(224, 64, 251, 0.1)',
+                              color: '#fce4ff',
+                              border: '1px solid #e040fb',
+                              padding: '6px 15px',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              borderRadius: '4px',
+                              textShadow: '0 0 5px rgba(224,64,251,0.5)',
+                              transition: 'all 0.2s',
+                              fontWeight: 'bold',
+                              position: 'relative'
+                            }}
+                            onClick={() => setLobbyTab('merchant')}
+                          >
+                            🔮 祕密商人 MERCHANT
+                            <span className="secret-merchant-badge">限時!</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* 升級進度條 (僅在數據頁顯示) */}
@@ -8352,6 +8611,63 @@ export default function App() {
                                   <div className="badge-name">Gunner</div>
                                   <div className="badge-desc-tooltip">生涯累計擊發 500 發子彈。</div>
                                 </div>
+                              </div>
+                            </div>
+
+                            {/* 任務合約系統 */}
+                            <div className="contracts-section" style={{ marginTop: '20px', background: 'rgba(0, 0, 0, 0.35)', border: '1px solid rgba(0, 255, 102, 0.15)', borderRadius: '6px', padding: '15px', textAlign: 'left' }}>
+                              <h4 style={{ color: '#00ff66', margin: '0 0 12px 0', fontSize: '0.95rem', letterSpacing: '1px', borderBottom: '1px solid rgba(0, 255, 102, 0.2)', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>📝 特種作戰合約 CONTRACTS</span>
+                                <span style={{ fontSize: '0.7rem', color: '#88a888', fontWeight: 'normal' }}>完成合約獲得 Delta 幣報酬</span>
+                              </h4>
+                              <div className="contracts-list" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                {contracts.map((c) => {
+                                  const isCompleted = c.progress >= c.target;
+                                  const progressPercent = Math.min(100, Math.round((c.progress / c.target) * 100));
+                                  return (
+                                    <div key={c.id} className="contract-card" style={{ background: 'rgba(0, 255, 102, 0.02)', border: '1px solid rgba(0, 255, 102, 0.08)', borderRadius: '4px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                      <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.8rem' }}>
+                                          <span style={{ color: isCompleted ? '#00ff66' : '#fff', fontWeight: 'bold' }}>{c.desc}</span>
+                                          <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>💰 +{c.reward}</span>
+                                        </div>
+                                        <div className="contract-progress-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                          <div className="contract-progress-bar-bg" style={{ flex: 1, height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div className="contract-progress-bar-fill" style={{ width: `${progressPercent}%`, height: '100%', background: isCompleted ? '#00ff66' : '#00e5ff', borderRadius: '3px', transition: 'width 0.3s' }} />
+                                          </div>
+                                          <span style={{ fontSize: '0.7rem', color: '#88a888', minWidth: '35px', textAlign: 'right' }}>{c.progress}/{c.target}</span>
+                                        </div>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                        {c.claimed ? (
+                                          <span style={{ fontSize: '0.7rem', color: '#88a888', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '3px' }}>✓ 已領取報酬</span>
+                                        ) : isCompleted ? (
+                                          <button
+                                            type="button"
+                                            className="claim-reward-btn"
+                                            style={{
+                                              background: '#00ff66',
+                                              color: '#000',
+                                              border: 'none',
+                                              padding: '3px 10px',
+                                              borderRadius: '3px',
+                                              fontSize: '0.7rem',
+                                              fontWeight: 'bold',
+                                              cursor: 'pointer',
+                                              boxShadow: '0 0 8px rgba(0,255,102,0.4)',
+                                              transition: 'all 0.2s'
+                                            }}
+                                            onClick={() => handleClaimContractReward(c.id)}
+                                          >
+                                            領取 {c.reward} 幣
+                                          </button>
+                                        ) : (
+                                          <span style={{ fontSize: '0.7rem', color: '#88a888' }}>執行中...</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
 
@@ -8523,6 +8839,37 @@ export default function App() {
                               )}
                             </div>
 
+                            {/* Slot 4b: Laser Sight */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M4A1 雷射瞄準器 (+5 傷害)</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.laserSight ? '#00ff66' : '#88a888' }}>
+                                  {currentUser.equipped?.laserSight ? '已安裝 (Equipped)' : '未安裝 (None)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.laserSight && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('laserSight')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Slot 4c: Suppressor */}
+                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M9 戰術消音器 (+5 傷害)</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.suppressor ? '#00ff66' : '#88a888' }}>
+                                  {currentUser.equipped?.suppressor ? '已安裝 (Equipped)' : '未安裝 (None)'}
+                                </div>
+                              </div>
+                              {currentUser.equipped?.suppressor && (
+                                <button className="loadout-action-btn sell-btn" style={{ fontSize: '0.7rem', padding: '4px 8px', border: '1px solid #ff3b3b', color: '#ff3b3b', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleUnequip('suppressor')}>
+                                  卸下
+                                </button>
+                              )}
+                            </div>
+
+
                             {/* Slot 5: Grenades */}
                             <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <div style={{ textAlign: 'left' }}>
@@ -8595,6 +8942,16 @@ export default function App() {
                                           裝備
                                         </button>
                                       )}
+                                      {key === 'laserSight' && count > 0 && !currentUser.equipped?.laserSight && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('laserSight', 'laserSight')}>
+                                          裝備
+                                        </button>
+                                      )}
+                                      {key === 'suppressor' && count > 0 && !currentUser.equipped?.suppressor && (
+                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('suppressor', 'suppressor')}>
+                                          裝備
+                                        </button>
+                                      )}
                                       {(key === 'grenade' || key === 'medkit') && count > 0 && (
                                         <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip(key === 'grenade' ? 'grenades' : 'medkits')}>
                                           帶入
@@ -8608,6 +8965,58 @@ export default function App() {
                                 );
                               })}
                             </div>
+                          </div>
+                        </div>
+                      ) : lobbyTab === 'merchant' ? (
+                        /* 神秘商人分頁 */
+                        <div className="market-container secret-merchant-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', flex: 1, maxHeight: '420px', overflow: 'hidden', background: 'rgba(224, 64, 251, 0.03)', border: '1px solid rgba(224, 64, 251, 0.15)', borderRadius: '6px', padding: '15px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(224, 64, 251, 0.25)', paddingBottom: '8px' }}>
+                            <h5 style={{ color: '#fce4ff', margin: 0, letterSpacing: '1px', fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>🔮 祕密商人限時特供 SECRET MERCHANT</span>
+                            </h5>
+                            <span style={{ fontSize: '0.7rem', color: '#e040fb', background: 'rgba(224, 64, 251, 0.15)', padding: '2px 8px', borderRadius: '3px', border: '1px solid rgba(224, 64, 251, 0.3)', fontWeight: 'bold' }}>限時折扣：所有商品 40% 折扣 (6 折)！</span>
+                          </div>
+                          
+                          <div className="merchant-items-grid" style={{ display: 'flex', gap: '15px', flex: 1, overflowY: 'auto', padding: '5px 0' }}>
+                            {secretMerchantItems.map((item) => (
+                              <div key={item.id} className="market-item-card merchant-card" style={{ flex: 1, background: 'rgba(0, 0, 0, 0.5)', border: '1px solid rgba(224, 64, 251, 0.2)', borderRadius: '4px', padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', transition: 'all 0.2s' }}>
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>{item.name}</span>
+                                    <span style={{ fontSize: '0.65rem', background: 'rgba(224,64,251,0.2)', color: '#ff80ab', padding: '1px 5px', borderRadius: '3px', fontWeight: 'bold' }}>特惠</span>
+                                  </div>
+                                  <p style={{ fontSize: '0.7rem', color: '#b0bec5', margin: '0 0 12px 0', textAlign: 'left', lineHeight: '1.3' }}>
+                                    {item.desc}
+                                  </p>
+                                </div>
+                                
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ffcc00' }}>💰 {item.cost}</span>
+                                    <span style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#88a888' }}>{item.originalCost}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      width: '100%',
+                                      background: 'linear-gradient(135deg, #e040fb 0%, #aa00ff 100%)',
+                                      color: '#fff',
+                                      border: 'none',
+                                      padding: '8px 12px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                      boxShadow: '0 0 10px rgba(224,64,251,0.4)',
+                                      transition: 'all 0.2s'
+                                    }}
+                                    onClick={() => handleBuySecretMerchantItem(item)}
+                                  >
+                                    立即購入
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ) : (
@@ -9237,6 +9646,14 @@ export default function App() {
       )}
 
       {/* 波次倒數大字提示 HUD */}
+      {/* 精銳伏擊警告橫幅 */}
+      {gameState === 'active' && isAmbushAlertVisible && (
+        <div className="ambush-warning-banner">
+          <div className="ambush-warning-title">⚠️ 偵測到敵軍精銳伏擊</div>
+          <div className="ambush-warning-subtitle">ELITE TEAM AMBUSH DETECTED! (雙倍擊殺金幣)</div>
+        </div>
+      )}
+
       {gameState === 'active' && waveCountdown > 0 && (
         <div className="wave-countdown-overlay">
           <div className="wave-countdown-title">NEXT WAVE IN</div>
@@ -9430,6 +9847,15 @@ export default function App() {
                 smokeClouds={smokeClouds}
               />
             )
+          ))}
+
+          {/* 漂浮傷害數字 */}
+          {damagePopups.map((popup) => (
+            <Html key={popup.id} position={[popup.position.x, popup.position.y + 0.8, popup.position.z]} center>
+              <div className={`damage-popup ${popup.isHeadshot ? 'headshot' : ''}`}>
+                {popup.amount}
+              </div>
+            </Html>
           ))}
 
           {/* 突擊步槍與手槍模型 */}

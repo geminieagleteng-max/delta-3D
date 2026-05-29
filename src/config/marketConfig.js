@@ -37,7 +37,9 @@ export const MARKET_PRICES = {
     keycard: 750,
     flashbang: 50,
     smoke: 50,
-    knife: 100
+    knife: 100,
+    laserSight: 400,
+    suppressor: 250
   }
 };
 
@@ -60,6 +62,9 @@ export const ITEM_NAMES = {
   keycard: '安全實驗室鑰匙卡',
   flashbang: '戰術閃光彈',
   smoke: '戰術煙霧彈',
-  knife: '特種作戰軍刀'
+  knife: '特種作戰軍刀',
+  laserSight: 'M4A1 雷射瞄準器',
+  suppressor: 'M9 戰術消音器'
 };
+
 
