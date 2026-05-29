@@ -2910,39 +2910,117 @@ function TrainingDummy({ data, onKilled }) {
 // ==========================================
 // 3. 3D 場景資產組件 (低多邊形 Low-Poly 風格)
 // ==========================================
-function Ground() {
+function Ground({ mapType }) {
+  const isFacility = mapType === 'facility';
+  const groundColor = isFacility ? '#141619' : '#2d3527';
+  const gridColor1 = isFacility ? '#00ffcc' : '#00ff66';
+  const gridColor2 = isFacility ? '#0c1a24' : '#142517';
+
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[250, 250]} />
-        <meshStandardMaterial color="#2d3527" roughness={0.9} />
+        <meshStandardMaterial color={groundColor} roughness={0.8} metalness={isFacility ? 0.3 : 0.0} />
       </mesh>
-      <gridHelper args={[240, 120, '#00ff66', '#142517']} position={[0, 0.01, 0]} />
+      <gridHelper args={[240, 120, gridColor1, gridColor2]} position={[0, 0.01, 0]} />
+
+      {isFacility && (
+        <group>
+          <mesh position={[0, 15, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[250, 250]} />
+            <meshStandardMaterial color="#0f1115" roughness={0.85} metalness={0.4} />
+          </mesh>
+          <gridHelper args={[240, 40, '#333333', '#1e222b']} position={[0, 14.95, 0]} />
+        </group>
+      )}
     </group>
   );
 }
 
-function PerimeterWalls() {
+function PerimeterWalls({ mapType }) {
+  const isFacility = mapType === 'facility';
+  const wallColor = isFacility ? '#0d0f12' : '#1a1f18';
+  
   const wallMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a1f18',
+    color: wallColor,
     roughness: 0.9,
     flatShading: true,
   });
 
   return (
     <group>
-      <mesh position={[0, 4, -120]} material={wallMaterial} castShadow receiveShadow>
-        <boxGeometry args={[240, 8, 2]} />
+      <mesh position={[0, 5, -120]} material={wallMaterial} castShadow receiveShadow>
+        <boxGeometry args={[240, 10, 2]} />
       </mesh>
-      <mesh position={[0, 4, 120]} material={wallMaterial} castShadow receiveShadow>
-        <boxGeometry args={[240, 8, 2]} />
+      <mesh position={[0, 5, 120]} material={wallMaterial} castShadow receiveShadow>
+        <boxGeometry args={[240, 10, 2]} />
       </mesh>
-      <mesh position={[120, 4, 0]} rotation={[0, Math.PI / 2, 0]} material={wallMaterial} castShadow receiveShadow>
-        <boxGeometry args={[240, 8, 2]} />
+      <mesh position={[120, 5, 0]} rotation={[0, Math.PI / 2, 0]} material={wallMaterial} castShadow receiveShadow>
+        <boxGeometry args={[240, 10, 2]} />
       </mesh>
-      <mesh position={[-120, 4, 0]} rotation={[0, Math.PI / 2, 0]} material={wallMaterial} castShadow receiveShadow>
-        <boxGeometry args={[240, 8, 2]} />
+      <mesh position={[-120, 5, 0]} rotation={[0, Math.PI / 2, 0]} material={wallMaterial} castShadow receiveShadow>
+        <boxGeometry args={[240, 10, 2]} />
       </mesh>
+    </group>
+  );
+}
+
+// ==========================================
+// 地下工廠 CQB 室內專屬 3D 組件
+// ==========================================
+function FacilityWall({ position, rotation = [0, 0, 0], scale = [1, 1, 1], length = 10 }) {
+  return (
+    <mesh position={position} rotation={rotation} scale={scale} castShadow receiveShadow>
+      <boxGeometry args={[length, 10, 0.6]} />
+      <meshStandardMaterial color="#1a1c22" roughness={0.95} metalness={0.1} flatShading />
+    </mesh>
+  );
+}
+
+function IndustrialGenerator({ position, rotation = [0, 0, 0] }) {
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[4, 2.5, 2.5]} />
+        <meshStandardMaterial color="#2d3238" roughness={0.7} metalness={0.4} flatShading />
+      </mesh>
+      <mesh position={[0, 1.6, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.8, 0.8, 3.2, 8]} />
+        <meshStandardMaterial color="#1f2329" roughness={0.8} metalness={0.3} flatShading />
+      </mesh>
+      <mesh position={[-1.2, 0.8, 1.26]}>
+        <boxGeometry args={[0.3, 0.3, 0.1]} />
+        <meshBasicMaterial color="#ff3333" />
+      </mesh>
+      <mesh position={[1.2, 0.8, 1.26]}>
+        <boxGeometry args={[0.3, 0.3, 0.1]} />
+        <meshBasicMaterial color="#00ff66" />
+      </mesh>
+    </group>
+  );
+}
+
+function IndustrialPipes({ position, rotation = [0, 0, 0], length = 12, radius = 0.3 }) {
+  return (
+    <mesh position={position} rotation={rotation} castShadow receiveShadow>
+      <cylinderGeometry args={[radius, radius, length, 8]} />
+      <meshStandardMaterial color="#685848" roughness={0.6} metalness={0.65} flatShading />
+    </mesh>
+  );
+}
+
+function FacilityLight({ position, color = "#ff3333", intensity = 5, distance = 30 }) {
+  return (
+    <group position={position}>
+      <mesh castShadow>
+        <cylinderGeometry args={[0.2, 0.4, 0.4, 6]} />
+        <meshStandardMaterial color="#222" roughness={0.5} />
+      </mesh>
+      <mesh position={[0, -0.22, 0]}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      <pointLight color={color} intensity={intensity} distance={distance} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
     </group>
   );
 }
@@ -3508,7 +3586,7 @@ function MedicalSupplyStation({ position, active }) {
   );
 }
 
-function TacticalAssets() {
+function OutpostAssets() {
   return (
     <group>
       {/* 角落狙擊哨塔 - 外移至 ±95 以適應兩倍大地圖 */}
@@ -3617,6 +3695,79 @@ function TacticalAssets() {
       <TwoStoryBuilding position={[65, 0, 45]} />
     </group>
   );
+}
+
+function FacilityAssets({ hideCenter }) {
+  return (
+    <group>
+      {/* 工廠專屬的室內高牆隔間，形成迷宮和長廊 */}
+      <FacilityWall position={[0, 0, 75]} length={60} />
+      <FacilityWall position={[-30, 0, 50]} rotation={[0, Math.PI / 2, 0]} length={50} />
+      <FacilityWall position={[30, 0, 50]} rotation={[0, Math.PI / 2, 0]} length={50} />
+      
+      <FacilityWall position={[-15, 0, 20]} length={30} />
+      <FacilityWall position={[15, 0, 20]} length={30} />
+      <FacilityWall position={[-15, 0, -20]} length={30} />
+      <FacilityWall position={[15, 0, -20]} length={30} />
+      <FacilityWall position={[-30, 0, 0]} rotation={[0, Math.PI / 2, 0]} length={40} />
+      <FacilityWall position={[30, 0, 0]} rotation={[0, Math.PI / 2, 0]} length={40} />
+
+      <FacilityWall position={[-75, 0, 40]} length={50} />
+      <FacilityWall position={[75, 0, -40]} length={50} />
+      <FacilityWall position={[-50, 0, -60]} rotation={[0, Math.PI / 2, 0]} length={60} />
+      <FacilityWall position={[50, 0, 60]} rotation={[0, Math.PI / 2, 0]} length={60} />
+
+      {/* 工業裝飾物 */}
+      <IndustrialGenerator position={[-10, 1.25, 45]} />
+      <IndustrialGenerator position={[10, 1.25, 45]} />
+      <IndustrialGenerator position={[-50, 1.25, -20]} rotation={[0, Math.PI / 2, 0]} />
+      <IndustrialGenerator position={[50, 1.25, 20]} rotation={[0, -Math.PI / 2, 0]} />
+
+      {/* 橫跨天花板/牆壁的管道 */}
+      <IndustrialPipes position={[0, 12, 75]} rotation={[0, 0, Math.PI / 2]} length={60} />
+      <IndustrialPipes position={[-30, 10, 50]} length={50} />
+      <IndustrialPipes position={[30, 10, 50]} length={50} />
+      <IndustrialPipes position={[0, 8, 0]} length={40} radius={0.5} />
+
+      {/* 戰術警示吊燈 (點光源，綠色/紅色/青色/橙色) */}
+      <FacilityLight position={[0, 14, 0]} color="#00ff66" intensity={6} distance={40} />
+      <FacilityLight position={[-45, 14, 45]} color="#ff3333" intensity={5} distance={30} />
+      <FacilityLight position={[45, 14, -45]} color="#ff3333" intensity={5} distance={30} />
+      <FacilityLight position={[-45, 14, -45]} color="#00e5ff" intensity={5} distance={30} />
+      <FacilityLight position={[45, 14, 45]} color="#00e5ff" intensity={5} distance={30} />
+      <FacilityLight position={[0, 14, 80]} color="#ff9900" intensity={5} distance={35} />
+      <FacilityLight position={[0, 14, -80]} color="#ff9900" intensity={5} distance={35} />
+
+      {/* 室內放一些貨櫃與箱子作為物資掩體 */}
+      <CargoContainer position={[-15, 1.3, 30]} color="#222" />
+      <CargoContainer position={[15, 1.3, -30]} color="#333" />
+      <CargoContainer position={[-25, 1.3, -30]} color="#444" />
+      <CargoContainer position={[25, 1.3, 30]} color="#2c2c2c" />
+      
+      <MilitaryCrate position={[0, 0.6, 10]} />
+      <MilitaryCrate position={[1.4, 0.6, 10]} rotation={[0, 0.2, 0]} />
+      <MilitaryCrate position={[-1.4, 0.6, -10]} rotation={[0, -0.4, 0]} />
+
+      <SandbagWall position={[0, 0, 5]} length={4} />
+      <SandbagWall position={[0, 0, -5]} length={4} />
+      
+      {/* 玩家出生點與補給站防護 (Z = 85 ~ 92) */}
+      <FacilityWall position={[0, 0, 85]} length={40} />
+      <MilitaryCrate position={[-3, 0.6, 88]} />
+      <MilitaryCrate position={[3, 0.6, 88]} />
+      
+      {/* 空心碉堡與建築 */}
+      <MilitaryBunker position={[-65, 0, -20]} />
+      <MilitaryBunker position={[65, 0, 20]} />
+    </group>
+  );
+}
+
+function TacticalAssets({ mapType, hideCenter }) {
+  if (mapType === 'facility') {
+    return <FacilityAssets hideCenter={hideCenter} />;
+  }
+  return <OutpostAssets />;
 }
 
 // ==========================================
@@ -5636,6 +5787,8 @@ export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
+  const [selectedMap, setSelectedMap] = useState('outpost'); // 'outpost' | 'facility'
+  const [isAdminConsoleExpanded, setIsAdminConsoleExpanded] = useState(false);
 
   // 受傷方向指示器與相機參考
   const cameraRef = useRef();
@@ -8630,6 +8783,57 @@ export default function App() {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                          {/* 地圖選擇器 MAP SELECTOR */}
+                          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--hud-primary)', letterSpacing: '1px', marginBottom: '8px', fontWeight: 'bold' }}>
+                              SELECT OPERATIONS BATTLEFIELD / 選擇戰術戰場:
+                            </div>
+                            <div style={{ display: 'flex', gap: '15px' }}>
+                              <button 
+                                className={`map-select-btn ${selectedMap === 'outpost' ? 'active' : ''}`}
+                                onClick={() => setSelectedMap('outpost')}
+                                style={{
+                                  flex: 1,
+                                  background: selectedMap === 'outpost' ? 'rgba(0, 255, 102, 0.15)' : 'rgba(0, 0, 0, 0.4)',
+                                  border: selectedMap === 'outpost' ? '2px solid #00ff66' : '1px dashed rgba(0, 255, 102, 0.4)',
+                                  color: selectedMap === 'outpost' ? '#00ff66' : 'rgba(0, 255, 102, 0.6)',
+                                  padding: '10px 15px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  textAlign: 'center',
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: selectedMap === 'outpost' ? '0 0 10px rgba(0, 255, 102, 0.2)' : 'none',
+                                  fontWeight: selectedMap === 'outpost' ? 'bold' : 'normal'
+                                }}
+                              >
+                                🏞️ OUTPOST BASE<br/>(軍事哨所 - 經典)
+                              </button>
+                              <button 
+                                className={`map-select-btn ${selectedMap === 'facility' ? 'active' : ''}`}
+                                onClick={() => setSelectedMap('facility')}
+                                style={{
+                                  flex: 1,
+                                  background: selectedMap === 'facility' ? 'rgba(0, 229, 255, 0.15)' : 'rgba(0, 0, 0, 0.4)',
+                                  border: selectedMap === 'facility' ? '2px solid #00e5ff' : '1px dashed rgba(0, 229, 255, 0.4)',
+                                  color: selectedMap === 'facility' ? '#00e5ff' : 'rgba(0, 229, 255, 0.6)',
+                                  padding: '10px 15px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  textAlign: 'center',
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: selectedMap === 'facility' ? '0 0 10px rgba(0, 229, 255, 0.2)' : 'none',
+                                  fontWeight: selectedMap === 'facility' ? 'bold' : 'normal'
+                                }}
+                              >
+                                🏭 INDOOR FACILITY<br/>(地下工廠 - 室內)
+                              </button>
+                            </div>
+                          </div>
+
                           <div style={{ display: 'flex', justifyContent: 'left', gap: '15px', marginBottom: '20px' }}>
                             <button className="deploy-button" style={{ fontSize: '1.0rem', padding: '12px 30px' }} onClick={handleDeploy}>
                               DEPLOY TO MISSION
@@ -10040,152 +10244,190 @@ export default function App() {
           className="admin-console-panel" 
           style={{
             position: 'absolute',
-            top: '80px',
+            top: '165px',
             left: '30px',
-            background: 'rgba(8, 20, 12, 0.9)',
+            background: 'rgba(8, 20, 12, 0.95)',
             border: '1px solid #00ff66',
             borderLeft: '4px solid #00ff66',
             borderRadius: '4px',
-            padding: '12px 18px',
+            padding: isAdminConsoleExpanded ? '12px 18px' : '6px 12px',
             zIndex: 9999,
             pointerEvents: 'auto',
             boxShadow: '0 0 15px rgba(0, 255, 102, 0.25)',
             fontFamily: 'monospace',
-            width: '200px',
+            width: isAdminConsoleExpanded ? '200px' : '120px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '8px',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            cursor: 'default'
           }}
         >
-          <div style={{ color: '#00ff66', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '1px solid rgba(0, 255, 102, 0.3)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🛠️ 特權控制台</span>
-            <span style={{ fontSize: '0.6rem', background: 'rgba(0, 255, 102, 0.2)', padding: '1px 4px', borderRadius: '2px' }}>ADMIN</span>
-          </div>
-          
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setEnemies([]);
-              if (currentWave < 3) {
-                setWaveCountdown(5);
-                addKillFeedEntry('管理員跳過當前波次，下一波即將開始...', 'system');
-              } else {
-                setExtractionActive(true);
-                setExtractionState('incoming');
-                setExtractionCountdown(5.0);
-                addKillFeedEntry('管理員跳過全部防守波次！已呼叫撤離直升機！', 'system');
-                soundManager.startHelicopterSound();
-              }
-            }}
-          >
-            ⏭️ 跳過波次 (O)
-          </button>
-
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setEnemies([]);
-              setExtractionActive(true);
-              setExtractionState('landed');
-              setExtractionCountdown(0.0);
-              addKillFeedEntry('管理員呼叫直升機，LZ 已建立，請前往中心點撤離！', 'system');
-              soundManager.startHelicopterSound();
-            }}
-          >
-            🚁 立即呼叫撤離
-          </button>
-
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #ffcc00',
-              color: '#ffcc00',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setGameState('victory');
-              if (controlsRef.current) {
-                controlsRef.current.unlock();
-              }
-              const duration = Math.round((Date.now() - runStatsRef.current.startTime) / 1000);
-              const accuracy = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0.8;
-              const total = (eliminated * 50) + 300 + (runStatsRef.current.headshots * 20) + 100;
-              setEndgameStats({
-                headshots: runStatsRef.current.headshots,
-                shotsFired: runStatsRef.current.shotsFired,
-                shotsHit: runStatsRef.current.shotsHit,
-                playTimeSeconds: duration,
-                coinsEarnedDetails: {
-                  killsCoins: eliminated * 50,
-                  victoryCoins: 300,
-                  headshotsCoins: runStatsRef.current.headshots * 20,
-                  accuracyCoins: 100,
-                  total: total
-                }
-              });
+          {isAdminConsoleExpanded ? (
+            <>
+              <div 
+                style={{ 
+                  color: '#00ff66', 
+                  fontSize: '0.75rem', 
+                  fontWeight: 'bold', 
+                  borderBottom: '1px solid rgba(0, 255, 102, 0.3)', 
+                  paddingBottom: '4px', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+                onClick={() => setIsAdminConsoleExpanded(false)}
+              >
+                <span>🛠️ 特權控制台 ▲</span>
+                <span style={{ fontSize: '0.6rem', background: 'rgba(0, 255, 102, 0.2)', padding: '1px 4px', borderRadius: '2px' }}>HIDE</span>
+              </div>
               
-              if (!currentUser.isGuest) {
-                try {
-                  updateStats(currentUser.username, {
-                    kills: eliminated,
-                    victory: true,
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setEnemies([]);
+                  if (currentWave < 3) {
+                    setWaveCountdown(5);
+                    addKillFeedEntry('管理員跳過當前波次，下一波即將開始...', 'system');
+                  } else {
+                    setExtractionActive(true);
+                    setExtractionState('incoming');
+                    setExtractionCountdown(5.0);
+                    addKillFeedEntry('管理員跳過全部防守波次！已呼叫撤離直升機！', 'system');
+                    soundManager.startHelicopterSound();
+                  }
+                }}
+              >
+                ⏭️ 跳過波次 (O)
+              </button>
+
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setEnemies([]);
+                  setExtractionActive(true);
+                  setExtractionState('landed');
+                  setExtractionCountdown(0.0);
+                  addKillFeedEntry('管理員呼叫直升機，LZ 已建立，請前往中心點撤離！', 'system');
+                  soundManager.startHelicopterSound();
+                }}
+              >
+                🚁 立即呼叫撤離
+              </button>
+
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #ffcc00',
+                  color: '#ffcc00',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setGameState('victory');
+                  if (controlsRef.current) {
+                    controlsRef.current.unlock();
+                  }
+                  const duration = Math.round((Date.now() - runStatsRef.current.startTime) / 1000);
+                  const accuracy = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0.8;
+                  const total = (eliminated * 50) + 300 + (runStatsRef.current.headshots * 20) + 100;
+                  setEndgameStats({
                     headshots: runStatsRef.current.headshots,
                     shotsFired: runStatsRef.current.shotsFired,
                     shotsHit: runStatsRef.current.shotsHit,
-                    playTimeSeconds: duration
+                    playTimeSeconds: duration,
+                    coinsEarnedDetails: {
+                      killsCoins: eliminated * 50,
+                      victoryCoins: 300,
+                      headshotsCoins: runStatsRef.current.headshots * 20,
+                      accuracyCoins: 100,
+                      total: total
+                    }
                   });
-                } catch (e) {}
-              }
-              addKillFeedEntry('管理員瞬間通關！ (K)', 'system');
-            }}
-          >
-            🏆 瞬間獲勝 (K)
-          </button>
+                  
+                  if (!currentUser.isGuest) {
+                    try {
+                      updateStats(currentUser.username, {
+                        kills: eliminated,
+                        victory: true,
+                        headshots: runStatsRef.current.headshots,
+                        shotsFired: runStatsRef.current.shotsFired,
+                        shotsHit: runStatsRef.current.shotsHit,
+                        playTimeSeconds: duration
+                      });
+                    } catch (e) {}
+                  }
+                  addKillFeedEntry('管理員瞬間通關！ (K)', 'system');
+                }}
+              >
+                🏆 瞬間獲勝 (K)
+              </button>
 
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setHealth(100);
-              addKillFeedEntry('管理員恢復生命值為 100% (P)', 'system');
-            }}
-          >
-            ❤️ 恢復血量 (P)
-          </button>
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setHealth(100);
+                  addKillFeedEntry('管理員恢復生命值為 100% (P)', 'system');
+                }}
+              >
+                ❤️ 恢復血量 (P)
+              </button>
+            </>
+          ) : (
+            <div 
+              style={{ 
+                color: '#00ff66', 
+                fontSize: '0.75rem', 
+                fontWeight: 'bold', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                height: '20px'
+              }}
+              onClick={() => setIsAdminConsoleExpanded(true)}
+            >
+              <span>🛠️ 控制台 ▼</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -10211,11 +10453,15 @@ export default function App() {
       {/* 3D Canvas 容器 */}
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
-          <ambientLight intensity={0.5} />
+          <ambientLight 
+            intensity={selectedMap === 'facility' ? 0.15 : 0.5} 
+            color={selectedMap === 'facility' ? '#0c1015' : '#ffffff'} 
+          />
           <directionalLight
             castShadow
-            position={[50, 80, 50]}
-            intensity={1.5}
+            position={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]}
+            intensity={selectedMap === 'facility' ? 0.1 : 1.5}
+            color={selectedMap === 'facility' ? '#6b829c' : '#ffffff'}
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
             shadow-camera-near={0.5}
@@ -10225,12 +10471,17 @@ export default function App() {
             shadow-camera-top={70}
             shadow-camera-bottom={-70}
           />
-          <Sky sunPosition={[50, 80, 50]} distance={450000} />
+          <Sky 
+            sunPosition={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]} 
+            distance={450000} 
+            turbidity={selectedMap === 'facility' ? 10 : 2}
+            rayleigh={selectedMap === 'facility' ? 4 : 1}
+          />
 
           {/* 地面與環境防禦工事 */}
-          <Ground />
-          <PerimeterWalls />
-          <TacticalAssets hideCenter={extractionActive} />
+          <Ground mapType={selectedMap} />
+          <PerimeterWalls mapType={selectedMap} />
+          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} />
 
           {/* 3D 戰術直升機撤離點 */}
           <LandingPad active={extractionActive} />
