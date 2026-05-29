@@ -1358,7 +1358,7 @@ export const LOOT_CONTAINERS = [
   { id: 6, name: '實驗室密室保險箱', position: new THREE.Vector3(-75, 0.4, 0), type: 'locked_safe', requiresKeycard: 'keycard' }
 ];
 
-export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false) => {
+export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost') => {
   const composition = WAVE_COMPOSITIONS[waveNumber] || WAVE_COMPOSITIONS[3];
   const spawned = [];
   let idCounter = 0;
@@ -1370,16 +1370,29 @@ export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = fal
       let pos;
 
       if (group.type === ENEMY_TYPES.SNIPER) {
-        // 狙擊手固定在哨塔位置
-        pos = SNIPER_POSITIONS[sniperIndex % SNIPER_POSITIONS.length].clone();
-        sniperIndex++;
+        if (mapType === 'facility') {
+          // 地鐵沒有哨塔，狙擊手放置在通道深處
+          pos = new THREE.Vector3((Math.random() - 0.5) * 4.0, 0, -110 + Math.random() * 40);
+        } else {
+          pos = SNIPER_POSITIONS[sniperIndex % SNIPER_POSITIONS.length].clone();
+          sniperIndex++;
+        }
       } else {
-        // 地面部隊隨機生成，避開玩家出生區
-        let x = (Math.random() - 0.5) * 180;
-        let z = (Math.random() - 0.5) * 180;
-        while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+        let x, z;
+        if (mapType === 'facility') {
+          // 地鐵通道內
+          x = (Math.random() - 0.5) * 6.0;
+          z = (Math.random() - 0.5) * 180;
+          while (z > 80) { // 避開玩家出生區 (Z=85~110)
+            z = (Math.random() - 0.5) * 180;
+          }
+        } else {
           x = (Math.random() - 0.5) * 180;
           z = (Math.random() - 0.5) * 180;
+          while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+            x = (Math.random() - 0.5) * 180;
+            z = (Math.random() - 0.5) * 180;
+          }
         }
         pos = new THREE.Vector3(x, 0, z);
       }
@@ -1404,7 +1417,7 @@ export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = fal
   return spawned;
 };
 
-const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush = false) => {
+const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost') => {
   if (isTutorial) {
     return [
       {
@@ -1416,14 +1429,14 @@ const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush =
       },
       {
         id: 102,
-        position: new THREE.Vector3(-6, 0, 60), // 前移至距玩家 35 米處，稍微靠左
+        position: new THREE.Vector3(-2, 0, 60), // 地鐵寬度受限，靠左一點但仍在通道內
         hp: 100,
         state: 'alive',
         isDummy: true,
       }
     ];
   }
-  return spawnWave(1, difficultyMultiplier, isAmbush);
+  return spawnWave(1, difficultyMultiplier, isAmbush, mapType);
 };
 
 export function LootCrate({ position, name, isLooted, type = 'default', rotation = [0, 0, 0] }) {
@@ -2058,7 +2071,7 @@ function SmokeCloud({ position, radius = 10.0, timeLeft }) {
 
 // 敵軍 AI 組件
 // 敵軍 AI 組件 (支援突擊、盾兵、擲彈、狙擊四兵種 AI 與精緻模型)
-function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [] }) {
+function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [], mapType }) {
   const meshRef = useRef();
   const healthBarRef = useRef();
   const [dyingRotation, setDyingRotation] = useState(0);
@@ -2684,6 +2697,11 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
     }
+
+    if (mapType === 'facility') {
+      enemyPos.x = Math.max(-3.6, Math.min(3.6, enemyPos.x));
+      enemyPos.z = Math.max(-115, Math.min(115, enemyPos.z));
+    }
   });
 
   // ========== 視覺模型 (依兵種分化) ==========
@@ -2912,26 +2930,56 @@ function TrainingDummy({ data, onKilled }) {
 // ==========================================
 function Ground({ mapType }) {
   const isFacility = mapType === 'facility';
-  const groundColor = isFacility ? '#141619' : '#2d3527';
-  const gridColor1 = isFacility ? '#00ffcc' : '#00ff66';
-  const gridColor2 = isFacility ? '#0c1a24' : '#142517';
+  const groundColor = isFacility ? '#e0e4e8' : '#2d3527';
+  const gridColor1 = isFacility ? '#cccccc' : '#00ff66';
+  const gridColor2 = isFacility ? '#dddddd' : '#142517';
 
   return (
     <group>
+      {/* 經典地圖地面或地鐵通道地面 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[250, 250]} />
-        <meshStandardMaterial color={groundColor} roughness={0.8} metalness={isFacility ? 0.3 : 0.0} />
+        <planeGeometry args={isFacility ? [8, 240] : [250, 250]} />
+        <meshStandardMaterial color={groundColor} roughness={0.75} />
       </mesh>
-      <gridHelper args={[240, 120, gridColor1, gridColor2]} position={[0, 0.01, 0]} />
-
+      
+      {/* 盲道黃線 (只在地鐵地圖顯示) */}
       {isFacility && (
-        <group>
-          <mesh position={[0, 15, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[250, 250]} />
-            <meshStandardMaterial color="#0f1115" roughness={0.85} metalness={0.4} />
+        <>
+          {/* 黃色導盲磚 */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
+            <planeGeometry args={[0.4, 240]} />
+            <meshStandardMaterial color="#f39c12" roughness={0.8} flatShading />
           </mesh>
-          <gridHelper args={[240, 40, '#333333', '#1e222b']} position={[0, 14.95, 0]} />
-        </group>
+          {/* 地鐵地板磁磚網格 */}
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[0, 0.001, 0]} />
+          
+          {/* 天花板 (屋頂) */}
+          <mesh position={[0, 5, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[8, 240]} />
+            <meshStandardMaterial color="#eceff1" roughness={0.9} />
+          </mesh>
+          <gridHelper args={[240, 120, '#b0bec5', '#cfd8dc']} position={[0, 4.98, 0]} />
+
+          {/* 兩側的白色磁磚牆壁 */}
+          {/* 左磁磚牆 */}
+          <mesh position={[-4, 2.5, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow castShadow>
+            <planeGeometry args={[240, 5]} />
+            <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
+          </mesh>
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[-3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
+
+          {/* 右磁磚牆 */}
+          <mesh position={[4, 2.5, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow castShadow>
+            <planeGeometry args={[240, 5]} />
+            <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
+          </mesh>
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
+        </>
+      )}
+
+      {/* 經典地圖 gridHelper */}
+      {!isFacility && (
+        <gridHelper args={[240, 120, gridColor1, gridColor2]} position={[0, 0.01, 0]} />
       )}
     </group>
   );
@@ -2939,13 +2987,30 @@ function Ground({ mapType }) {
 
 function PerimeterWalls({ mapType }) {
   const isFacility = mapType === 'facility';
-  const wallColor = isFacility ? '#0d0f12' : '#1a1f18';
+  const wallColor = isFacility ? '#2c3e50' : '#1a1f18';
   
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: wallColor,
     roughness: 0.9,
     flatShading: true,
   });
+
+  if (isFacility) {
+    return (
+      <group>
+        {/* 北端大門 */}
+        <mesh position={[0, 2.5, -120]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 0.4]} />
+          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+        </mesh>
+        {/* 南端大門 */}
+        <mesh position={[0, 2.5, 120]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 0.4]} />
+          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+        </mesh>
+      </group>
+    );
+  }
 
   return (
     <group>
@@ -2966,62 +3031,148 @@ function PerimeterWalls({ mapType }) {
 }
 
 // ==========================================
-// 地下工廠 CQB 室內專屬 3D 組件
+// 地鐵通道 (Exit 8 風格) 專屬 3D 組件
 // ==========================================
-function FacilityWall({ position, rotation = [0, 0, 0], scale = [1, 1, 1], length = 10 }) {
-  return (
-    <mesh position={position} rotation={rotation} scale={scale} castShadow receiveShadow>
-      <boxGeometry args={[length, 10, 0.6]} />
-      <meshStandardMaterial color="#1a1c22" roughness={0.95} metalness={0.1} flatShading />
-    </mesh>
-  );
-}
-
-function IndustrialGenerator({ position, rotation = [0, 0, 0] }) {
-  return (
-    <group position={position} rotation={rotation}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[4, 2.5, 2.5]} />
-        <meshStandardMaterial color="#2d3238" roughness={0.7} metalness={0.4} flatShading />
-      </mesh>
-      <mesh position={[0, 1.6, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.8, 0.8, 3.2, 8]} />
-        <meshStandardMaterial color="#1f2329" roughness={0.8} metalness={0.3} flatShading />
-      </mesh>
-      <mesh position={[-1.2, 0.8, 1.26]}>
-        <boxGeometry args={[0.3, 0.3, 0.1]} />
-        <meshBasicMaterial color="#ff3333" />
-      </mesh>
-      <mesh position={[1.2, 0.8, 1.26]}>
-        <boxGeometry args={[0.3, 0.3, 0.1]} />
-        <meshBasicMaterial color="#00ff66" />
-      </mesh>
-    </group>
-  );
-}
-
-function IndustrialPipes({ position, rotation = [0, 0, 0], length = 12, radius = 0.3 }) {
-  return (
-    <mesh position={position} rotation={rotation} castShadow receiveShadow>
-      <cylinderGeometry args={[radius, radius, length, 8]} />
-      <meshStandardMaterial color="#685848" roughness={0.6} metalness={0.65} flatShading />
-    </mesh>
-  );
-}
-
-function FacilityLight({ position, color = "#ff3333", intensity = 5, distance = 30 }) {
+function SubwayFluorescentLight({ position }) {
   return (
     <group position={position}>
+      {/* 燈管外殼 */}
       <mesh castShadow>
-        <cylinderGeometry args={[0.2, 0.4, 0.4, 6]} />
-        <meshStandardMaterial color="#222" roughness={0.5} />
+        <boxGeometry args={[1.5, 0.05, 0.25]} />
+        <meshStandardMaterial color="#353b48" roughness={0.5} />
       </mesh>
-      <mesh position={[0, -0.22, 0]}>
-        <sphereGeometry args={[0.15, 8, 8]} />
-        <meshBasicMaterial color={color} />
+      {/* 燈管發光體 */}
+      <mesh position={[0, -0.03, 0]}>
+        <boxGeometry args={[1.4, 0.02, 0.18]} />
+        <meshBasicMaterial color="#ffffff" />
       </mesh>
-      <pointLight color={color} intensity={intensity} distance={distance} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+      {/* 點光源 */}
+      <pointLight color="#ffffff" intensity={2.0} distance={18} decay={1.8} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
     </group>
+  );
+}
+
+function ExitSign({ position }) {
+  return (
+    <group position={position}>
+      {/* 指示牌本體 */}
+      <mesh castShadow>
+        <boxGeometry args={[3.2, 0.7, 0.15]} />
+        <meshStandardMaterial color="#ffd200" roughness={0.2} metalness={0.1} />
+      </mesh>
+      {/* 吊桿 */}
+      <mesh position={[-1.0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.03, 1.0, 6]} />
+        <meshStandardMaterial color="#2f3640" />
+      </mesh>
+      <mesh position={[1.0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.03, 1.0, 6]} />
+        <meshStandardMaterial color="#2f3640" />
+      </mesh>
+      {/* 使用 Html 渲染看板文字 */}
+      <Html position={[0, 0, 0.08]} transform center distanceFactor={7}>
+        <div style={{
+          background: '#ffd200',
+          color: '#000000',
+          fontFamily: '"Helvetica Neue", Arial, sans-serif',
+          fontWeight: 'bold',
+          fontSize: '22px',
+          width: '300px',
+          textAlign: 'center',
+          padding: '4px 8px',
+          border: '2px solid #000',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '12px',
+          userSelect: 'none'
+        }}>
+          <span style={{ fontSize: '30px' }}>↑</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <div style={{ fontSize: '18px', lineHeight: '20px' }}>出口 <span style={{ fontSize: '26px' }}>8</span></div>
+            <div style={{ fontSize: '11px', lineHeight: '11px', letterSpacing: '0.5px' }}>Exit 8</div>
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function WallPoster({ position, rotation, title, subtitle, bgColor = "#3498db" }) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 海報外框 */}
+      <mesh castShadow>
+        <boxGeometry args={[1.3, 1.7, 0.015]} />
+        <meshStandardMaterial color="#2c3e50" roughness={0.6} />
+      </mesh>
+      {/* 海報平面 */}
+      <mesh position={[0, 0, 0.01]}>
+        <planeGeometry args={[1.2, 1.6]} />
+        <meshStandardMaterial color={bgColor} roughness={0.8} />
+      </mesh>
+      <Html position={[0, 0, 0.015]} transform center distanceFactor={5}>
+        <div style={{
+          width: '100px',
+          height: '130px',
+          background: bgColor,
+          color: '#ffffff',
+          fontFamily: 'monospace',
+          padding: '8px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          userSelect: 'none',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9px', borderBottom: '1px solid white', paddingBottom: '1px', textTransform: 'uppercase' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: '7px', opacity: 0.8, wordBreak: 'break-all' }}>
+            {subtitle}
+          </div>
+          <div style={{ fontSize: '8px', fontWeight: 'bold', textAlign: 'right', color: '#f1c40f' }}>
+            DELTA-3D
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function VendingMachine({ position, rotation }) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 機身 */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.1, 2.0, 0.7]} />
+        <meshStandardMaterial color="#e74c3c" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* 展示櫃 */}
+      <mesh position={[0, 0.35, 0.36]} castShadow>
+        <boxGeometry args={[0.9, 0.8, 0.05]} />
+        <meshStandardMaterial color="#2d3436" roughness={0.2} metalness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.35, 0.39]}>
+        <planeGeometry args={[0.8, 0.7]} />
+        <meshBasicMaterial color="#ffffff" opacity={0.15} transparent />
+      </mesh>
+      {/* 取物口 */}
+      <mesh position={[0, -0.65, 0.36]} castShadow>
+        <boxGeometry args={[0.7, 0.25, 0.05]} />
+        <meshStandardMaterial color="#1e272e" roughness={0.8} />
+      </mesh>
+    </group>
+  );
+}
+
+function TrashCan({ position }) {
+  return (
+    <mesh position={position} castShadow receiveShadow>
+      <cylinderGeometry args={[0.25, 0.25, 0.8, 10]} />
+      <meshStandardMaterial color="#95a5a6" roughness={0.4} metalness={0.8} />
+    </mesh>
   );
 }
 
@@ -3700,65 +3851,41 @@ function OutpostAssets() {
 function FacilityAssets({ hideCenter }) {
   return (
     <group>
-      {/* 工廠專屬的室內高牆隔間，形成迷宮和長廊 */}
-      <FacilityWall position={[0, 0, 75]} length={60} />
-      <FacilityWall position={[-30, 0, 50]} rotation={[0, Math.PI / 2, 0]} length={50} />
-      <FacilityWall position={[30, 0, 50]} rotation={[0, Math.PI / 2, 0]} length={50} />
-      
-      <FacilityWall position={[-15, 0, 20]} length={30} />
-      <FacilityWall position={[15, 0, 20]} length={30} />
-      <FacilityWall position={[-15, 0, -20]} length={30} />
-      <FacilityWall position={[15, 0, -20]} length={30} />
-      <FacilityWall position={[-30, 0, 0]} rotation={[0, Math.PI / 2, 0]} length={40} />
-      <FacilityWall position={[30, 0, 0]} rotation={[0, Math.PI / 2, 0]} length={40} />
+      {/* 天花板上的日光燈管 (一整排縱向排列，提供明亮光影) */}
+      {[-105, -90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90, 105].map((z, idx) => (
+        <SubwayFluorescentLight key={idx} position={[0, 4.9, z]} />
+      ))}
 
-      <FacilityWall position={[-75, 0, 40]} length={50} />
-      <FacilityWall position={[75, 0, -40]} length={50} />
-      <FacilityWall position={[-50, 0, -60]} rotation={[0, Math.PI / 2, 0]} length={60} />
-      <FacilityWall position={[50, 0, 60]} rotation={[0, Math.PI / 2, 0]} length={60} />
+      {/* 經典 Exit 8 黃色指示牌 */}
+      <ExitSign position={[0, 4.3, 0]} />
 
-      {/* 工業裝飾物 */}
-      <IndustrialGenerator position={[-10, 1.25, 45]} />
-      <IndustrialGenerator position={[10, 1.25, 45]} />
-      <IndustrialGenerator position={[-50, 1.25, -20]} rotation={[0, Math.PI / 2, 0]} />
-      <IndustrialGenerator position={[50, 1.25, 20]} rotation={[0, -Math.PI / 2, 0]} />
+      {/* 左右磁磚牆壁上的廣告海報 */}
+      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
+      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} title="JOIN DELTA FORCE" subtitle="ENLIST TODAY TO DEFEND OUTPOST BASE SECURE SECTOR." bgColor="#27ae60" />
+      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} title="WANTED" subtitle="ELITE SHIELD TROOPS DETECTED IN SECTOR 8. EXTREME CAUTION." bgColor="#c0392b" />
+      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} title="TACTICAL GEAR" subtitle="EQUIP PRIMARY SILENCERS & EXTENDED MAGS FOR CLOSE CQB." bgColor="#8e44ad" />
+      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} title="WARNING" subtitle="HIGH VOLTAGE RAILWAY SECTIONS AHEAD. DO NOT CROSS." bgColor="#d35400" />
+      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} title="SECURE EXIT 8" subtitle="LZ EVACUATION ESTABLISHED AT THE CENTER ZONE (0,0)." bgColor="#16a085" />
 
-      {/* 橫跨天花板/牆壁的管道 */}
-      <IndustrialPipes position={[0, 12, 75]} rotation={[0, 0, Math.PI / 2]} length={60} />
-      <IndustrialPipes position={[-30, 10, 50]} length={50} />
-      <IndustrialPipes position={[30, 10, 50]} length={50} />
-      <IndustrialPipes position={[0, 8, 0]} length={40} radius={0.5} />
+      {/* 沿著通道兩側擺放自動販賣機與垃圾桶 (適度填充空間並作為戰術掩體) */}
+      <VendingMachine position={[-3.4, 1.0, -60]} rotation={[0, Math.PI / 2, 0]} />
+      <TrashCan position={[-3.4, 0.4, -58]} />
 
-      {/* 戰術警示吊燈 (點光源，綠色/紅色/青色/橙色) */}
-      <FacilityLight position={[0, 14, 0]} color="#00ff66" intensity={6} distance={40} />
-      <FacilityLight position={[-45, 14, 45]} color="#ff3333" intensity={5} distance={30} />
-      <FacilityLight position={[45, 14, -45]} color="#ff3333" intensity={5} distance={30} />
-      <FacilityLight position={[-45, 14, -45]} color="#00e5ff" intensity={5} distance={30} />
-      <FacilityLight position={[45, 14, 45]} color="#00e5ff" intensity={5} distance={30} />
-      <FacilityLight position={[0, 14, 80]} color="#ff9900" intensity={5} distance={35} />
-      <FacilityLight position={[0, 14, -80]} color="#ff9900" intensity={5} distance={35} />
+      <VendingMachine position={[3.4, 1.0, -25]} rotation={[0, -Math.PI / 2, 0]} />
+      <TrashCan position={[3.4, 0.4, -27]} />
 
-      {/* 室內放一些貨櫃與箱子作為物資掩體 */}
-      <CargoContainer position={[-15, 1.3, 30]} color="#222" />
-      <CargoContainer position={[15, 1.3, -30]} color="#333" />
-      <CargoContainer position={[-25, 1.3, -30]} color="#444" />
-      <CargoContainer position={[25, 1.3, 30]} color="#2c2c2c" />
-      
-      <MilitaryCrate position={[0, 0.6, 10]} />
-      <MilitaryCrate position={[1.4, 0.6, 10]} rotation={[0, 0.2, 0]} />
-      <MilitaryCrate position={[-1.4, 0.6, -10]} rotation={[0, -0.4, 0]} />
+      <VendingMachine position={[-3.4, 1.0, 30]} rotation={[0, Math.PI / 2, 0]} />
+      <TrashCan position={[-3.4, 0.4, 32]} />
 
-      <SandbagWall position={[0, 0, 5]} length={4} />
-      <SandbagWall position={[0, 0, -5]} length={4} />
-      
-      {/* 玩家出生點與補給站防護 (Z = 85 ~ 92) */}
-      <FacilityWall position={[0, 0, 85]} length={40} />
-      <MilitaryCrate position={[-3, 0.6, 88]} />
-      <MilitaryCrate position={[3, 0.6, 88]} />
-      
-      {/* 空心碉堡與建築 */}
-      <MilitaryBunker position={[-65, 0, -20]} />
-      <MilitaryBunker position={[65, 0, 20]} />
+      <VendingMachine position={[3.4, 1.0, 70]} rotation={[0, -Math.PI / 2, 0]} />
+      <TrashCan position={[3.4, 0.4, 68]} />
+
+      {/* 通道中散落的軍事箱體與沙包掩體，提供額外的 CQB 槍戰遮擋 */}
+      <MilitaryCrate position={[-1.8, 0.6, -40]} rotation={[0, 0.3, 0]} />
+      <MilitaryCrate position={[1.5, 0.6, -10]} rotation={[0, -0.2, 0]} />
+      <MilitaryCrate position={[-1.2, 0.6, 15]} rotation={[0, 0.5, 0]} />
+      <MilitaryCrate position={[1.6, 0.6, 45]} rotation={[0, -0.4, 0]} scale={[1.1, 1.1, 1.1]} />
+      <MilitaryCrate position={[0, 0.6, -85]} rotation={[0, 0.1, 0]} />
     </group>
   );
 }
@@ -5402,7 +5529,7 @@ function PlayerController({
     let closestCrate = null;
     let minCrateDist = Infinity;
 
-    LOOT_CONTAINERS.forEach((container) => {
+    getAdjustedLootContainers().forEach((container) => {
       if (lootedContainersRef.current && lootedContainersRef.current[container.id]) return;
       const dist = playerPos3D.distanceTo(container.position);
       if (dist < minCrateDist) {
@@ -5579,7 +5706,7 @@ function PlayerController({
     const playerRadius = 0.45;
 
     // 建立目前所有的碰撞體清單 (包含靜態掩體與教學靶)
-    const activeColliders = [...STATIC_COLLIDERS];
+    const activeColliders = selectedMap === 'facility' ? [] : [...STATIC_COLLIDERS];
     if (isTutorialRef.current) {
       activeColliders.push({ x: 0, z: 65, hx: 0.5, hz: 0.5 });
       activeColliders.push({ x: -6, z: 60, hx: 0.5, hz: 0.5 });
@@ -5618,7 +5745,12 @@ function PlayerController({
         }
       }
     }
-    camera.position.x = Math.max(-mapLimit, Math.min(mapLimit, camera.position.x));
+    
+    if (selectedMap === 'facility') {
+      camera.position.x = Math.max(-3.6, Math.min(3.6, camera.position.x));
+    } else {
+      camera.position.x = Math.max(-mapLimit, Math.min(mapLimit, camera.position.x));
+    }
 
     // 2. 分別沿 Z 軸移動並檢測碰撞
     if (direction.z !== 0) {
@@ -5651,7 +5783,12 @@ function PlayerController({
         }
       }
     }
-    camera.position.z = Math.max(-mapLimit, Math.min(mapLimit, camera.position.z));
+    
+    if (selectedMap === 'facility') {
+      camera.position.z = Math.max(-115, Math.min(115, camera.position.z));
+    } else {
+      camera.position.z = Math.max(-mapLimit, Math.min(mapLimit, camera.position.z));
+    }
 
     // ------------------------------------------
     // 6.X 教學移動與跳躍觸發判定
@@ -5789,6 +5926,22 @@ export default function App() {
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
   const [selectedMap, setSelectedMap] = useState('outpost'); // 'outpost' | 'facility'
   const [isAdminConsoleExpanded, setIsAdminConsoleExpanded] = useState(false);
+
+  const getAdjustedLootContainers = () => {
+    return LOOT_CONTAINERS.map(c => {
+      if (selectedMap === 'facility') {
+        const pos = c.position.clone();
+        if (c.id === 1) pos.set(-3.5, 0.4, 40);
+        else if (c.id === 2) pos.set(3.5, 0.4, -20);
+        else if (c.id === 3) pos.set(-3.5, 0.4, -50);
+        else if (c.id === 4) pos.set(3.5, 0.4, 15);
+        else if (c.id === 5) pos.set(-3.5, 0.4, -10);
+        else if (c.id === 6) pos.set(3.5, 0.4, 60);
+        return { ...c, position: pos };
+      }
+      return c;
+    });
+  };
 
   // 受傷方向指示器與相機參考
   const cameraRef = useRef();
@@ -6076,7 +6229,7 @@ export default function App() {
   const [isPlayerInExtractionZone, setIsPlayerInExtractionZone] = useState(false);
 
   // 敵人、粒子特效、彈孔貼紙狀態
-  const [enemies, setEnemies] = useState(() => spawnEnemies(false));
+  const [enemies, setEnemies] = useState(() => spawnEnemies(false, 1.0, false, 'outpost'));
   const [particles, setParticles] = useState([]);
   const [holes, setHoles] = useState([]);
   
@@ -6141,7 +6294,7 @@ export default function App() {
           if (prev <= 1) {
             setCurrentWave((w) => {
               const nextWave = w + 1;
-              setEnemies(spawnWave(nextWave, getDifficultyMultiplier(), isAmbushActive));
+              setEnemies(spawnWave(nextWave, getDifficultyMultiplier(), isAmbushActive, selectedMap));
               addKillFeedEntry(`第 ${nextWave} 波敵軍已進入戰區！`, 'system');
               return nextWave;
             });
@@ -7318,7 +7471,7 @@ export default function App() {
     }
 
     const diff = getDifficultyMultiplier();
-    setEnemies(spawnEnemies(false, diff, isAmbush));
+    setEnemies(spawnEnemies(false, diff, isAmbush, selectedMap));
 
     setGameState('active');
     soundManager.startAmbient();
@@ -8029,7 +8182,7 @@ export default function App() {
     setIsHealing(false);
     setHealProgress(0);
     setEliminated(0);
-    setEnemies(spawnEnemies(isTutorial)); // 依照當前是否為教學模式生成對應敵軍或標靶
+    setEnemies(spawnEnemies(isTutorial, 1.0, false, selectedMap)); // 依照當前是否為教學模式生成對應敵軍或標靶
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -8093,7 +8246,7 @@ export default function App() {
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     setEliminated(0);
-    setEnemies(spawnEnemies(true)); // 生成訓練標靶 Dummy
+    setEnemies(spawnEnemies(true, 1.0, false, selectedMap)); // 生成訓練標靶 Dummy
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -8169,7 +8322,7 @@ export default function App() {
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     setEliminated(0);
-    setEnemies(spawnEnemies(false));
+    setEnemies(spawnEnemies(false, 1.0, false, selectedMap));
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -10494,7 +10647,7 @@ export default function App() {
           <MedicalSupplyStation position={[3.0, 0, 92.0]} active={medCooldown === 0} />
 
           {/* 3D 戰術物資搜刮箱 */}
-          {LOOT_CONTAINERS.map((container) => (
+          {getAdjustedLootContainers().map((container) => (
             <LootCrate
               key={container.id}
               position={container.position}
@@ -10572,6 +10725,7 @@ export default function App() {
                 onKilled={handleEnemyKilled}
                 onThrowGrenade={addEnemyGrenade}
                 smokeClouds={smokeClouds}
+                mapType={selectedMap}
               />
             )
           ))}
