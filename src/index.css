@@ -3120,87 +3120,196 @@ html, body {
   }
 }
 
-/* 行動端與小螢幕大廳初始 UI 縮小響應式適配 */
+/* 行動端與小螢幕大廳初始 UI 與遊戲 HUD 全面縮小適配 */
 @media (max-width: 1024px) or (max-height: 550px) {
+  /* 1. 大廳初始面版等比縮小 65%，確保全部內容完整顯示，並添加 max-height 滾動防截斷 */
   .hud-panel {
-    padding: 12px 20px !important;
-    font-size: 0.8rem !important;
+    transform: scale(0.65) !important;
+    transform-origin: center center !important;
+    margin: 0 auto !important;
+    max-height: 96vh !important;
+    overflow-y: auto !important;
   }
-  .hud-title {
-    font-size: 1.4rem !important;
-    margin-bottom: 5px !important;
+
+  /* 行動端輸入框與表單組件微調以適應縮放 */
+  .auth-input {
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
   }
-  .hud-subtitle {
-    font-size: 0.65rem !important;
-    margin-bottom: 10px !important;
-  }
-  .profile-header {
-    padding-bottom: 8px !important;
-    gap: 12px !important;
-  }
-  .profile-avatar-circle {
-    width: 48px !important;
-    height: 48px !important;
-    font-size: 0.8rem !important;
-  }
-  .lobby-tabs {
-    margin: 8px 0 5px 0 !important;
-    padding-bottom: 6px !important;
-    gap: 5px !important;
-  }
-  .lobby-tab-btn {
-    padding: 4px 8px !important;
-    font-size: 0.7rem !important;
-  }
-  /* 雙欄的 gap 縮小 */
-  .hud-panel > div {
-    gap: 15px !important;
-  }
-  .deploy-button {
-    font-size: 0.8rem !important;
-    padding: 8px 16px !important;
-  }
-  /* 排行榜與其他區塊間距縮小 */
-  .stats-grid {
-    gap: 6px !important;
-  }
-  .stat-item {
-    padding: 4px !important;
-  }
-  .stat-item-label {
-    font-size: 0.55rem !important;
-  }
-  .stat-item-val {
+  .auth-submit-btn {
+    padding: 10px !important;
     font-size: 0.9rem !important;
   }
-  .contracts-section {
-    padding: 8px !important;
-    margin-top: 10px !important;
+  
+  /* 2. 遊戲內 HUD 元素縮小 */
+  .game-hud {
+    padding: 10px !important;
   }
-  .contracts-list {
-    gap: 6px !important;
+
+  /* 頂部 HUD (雷達與任務狀態) 整體縮小 28% */
+  .hud-top {
+    transform: scale(0.72) !important;
+    transform-origin: top left !important;
+    width: 138% !important;
   }
-  .contract-card {
-    padding: 6px !important;
+  
+  .hud-radar-scanner {
+    width: 90px !important;
+    height: 90px !important;
   }
-  .badges-grid {
-    gap: 5px !important;
+  .hud-stats-panel {
+    scale: 0.8 !important;
+    transform-origin: top right !important;
   }
-  .badge-card {
-    padding: 6px !important;
-  }
-  .badge-icon {
-    font-size: 1.2rem !important;
-  }
-  .badge-name {
+  .kill-feed {
+    max-width: 180px !important;
     font-size: 0.6rem !important;
   }
-  .leaderboard-section {
-    margin-top: 12px !important;
+
+  /* 底部 HUD (HP、彈藥、醫療包等) 整體縮小 32% */
+  .hud-bottom {
+    transform: scale(0.68) !important;
+    transform-origin: bottom left !important;
+    width: 147% !important;
   }
-  .leaderboard-table th, .leaderboard-table td {
-    padding: 4px !important;
+
+  /* 背包 HUD 縮小 30% */
+  .hud-backpack-panel {
+    transform: scale(0.7) !important;
+    transform-origin: top right !important;
+  }
+  
+  /* 3. 搜刮物資彈出面板行動端適配縮小 32% */
+  .loot-modal-container {
+    transform: scale(0.68) !important;
+    transform-origin: center center !important;
+    max-height: 98vh !important;
+  }
+  .loot-modal-body {
+    height: 240px !important;
+    gap: 10px !important;
+    padding: 10px !important;
+  }
+  .loot-modal-item-row {
+    padding: 6px 10px !important;
+  }
+  .loot-item-icon {
+    font-size: 1.1rem !important;
+    margin-right: 8px !important;
+  }
+  .loot-item-name {
+    font-size: 0.75rem !important;
+  }
+  .loot-item-desc {
+    font-size: 0.62rem !important;
+    max-width: 180px !important;
+  }
+  .loot-item-take-btn {
     font-size: 0.65rem !important;
+    padding: 2px 6px !important;
+  }
+  .bp-item-row {
+    padding: 4px 8px !important;
+    font-size: 0.72rem !important;
+  }
+  
+  /* 4. 手機虛擬搖桿整體縮小 */
+  .joystick-container {
+    bottom: 20px !important;
+    left: 20px !important;
+    width: 100px !important;
+    height: 100px !important;
+  }
+  .joystick-base {
+    width: 85px !important;
+    height: 85px !important;
+  }
+  .joystick-handle {
+    width: 35px !important;
+    height: 35px !important;
+  }
+
+  /* 5. 手機虛擬按鈕整體縮小，降低對 3D 畫面的遮擋 */
+  .mobile-buttons-container {
+    bottom: 15px !important;
+    right: 15px !important;
+    width: 250px !important;
+    height: 250px !important;
+  }
+  .mobile-btn {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+  }
+  .btn-fire {
+    width: 58px !important;
+    height: 58px !important;
+    bottom: 20px !important;
+    right: 130px !important;
+    font-size: 1.3rem !important;
+  }
+  .btn-jump {
+    width: 44px !important;
+    height: 44px !important;
+    bottom: 15px !important;
+    right: 15px !important;
+    font-size: 1.1rem !important;
+  }
+  .btn-ads {
+    width: 44px !important;
+    height: 44px !important;
+    bottom: 70px !important;
+    right: 15px !important;
+    font-size: 1.0rem !important;
+  }
+  .btn-crouch {
+    width: 38px !important;
+    height: 38px !important;
+    bottom: 15px !important;
+    right: 75px !important;
+    font-size: 0.95rem !important;
+  }
+  .btn-reload {
+    width: 38px !important;
+    height: 38px !important;
+    bottom: 70px !important;
+    right: 75px !important;
+    font-size: 0.95rem !important;
+  }
+  .btn-search {
+    width: 44px !important;
+    height: 44px !important;
+    bottom: 85px !important;
+    right: 130px !important;
+    font-size: 1.0rem !important;
+  }
+  
+  /* 頂部輔助按鈕也縮小 */
+  .btn-heal {
+    width: 36px !important;
+    height: 36px !important;
+    top: 12px !important;
+    left: 105px !important;
+    font-size: 0.95rem !important;
+  }
+  .btn-grenade {
+    width: 36px !important;
+    height: 36px !important;
+    top: 12px !important;
+    left: 150px !important;
+    font-size: 0.95rem !important;
+  }
+  .btn-switch {
+    width: 36px !important;
+    height: 36px !important;
+    top: 12px !important;
+    right: 60px !important;
+    font-size: 0.95rem !important;
+  }
+  .mobile-pause-btn {
+    width: 36px !important;
+    height: 36px !important;
+    top: 12px !important;
+    right: 15px !important;
+    font-size: 0.9rem !important;
   }
 }
 
