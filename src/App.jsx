@@ -7636,6 +7636,7 @@ export default function App() {
     }
   };
 
+
   // 重新開始/部署遊戲
   const handleRestart = () => {
     setEndgameStats(null);
@@ -7861,15 +7862,60 @@ export default function App() {
     }, 50);
   };
 
-  // 教學完成後返回大廳
+  // 返回大廳 (回到初始畫面/大廳，並完整重置遊戲狀態)
   const handleReturnToLobby = () => {
-    setIsTutorial(false);
-    setGameState('deploying');
-    if (device === 'mobile') {
-      setIsLocked(false);
-    } else if (controlsRef.current) {
+    setEndgameStats(null);
+    runStatsRef.current = { shotsFired: 0, shotsHit: 0, headshots: 0, startTime: Date.now() };
+    
+    // 重置波次、搜刮與背包狀態
+    setCurrentWave(1);
+    setWaveCountdown(0);
+    setBackpackItems([]);
+    setBackpackCoins(0);
+    setIsLootModalOpen(false);
+    setContainerLootItems([]);
+    setContainerLootCoins(0);
+    setLootedContainers({});
+    setNearContainer(null);
+    setIsLooting(false);
+    setLootProgress(0);
+    setLootPopup(null);
+    setDamageIndicators([]);
+    setExtractionActive(false);
+    setExtractionState('idle');
+    setExtractionCountdown(5.0);
+    setIsPlayerInExtractionZone(false);
+    soundManager.stopHelicopterSound();
+
+    if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
+    setIsReloading(false);
+    if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+    if (healIntervalRef.current) clearInterval(healIntervalRef.current);
+    setIsHealing(false);
+    setHealProgress(0);
+    setEliminated(0);
+    setEnemies([]);
+    setHoles([]);
+    setParticles([]);
+    setIsAds(false);
+    setPrimaryFireMode('auto');
+    setGrenadeEntities([]);
+    setEnemyGrenadeEntities([]);
+    setCasings([]);
+    setDroppedMags([]);
+    setKillFeed([]);
+    setAmmoCooldown(0);
+    setResetTrigger((prev) => prev + 1);
+
+    // 關閉 PointerLock
+    setIsLocked(false);
+    if (controlsRef.current) {
       controlsRef.current.unlock();
     }
+    
+    setIsTutorial(false);
+    // 將狀態設回大廳
+    setGameState('deploying');
   };
 
   // 監聽教學任務全部完成時，自動解鎖游標
@@ -7883,12 +7929,12 @@ export default function App() {
     }
   }, [tutorialChecklist, isTutorial, device]);
 
-  // 勝利或失敗狀態下，按 R 鍵亦能快速重新部署
+  // 勝利或失敗狀態下，按 R 鍵返回大廳 (回到初始畫面)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'KeyR') {
         if (gameState === 'victory' || gameState === 'failed') {
-          handleRestart();
+          handleReturnToLobby();
         }
       }
     };
@@ -9236,8 +9282,8 @@ export default function App() {
                   </div>
                 )}
 
-                <button className="deploy-button" onClick={handleRestart} style={{ marginTop: '15px' }}>
-                  RE-DEPLOY {device === 'pc' ? '(R)' : ''}
+                <button className="deploy-button" onClick={handleReturnToLobby} style={{ marginTop: '15px' }}>
+                  RETURN TO LOBBY 返回大廳 {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>
             </div>
@@ -9313,8 +9359,8 @@ export default function App() {
                   </div>
                 )}
 
-                <button className="deploy-button" onClick={handleRestart} style={{ marginTop: '15px' }}>
-                  RE-DEPLOY {device === 'pc' ? '(R)' : ''}
+                <button className="deploy-button" onClick={handleReturnToLobby} style={{ marginTop: '15px' }}>
+                  RETURN TO LOBBY 返回大廳 {device === 'pc' ? '(R)' : ''}
                 </button>
               </div>
             </div>
