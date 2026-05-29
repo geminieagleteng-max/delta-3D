@@ -1358,7 +1358,7 @@ export const LOOT_CONTAINERS = [
   { id: 6, name: '實驗室密室保險箱', position: new THREE.Vector3(-75, 0.4, 0), type: 'locked_safe', requiresKeycard: 'keycard' }
 ];
 
-export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false) => {
+export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost') => {
   const composition = WAVE_COMPOSITIONS[waveNumber] || WAVE_COMPOSITIONS[3];
   const spawned = [];
   let idCounter = 0;
@@ -1370,16 +1370,29 @@ export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = fal
       let pos;
 
       if (group.type === ENEMY_TYPES.SNIPER) {
-        // 狙擊手固定在哨塔位置
-        pos = SNIPER_POSITIONS[sniperIndex % SNIPER_POSITIONS.length].clone();
-        sniperIndex++;
+        if (mapType === 'facility') {
+          // 在地鐵通道內隨機分布，不能在塔上
+          pos = new THREE.Vector3((Math.random() - 0.5) * 4.0, 0, -110 + Math.random() * 40);
+        } else {
+          pos = SNIPER_POSITIONS[sniperIndex % SNIPER_POSITIONS.length].clone();
+          sniperIndex++;
+        }
       } else {
-        // 地面部隊隨機生成，避開玩家出生區
-        let x = (Math.random() - 0.5) * 180;
-        let z = (Math.random() - 0.5) * 180;
-        while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+        let x, z;
+        if (mapType === 'facility') {
+          // 地鐵隨機位置
+          x = (Math.random() - 0.5) * 6.0;
+          z = (Math.random() - 0.5) * 180;
+          while (z > 80) { // 避開玩家出生區 (Z=85~110)
+            z = (Math.random() - 0.5) * 180;
+          }
+        } else {
           x = (Math.random() - 0.5) * 180;
           z = (Math.random() - 0.5) * 180;
+          while (Math.sqrt(x * x + (z - 95) * (z - 95)) < 40) {
+            x = (Math.random() - 0.5) * 180;
+            z = (Math.random() - 0.5) * 180;
+          }
         }
         pos = new THREE.Vector3(x, 0, z);
       }
@@ -1404,7 +1417,7 @@ export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = fal
   return spawned;
 };
 
-const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush = false) => {
+const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost') => {
   if (isTutorial) {
     return [
       {
@@ -1416,14 +1429,14 @@ const spawnEnemies = (isTutorial = false, difficultyMultiplier = 1.0, isAmbush =
       },
       {
         id: 102,
-        position: new THREE.Vector3(-6, 0, 60), // 前移至距玩家 35 米處，稍微靠左
+        position: new THREE.Vector3(mapType === 'facility' ? -2 : -6, 0, 60), // 前移至距玩家 35 米處，稍微靠左
         hp: 100,
         state: 'alive',
         isDummy: true,
       }
     ];
   }
-  return spawnWave(1, difficultyMultiplier, isAmbush);
+  return spawnWave(1, difficultyMultiplier, isAmbush, mapType);
 };
 
 export function LootCrate({ position, name, isLooted, type = 'default', rotation = [0, 0, 0] }) {
@@ -2058,7 +2071,7 @@ function SmokeCloud({ position, radius = 10.0, timeLeft }) {
 
 // 敵軍 AI 組件
 // 敵軍 AI 組件 (支援突擊、盾兵、擲彈、狙擊四兵種 AI 與精緻模型)
-function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [] }) {
+function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [], mapType }) {
   const meshRef = useRef();
   const healthBarRef = useRef();
   const [dyingRotation, setDyingRotation] = useState(0);
@@ -2684,6 +2697,11 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
     }
+
+    if (mapType === 'facility') {
+      enemyPos.x = Math.max(-3.6, Math.min(3.6, enemyPos.x));
+      enemyPos.z = Math.max(-115, Math.min(115, enemyPos.z));
+    }
   });
 
   // ========== 視覺模型 (依兵種分化) ==========
@@ -2910,24 +2928,88 @@ function TrainingDummy({ data, onKilled }) {
 // ==========================================
 // 3. 3D 場景資產組件 (低多邊形 Low-Poly 風格)
 // ==========================================
-function Ground() {
+function Ground({ mapType }) {
+  const isFacility = mapType === 'facility';
+  const groundColor = isFacility ? '#e0e4e8' : '#2d3527';
+  const gridColor1 = isFacility ? '#cccccc' : '#00ff66';
+  const gridColor2 = isFacility ? '#dddddd' : '#142517';
+
   return (
     <group>
+      {/* 渲染草地或地鐵通道瓷磚地表 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[250, 250]} />
-        <meshStandardMaterial color="#2d3527" roughness={0.9} />
+        <planeGeometry args={isFacility ? [8, 240] : [250, 250]} />
+        <meshStandardMaterial color={groundColor} roughness={0.75} />
       </mesh>
-      <gridHelper args={[240, 120, '#00ff66', '#142517']} position={[0, 0.01, 0]} />
+      
+      {/* 地鐵特有輔助線與結構 */}
+      {isFacility && (
+        <>
+          {/* 黃色盲道引導磚 */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
+            <planeGeometry args={[0.4, 240]} />
+            <meshStandardMaterial color="#f39c12" roughness={0.8} flatShading />
+          </mesh>
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[0, 0.001, 0]} />
+          
+          {/* 天花板 */}
+          <mesh position={[0, 5, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[8, 240]} />
+            <meshStandardMaterial color="#eceff1" roughness={0.9} />
+          </mesh>
+          <gridHelper args={[240, 120, '#b0bec5', '#cfd8dc']} position={[0, 4.98, 0]} />
+
+          {/* 瓷磚側壁 (左右高 5 米) */}
+          {/* 左側壁 */}
+          <mesh position={[-4, 2.5, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow castShadow>
+            <planeGeometry args={[240, 5]} />
+            <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
+          </mesh>
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[-3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
+
+          {/* 右側壁 */}
+          <mesh position={[4, 2.5, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow castShadow>
+            <planeGeometry args={[240, 5]} />
+            <meshStandardMaterial color="#fafafa" roughness={0.35} metalness={0.05} />
+          </mesh>
+          <gridHelper args={[240, 240, '#b2bec3', '#dfe6e9']} position={[3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} />
+        </>
+      )}
+
+      {/* 草地 gridHelper */}
+      {!isFacility && (
+        <gridHelper args={[240, 120, gridColor1, gridColor2]} position={[0, 0.01, 0]} />
+      )}
     </group>
   );
 }
 
-function PerimeterWalls() {
+function PerimeterWalls({ mapType }) {
+  const isFacility = mapType === 'facility';
+  const wallColor = isFacility ? '#2c3e50' : '#1a1f18';
+  
   const wallMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a1f18',
+    color: wallColor,
     roughness: 0.9,
     flatShading: true,
   });
+
+  if (isFacility) {
+    return (
+      <group>
+        {/* 前端鋼製封口 */}
+        <mesh position={[0, 2.5, -120]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 0.4]} />
+          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+        </mesh>
+        {/* 後端鋼製封口 */}
+        <mesh position={[0, 2.5, 120]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 0.4]} />
+          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+        </mesh>
+      </group>
+    );
+  }
 
   return (
     <group>
@@ -3508,7 +3590,7 @@ function MedicalSupplyStation({ position, active }) {
   );
 }
 
-function TacticalAssets() {
+function OutpostAssets() {
   return (
     <group>
       {/* 角落狙擊哨塔 - 外移至 ±95 以適應兩倍大地圖 */}
@@ -3617,6 +3699,209 @@ function TacticalAssets() {
       <TwoStoryBuilding position={[65, 0, 45]} />
     </group>
   );
+}
+
+function SubwayFluorescentLight({ position, castShadow = false }) {
+  return (
+    <group position={position}>
+      {/* 燈具外殼 */}
+      <mesh>
+        <boxGeometry args={[1.5, 0.05, 0.25]} />
+        <meshStandardMaterial color="#353b48" roughness={0.5} />
+      </mesh>
+      {/* 燈管部分 */}
+      <mesh position={[0, -0.03, 0]}>
+        <boxGeometry args={[1.4, 0.02, 0.18]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      {/* 點光源：限制日光燈 shadows 以防止 WebGL 崩潰 */}
+      <pointLight 
+        color="#ffffff" 
+        intensity={1.2} 
+        distance={18} 
+        decay={1.8} 
+        castShadow={castShadow} 
+        shadow-mapSize-width={512} 
+        shadow-mapSize-height={512} 
+      />
+    </group>
+  );
+}
+
+function ExitSign({ position }) {
+  return (
+    <group position={position}>
+      {/* 出口指示牌外框 */}
+      <mesh castShadow>
+        <boxGeometry args={[3.2, 0.7, 0.15]} />
+        <meshStandardMaterial color="#ffd200" roughness={0.2} metalness={0.1} />
+      </mesh>
+      {/* 吊桿 */}
+      <mesh position={[-1.0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.03, 1.0, 6]} />
+        <meshStandardMaterial color="#2f3640" />
+      </mesh>
+      <mesh position={[1.0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.03, 1.0, 6]} />
+        <meshStandardMaterial color="#2f3640" />
+      </mesh>
+      {/* 出口標記 */}
+      <Html position={[0, 0, 0.08]} transform center distanceFactor={7}>
+        <div style={{
+          background: '#ffd200',
+          color: '#000000',
+          fontFamily: '"Helvetica Neue", Arial, sans-serif',
+          fontWeight: 'bold',
+          fontSize: '22px',
+          width: '300px',
+          textAlign: 'center',
+          padding: '4px 8px',
+          border: '2px solid #000',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '12px',
+          userSelect: 'none'
+        }}>
+          <span style={{ fontSize: '30px' }}>出口</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <div style={{ fontSize: '18px', lineHeight: '20px' }}>出口 <span style={{ fontSize: '26px' }}>8</span></div>
+            <div style={{ fontSize: '11px', lineHeight: '11px', letterSpacing: '0.5px' }}>Exit 8</div>
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function WallPoster({ position, rotation, title, subtitle, bgColor = "#3498db" }) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 海報框 */}
+      <mesh castShadow>
+        <boxGeometry args={[1.3, 1.7, 0.015]} />
+        <meshStandardMaterial color="#2c3e50" roughness={0.6} />
+      </mesh>
+      {/* 紙張 */}
+      <mesh position={[0, 0, 0.01]}>
+        <planeGeometry args={[1.2, 1.6]} />
+        <meshStandardMaterial color={bgColor} roughness={0.8} />
+      </mesh>
+      <Html position={[0, 0, 0.015]} transform center distanceFactor={5}>
+        <div style={{
+          width: '100px',
+          height: '130px',
+          background: bgColor,
+          color: '#ffffff',
+          fontFamily: 'monospace',
+          padding: '8px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          userSelect: 'none',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9px', borderBottom: '1px solid white', paddingBottom: '1px', textTransform: 'uppercase' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: '7px', opacity: 0.8, wordBreak: 'break-all' }}>
+            {subtitle}
+          </div>
+          <div style={{ fontSize: '8px', fontWeight: 'bold', textAlign: 'right', color: '#f1c40f' }}>
+            DELTA-3D
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function VendingMachine({ position, rotation }) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 自動販賣機主體 */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.1, 2.0, 0.7]} />
+        <meshStandardMaterial color="#e74c3c" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* 玻璃櫥窗 */}
+      <mesh position={[0, 0.35, 0.36]} castShadow>
+        <boxGeometry args={[0.9, 0.8, 0.05]} />
+        <meshStandardMaterial color="#2d3436" roughness={0.2} metalness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.35, 0.39]}>
+        <planeGeometry args={[0.8, 0.7]} />
+        <meshBasicMaterial color="#ffffff" opacity={0.15} transparent />
+      </mesh>
+      {/* 取物槽 */}
+      <mesh position={[0, -0.65, 0.36]} castShadow>
+        <boxGeometry args={[0.7, 0.25, 0.05]} />
+        <meshStandardMaterial color="#1e272e" roughness={0.8} />
+      </mesh>
+    </group>
+  );
+}
+
+function TrashCan({ position }) {
+  return (
+    <mesh position={position} castShadow receiveShadow>
+      <cylinderGeometry args={[0.25, 0.25, 0.8, 10]} />
+      <meshStandardMaterial color="#95a5a6" roughness={0.4} metalness={0.8} />
+    </mesh>
+  );
+}
+
+function FacilityAssets({ hideCenter }) {
+  // 地鐵長廊有 15 個日光燈，僅讓第 4 和 第 11 兩個日光燈投射陰影，其他日光燈關閉陰影投射，防止 WebGL 崩潰
+  const lightZPositions = [-105, -90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90, 105];
+  return (
+    <group>
+      {/* 日光燈排燈 */}
+      {lightZPositions.map((z, idx) => {
+        const castShadow = idx === 3 || idx === 11;
+        return <SubwayFluorescentLight key={idx} position={[0, 4.9, z]} castShadow={castShadow} />;
+      })}
+
+      {/* 出口 8 指示牌 */}
+      <ExitSign position={[0, 4.3, 0]} />
+
+      {/* 牆上海報 */}
+      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
+      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} title="JOIN DELTA FORCE" subtitle="ENLIST TODAY TO DEFEND OUTPOST BASE SECURE SECTOR." bgColor="#27ae60" />
+      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} title="WANTED" subtitle="ELITE SHIELD TROOPS DETECTED IN SECTOR 8. EXTREME CAUTION." bgColor="#c0392b" />
+      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} title="TACTICAL GEAR" subtitle="EQUIP PRIMARY SILENCERS & EXTENDED MAGS FOR CLOSE CQB." bgColor="#8e44ad" />
+      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} title="WARNING" subtitle="HIGH VOLTAGE RAILWAY SECTIONS AHEAD. DO NOT CROSS." bgColor="#d35400" />
+      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} title="SECURE EXIT 8" subtitle="LZ EVACUATION ESTABLISHED AT THE CENTER ZONE (0,0)." bgColor="#16a085" />
+
+      {/* 自動販賣機與垃圾桶組件 */}
+      <VendingMachine position={[-3.4, 1.0, -60]} rotation={[0, Math.PI / 2, 0]} />
+      <TrashCan position={[-3.4, 0.4, -58]} />
+
+      <VendingMachine position={[3.4, 1.0, -25]} rotation={[0, -Math.PI / 2, 0]} />
+      <TrashCan position={[3.4, 0.4, -27]} />
+
+      <VendingMachine position={[-3.4, 1.0, 30]} rotation={[0, Math.PI / 2, 0]} />
+      <TrashCan position={[-3.4, 0.4, 32]} />
+
+      <VendingMachine position={[3.4, 1.0, 70]} rotation={[0, -Math.PI / 2, 0]} />
+      <TrashCan position={[3.4, 0.4, 68]} />
+
+      {/* 通道掩體箱 */}
+      <MilitaryCrate position={[-1.8, 0.6, -40]} rotation={[0, 0.3, 0]} />
+      <MilitaryCrate position={[1.5, 0.6, -10]} rotation={[0, -0.2, 0]} />
+      <MilitaryCrate position={[-1.2, 0.6, 15]} rotation={[0, 0.5, 0]} />
+      <MilitaryCrate position={[1.6, 0.6, 45]} rotation={[0, -0.4, 0]} scale={[1.1, 1.1, 1.1]} />
+      <MilitaryCrate position={[0, 0.6, -85]} rotation={[0, 0.1, 0]} />
+    </group>
+  );
+}
+
+function TacticalAssets({ mapType, hideCenter }) {
+  if (mapType === 'facility') {
+    return <FacilityAssets hideCenter={hideCenter} />;
+  }
+  return <OutpostAssets />;
 }
 
 // ==========================================
@@ -4533,9 +4818,10 @@ function PlayerController({
   extractionState,
   setExtractionCountdown,
   setIsPlayerInExtractionZone,
-  onExtractSuccess,
   primaryConfig,
   secondaryConfig,
+  selectedMap,
+  lootContainers,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -5251,7 +5537,7 @@ function PlayerController({
     let closestCrate = null;
     let minCrateDist = Infinity;
 
-    LOOT_CONTAINERS.forEach((container) => {
+    lootContainers.forEach((container) => {
       if (lootedContainersRef.current && lootedContainersRef.current[container.id]) return;
       const dist = playerPos3D.distanceTo(container.position);
       if (dist < minCrateDist) {
@@ -5428,7 +5714,7 @@ function PlayerController({
     const playerRadius = 0.45;
 
     // 建立目前所有的碰撞體清單 (包含靜態掩體與教學靶)
-    const activeColliders = [...STATIC_COLLIDERS];
+    const activeColliders = selectedMap === 'facility' ? [] : [...STATIC_COLLIDERS];
     if (isTutorialRef.current) {
       activeColliders.push({ x: 0, z: 65, hx: 0.5, hz: 0.5 });
       activeColliders.push({ x: -6, z: 60, hx: 0.5, hz: 0.5 });
@@ -5467,7 +5753,12 @@ function PlayerController({
         }
       }
     }
-    camera.position.x = Math.max(-mapLimit, Math.min(mapLimit, camera.position.x));
+    
+    if (selectedMap === 'facility') {
+      camera.position.x = Math.max(-3.6, Math.min(3.6, camera.position.x));
+    } else {
+      camera.position.x = Math.max(-mapLimit, Math.min(mapLimit, camera.position.x));
+    }
 
     // 2. 分別沿 Z 軸移動並檢測碰撞
     if (direction.z !== 0) {
@@ -5500,7 +5791,12 @@ function PlayerController({
         }
       }
     }
-    camera.position.z = Math.max(-mapLimit, Math.min(mapLimit, camera.position.z));
+    
+    if (selectedMap === 'facility') {
+      camera.position.z = Math.max(-115, Math.min(115, camera.position.z));
+    } else {
+      camera.position.z = Math.max(-mapLimit, Math.min(mapLimit, camera.position.z));
+    }
 
     // ------------------------------------------
     // 6.X 教學移動與跳躍觸發判定
@@ -5672,7 +5968,24 @@ export default function App() {
   const [newNickname, setNewNickname] = useState('');
   const [endgameStats, setEndgameStats] = useState(null);
   const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop' or 'merchant'
+  const [selectedMap, setSelectedMap] = useState('outpost'); // 'outpost' | 'facility'
   const [isAdminConsoleExpanded, setIsAdminConsoleExpanded] = useState(false);
+
+  const getAdjustedLootContainers = () => {
+    return LOOT_CONTAINERS.map(c => {
+      if (selectedMap === 'facility') {
+        const pos = c.position.clone();
+        if (c.id === 1) pos.set(-3.5, 0.4, 40);
+        else if (c.id === 2) pos.set(3.5, 0.4, -20);
+        else if (c.id === 3) pos.set(-3.5, 0.4, -50);
+        else if (c.id === 4) pos.set(3.5, 0.4, 15);
+        else if (c.id === 5) pos.set(-3.5, 0.4, -10);
+        else if (c.id === 6) pos.set(3.5, 0.4, 60);
+        return { ...c, position: pos };
+      }
+      return c;
+    });
+  };
 
   // 雙重驗證 OTP 動態金鑰相關狀態與邏輯
   const [currentOtp, setCurrentOtp] = useState('');
@@ -5924,7 +6237,7 @@ export default function App() {
   const [isPlayerInExtractionZone, setIsPlayerInExtractionZone] = useState(false);
 
   // 敵人、粒子特效、彈孔貼紙狀態
-  const [enemies, setEnemies] = useState(() => spawnEnemies(false));
+  const [enemies, setEnemies] = useState(() => spawnEnemies(false, 1.0, false, 'outpost'));
   const [particles, setParticles] = useState([]);
   const [holes, setHoles] = useState([]);
   
@@ -5989,7 +6302,7 @@ export default function App() {
           if (prev <= 1) {
             setCurrentWave((w) => {
               const nextWave = w + 1;
-              setEnemies(spawnWave(nextWave, getDifficultyMultiplier(), isAmbushActive));
+              setEnemies(spawnWave(nextWave, getDifficultyMultiplier(), isAmbushActive, selectedMap));
               addKillFeedEntry(`第 ${nextWave} 波敵軍已進入戰區！`, 'system');
               return nextWave;
             });
@@ -7166,7 +7479,7 @@ export default function App() {
     }
 
     const diff = getDifficultyMultiplier();
-    setEnemies(spawnEnemies(false, diff, isAmbush));
+    setEnemies(spawnEnemies(false, diff, isAmbush, selectedMap));
 
     setGameState('active');
     soundManager.startAmbient();
@@ -7877,7 +8190,7 @@ export default function App() {
     setIsHealing(false);
     setHealProgress(0);
     setEliminated(0);
-    setEnemies(spawnEnemies(isTutorial)); // 依照當前是否為教學模式生成對應敵軍或標靶
+    setEnemies(spawnEnemies(isTutorial, 1.0, false, selectedMap)); // 依照當前是否為教學模式生成對應敵軍或標靶
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -7941,7 +8254,7 @@ export default function App() {
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     setEliminated(0);
-    setEnemies(spawnEnemies(true)); // 生成訓練標靶 Dummy
+    setEnemies(spawnEnemies(true, 1.0, false, selectedMap)); // 生成訓練標靶 Dummy
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -8017,7 +8330,7 @@ export default function App() {
     if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
     setIsReloading(false);
     setEliminated(0);
-    setEnemies(spawnEnemies(false));
+    setEnemies(spawnEnemies(false, 1.0, false, selectedMap));
     setHoles([]);
     setParticles([]);
     setIsAds(false);
@@ -8631,6 +8944,57 @@ export default function App() {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                          {/* 地圖選擇器 MAP SELECTOR */}
+                          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--hud-primary)', letterSpacing: '1px', marginBottom: '8px', fontWeight: 'bold' }}>
+                              SELECT OPERATIONS BATTLEFIELD / 選擇戰術場地:
+                            </div>
+                            <div style={{ display: 'flex', gap: '15px' }}>
+                              <button 
+                                className={`map-select-btn ${selectedMap === 'outpost' ? 'active' : ''}`}
+                                onClick={() => setSelectedMap('outpost')}
+                                style={{
+                                  flex: 1,
+                                  background: selectedMap === 'outpost' ? 'rgba(0, 255, 102, 0.15)' : 'rgba(0, 0, 0, 0.4)',
+                                  border: selectedMap === 'outpost' ? '2px solid #00ff66' : '1px dashed rgba(0, 255, 102, 0.4)',
+                                  color: selectedMap === 'outpost' ? '#00ff66' : 'rgba(0, 255, 102, 0.6)',
+                                  padding: '10px 15px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  textAlign: 'center',
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: selectedMap === 'outpost' ? '0 0 10px rgba(0, 255, 102, 0.2)' : 'none',
+                                  fontWeight: selectedMap === 'outpost' ? 'bold' : 'normal'
+                                }}
+                              >
+                                前哨基地 OUTPOST BASE<br/>(荒野前哨 - 經典)
+                              </button>
+                              <button 
+                                className={`map-select-btn ${selectedMap === 'facility' ? 'active' : ''}`}
+                                onClick={() => setSelectedMap('facility')}
+                                style={{
+                                  flex: 1,
+                                  background: selectedMap === 'facility' ? 'rgba(0, 229, 255, 0.15)' : 'rgba(0, 0, 0, 0.4)',
+                                  border: selectedMap === 'facility' ? '2px solid #00e5ff' : '1px dashed rgba(0, 229, 255, 0.4)',
+                                  color: selectedMap === 'facility' ? '#00e5ff' : 'rgba(0, 229, 255, 0.6)',
+                                  padding: '10px 15px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  textAlign: 'center',
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: selectedMap === 'facility' ? '0 0 10px rgba(0, 229, 255, 0.2)' : 'none',
+                                  fontWeight: selectedMap === 'facility' ? 'bold' : 'normal'
+                                }}
+                              >
+                                地鐵通道 EXIT 8 SUBWAY<br/>(室內通道 - 近戰)
+                              </button>
+                            </div>
+                          </div>
+
                           <div style={{ display: 'flex', justifyContent: 'left', gap: '15px', marginBottom: '20px' }}>
                             <button className="deploy-button" style={{ fontSize: '1.0rem', padding: '12px 30px' }} onClick={handleDeploy}>
                               DEPLOY TO MISSION
@@ -10246,11 +10610,15 @@ export default function App() {
       {/* 3D Canvas 容器 */}
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
-          <ambientLight intensity={0.5} />
+          <ambientLight 
+            intensity={selectedMap === 'facility' ? 0.15 : 0.5} 
+            color={selectedMap === 'facility' ? '#0c1015' : '#ffffff'} 
+          />
           <directionalLight
             castShadow
-            position={[50, 80, 50]}
-            intensity={1.5}
+            position={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]}
+            intensity={selectedMap === 'facility' ? 0.1 : 1.5}
+            color={selectedMap === 'facility' ? '#6b829c' : '#ffffff'}
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
             shadow-camera-near={0.5}
@@ -10260,12 +10628,17 @@ export default function App() {
             shadow-camera-top={70}
             shadow-camera-bottom={-70}
           />
-          <Sky sunPosition={[50, 80, 50]} distance={450000} />
+          <Sky 
+            sunPosition={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]} 
+            distance={450000} 
+            turbidity={selectedMap === 'facility' ? 10 : 2}
+            rayleigh={selectedMap === 'facility' ? 4 : 1}
+          />
 
           {/* 地面與環境防禦工事 */}
-          <Ground />
-          <PerimeterWalls />
-          <TacticalAssets hideCenter={extractionActive} />
+          <Ground mapType={selectedMap} />
+          <PerimeterWalls mapType={selectedMap} />
+          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} />
 
           {/* 3D 戰術直升機撤離點 */}
           <LandingPad active={extractionActive} />
@@ -10278,7 +10651,7 @@ export default function App() {
           <MedicalSupplyStation position={[3.0, 0, 92.0]} active={medCooldown === 0} />
 
           {/* 3D 戰術物資搜刮箱 */}
-          {LOOT_CONTAINERS.map((container) => (
+          {getAdjustedLootContainers().map((container) => (
             <LootCrate
               key={container.id}
               position={container.position}
@@ -10356,6 +10729,7 @@ export default function App() {
                 onKilled={handleEnemyKilled}
                 onThrowGrenade={addEnemyGrenade}
                 smokeClouds={smokeClouds}
+                mapType={selectedMap}
               />
             )
           ))}
@@ -10429,6 +10803,8 @@ export default function App() {
             onExtractSuccess={handleExtractSuccess}
             primaryConfig={primaryConfig}
             secondaryConfig={secondaryConfig}
+            selectedMap={selectedMap}
+            lootContainers={getAdjustedLootContainers()}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
