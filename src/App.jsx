@@ -4818,6 +4818,7 @@ function PlayerController({
   extractionState,
   setExtractionCountdown,
   setIsPlayerInExtractionZone,
+  onExtractSuccess,
   primaryConfig,
   secondaryConfig,
   selectedMap,
