@@ -5672,6 +5672,7 @@ export default function App() {
   const [newNickname, setNewNickname] = useState('');
   const [endgameStats, setEndgameStats] = useState(null);
   const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop' or 'merchant'
+  const [isAdminConsoleExpanded, setIsAdminConsoleExpanded] = useState(false);
 
   // 雙重驗證 OTP 動態金鑰相關狀態與邏輯
   const [currentOtp, setCurrentOtp] = useState('');
@@ -10040,152 +10041,186 @@ export default function App() {
           className="admin-console-panel" 
           style={{
             position: 'absolute',
-            top: '80px',
+            top: '165px',
             left: '30px',
             background: 'rgba(8, 20, 12, 0.9)',
             border: '1px solid #00ff66',
             borderLeft: '4px solid #00ff66',
             borderRadius: '4px',
-            padding: '12px 18px',
+            padding: isAdminConsoleExpanded ? '12px 18px' : '4px 10px',
             zIndex: 9999,
             pointerEvents: 'auto',
             boxShadow: '0 0 15px rgba(0, 255, 102, 0.25)',
             fontFamily: 'monospace',
-            width: '200px',
+            width: isAdminConsoleExpanded ? '200px' : '100px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: isAdminConsoleExpanded ? '8px' : '0px',
+            transition: 'all 0.2s ease-in-out'
           }}
         >
-          <div style={{ color: '#00ff66', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '1px solid rgba(0, 255, 102, 0.3)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🛠️ 特權控制台</span>
-            <span style={{ fontSize: '0.6rem', background: 'rgba(0, 255, 102, 0.2)', padding: '1px 4px', borderRadius: '2px' }}>ADMIN</span>
-          </div>
-          
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setEnemies([]);
-              if (currentWave < 3) {
-                setWaveCountdown(5);
-                addKillFeedEntry('管理員跳過當前波次，下一波即將開始...', 'system');
-              } else {
-                setExtractionActive(true);
-                setExtractionState('incoming');
-                setExtractionCountdown(5.0);
-                addKillFeedEntry('管理員跳過全部防守波次！已呼叫撤離直升機！', 'system');
-                soundManager.startHelicopterSound();
-              }
-            }}
-          >
-            ⏭️ 跳過波次 (O)
-          </button>
-
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setEnemies([]);
-              setExtractionActive(true);
-              setExtractionState('landed');
-              setExtractionCountdown(0.0);
-              addKillFeedEntry('管理員呼叫直升機，LZ 已建立，請前往中心點撤離！', 'system');
-              soundManager.startHelicopterSound();
-            }}
-          >
-            🚁 立即呼叫撤離
-          </button>
-
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #ffcc00',
-              color: '#ffcc00',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setGameState('victory');
-              if (controlsRef.current) {
-                controlsRef.current.unlock();
-              }
-              const duration = Math.round((Date.now() - runStatsRef.current.startTime) / 1000);
-              const accuracy = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0.8;
-              const total = (eliminated * 50) + 300 + (runStatsRef.current.headshots * 20) + 100;
-              setEndgameStats({
-                headshots: runStatsRef.current.headshots,
-                shotsFired: runStatsRef.current.shotsFired,
-                shotsHit: runStatsRef.current.shotsHit,
-                playTimeSeconds: duration,
-                coinsEarnedDetails: {
-                  killsCoins: eliminated * 50,
-                  victoryCoins: 300,
-                  headshotsCoins: runStatsRef.current.headshots * 20,
-                  accuracyCoins: 100,
-                  total: total
-                }
-              });
+          {isAdminConsoleExpanded ? (
+            <>
+              <div 
+                style={{ 
+                  color: '#00ff66', 
+                  fontSize: '0.75rem', 
+                  fontWeight: 'bold', 
+                  borderBottom: '1px solid rgba(0, 255, 102, 0.3)', 
+                  paddingBottom: '4px', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+                onClick={() => setIsAdminConsoleExpanded(false)}
+              >
+                <span>🛠️ 特權控制台 ▲</span>
+                <span style={{ fontSize: '0.6rem', background: 'rgba(0, 255, 102, 0.2)', padding: '1px 4px', borderRadius: '2px' }}>ADMIN</span>
+              </div>
               
-              if (!currentUser.isGuest) {
-                try {
-                  updateStats(currentUser.username, {
-                    kills: eliminated,
-                    victory: true,
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setEnemies([]);
+                  if (currentWave < 3) {
+                    setWaveCountdown(5);
+                    addKillFeedEntry('管理員跳過當前波次，下一波即將開始...', 'system');
+                  } else {
+                    setExtractionActive(true);
+                    setExtractionState('incoming');
+                    setExtractionCountdown(5.0);
+                    addKillFeedEntry('管理員跳過全部防守波次！已呼叫撤離直升機！', 'system');
+                    soundManager.startHelicopterSound();
+                  }
+                }}
+              >
+                ⏭️ 跳過波次 (O)
+              </button>
+
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setEnemies([]);
+                  setExtractionActive(true);
+                  setExtractionState('landed');
+                  setExtractionCountdown(0.0);
+                  addKillFeedEntry('管理員呼叫直升機，LZ 已建立，請前往中心點撤離！', 'system');
+                  soundManager.startHelicopterSound();
+                }}
+              >
+                🚁 立即呼叫撤離
+              </button>
+
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #ffcc00',
+                  color: '#ffcc00',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setGameState('victory');
+                  if (controlsRef.current) {
+                    controlsRef.current.unlock();
+                  }
+                  const duration = Math.round((Date.now() - runStatsRef.current.startTime) / 1000);
+                  const accuracy = runStatsRef.current.shotsFired > 0 ? (runStatsRef.current.shotsHit / runStatsRef.current.shotsFired) : 0.8;
+                  const total = (eliminated * 50) + 300 + (runStatsRef.current.headshots * 20) + 100;
+                  setEndgameStats({
                     headshots: runStatsRef.current.headshots,
                     shotsFired: runStatsRef.current.shotsFired,
                     shotsHit: runStatsRef.current.shotsHit,
-                    playTimeSeconds: duration
+                    playTimeSeconds: duration,
+                    coinsEarnedDetails: {
+                      killsCoins: eliminated * 50,
+                      victoryCoins: 300,
+                      headshotsCoins: runStatsRef.current.headshots * 20,
+                      accuracyCoins: 100,
+                      total: total
+                    }
                   });
-                } catch (e) {}
-              }
-              addKillFeedEntry('管理員瞬間通關！ (K)', 'system');
-            }}
-          >
-            🏆 瞬間獲勝 (K)
-          </button>
+                  
+                  if (!currentUser.isGuest) {
+                    try {
+                      updateStats(currentUser.username, {
+                        kills: eliminated,
+                        victory: true,
+                        headshots: runStatsRef.current.headshots,
+                        shotsFired: runStatsRef.current.shotsFired,
+                        shotsHit: runStatsRef.current.shotsHit,
+                        playTimeSeconds: duration
+                      });
+                    } catch (e) {}
+                  }
+                  addKillFeedEntry('管理員瞬間通關！ (K)', 'system');
+                }}
+              >
+                🏆 瞬間獲勝 (K)
+              </button>
 
-          <button 
-            type="button"
-            style={{
-              background: 'rgba(0, 255, 102, 0.1)',
-              border: '1px solid #00ff66',
-              color: '#00ff66',
-              padding: '5px',
-              fontSize: '0.72rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}
-            onClick={() => {
-              setHealth(100);
-              addKillFeedEntry('管理員恢復生命值為 100% (P)', 'system');
-            }}
-          >
-            ❤️ 恢復血量 (P)
-          </button>
+              <button 
+                type="button"
+                style={{
+                  background: 'rgba(0, 255, 102, 0.1)',
+                  border: '1px solid #00ff66',
+                  color: '#00ff66',
+                  padding: '5px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'left'
+                }}
+                onClick={() => {
+                  setHealth(100);
+                  addKillFeedEntry('管理員恢復生命值為 100% (P)', 'system');
+                }}
+              >
+                ❤️ 恢復血量 (P)
+              </button>
+            </>
+          ) : (
+            <div 
+              style={{ 
+                color: '#00ff66', 
+                fontSize: '0.72rem', 
+                fontWeight: 'bold', 
+                textAlign: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                padding: '4px 0'
+              }}
+              onClick={() => setIsAdminConsoleExpanded(true)}
+            >
+              🛠️ 控制台 ▼
+            </div>
+          )}
         </div>
       )}
 
