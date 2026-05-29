@@ -4723,7 +4723,7 @@ function PlayerController({
       
       lastLookPos.current = { x: lookTouch.clientX, y: lookTouch.clientY };
 
-      const sensitivity = 0.0035;
+      const sensitivity = 0.007;
       camera.rotation.y -= deltaX * sensitivity;
       camera.rotation.x -= deltaY * sensitivity;
       camera.rotation.x = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, camera.rotation.x));

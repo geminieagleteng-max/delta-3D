@@ -3171,17 +3171,42 @@ html, body {
     font-size: 0.6rem !important;
   }
 
-  /* 底部 HUD (HP、彈藥、醫療包等) 整體縮小 32% */
+  /* 底部 HUD (HP、彈藥、醫療包等) 行動端精簡並居中，不擋兩側 */
   .hud-bottom {
-    transform: scale(0.68) !important;
-    transform-origin: bottom left !important;
-    width: 147% !important;
+    position: absolute !important;
+    bottom: 10px !important;
+    left: 50% !important;
+    transform: translateX(-50%) scale(0.68) !important;
+    transform-origin: bottom center !important;
+    width: auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    gap: 6px !important;
+  }
+  .hud-status-card {
+    width: 108px !important;
+    padding: 5px 8px !important;
+  }
+  .hud-large-num {
+    font-size: 1.1rem !important;
+  }
+  .hud-label {
+    font-size: 0.58rem !important;
+  }
+  .hud-small-label {
+    font-size: 0.65rem !important;
+  }
+  .hud-sys-status {
+    font-size: 0.58rem !important;
   }
 
-  /* 背包 HUD 縮小 30% */
+  /* 背包 HUD 移到左上角雷達下方，避免蓋住左下角搖桿 */
   .hud-backpack-panel {
-    transform: scale(0.7) !important;
-    transform-origin: top right !important;
+    transform: scale(0.72) !important;
+    transform-origin: top left !important;
+    left: 15px !important;
+    top: 110px !important;
+    bottom: auto !important;
   }
   
   /* 3. 搜刮物資彈出面板行動端適配縮小 32% */
@@ -3234,9 +3259,9 @@ html, body {
     height: 35px !important;
   }
 
-  /* 5. 手機虛擬按鈕整體縮小，降低對 3D 畫面的遮擋 */
+  /* 5. 手機虛擬按鈕整體縮小且往上抬升，防止被底部手勢條遮擋 */
   .mobile-buttons-container {
-    bottom: 15px !important;
+    bottom: 25px !important;
     right: 15px !important;
     width: 250px !important;
     height: 250px !important;
@@ -3247,7 +3272,7 @@ html, body {
   .btn-fire {
     width: 58px !important;
     height: 58px !important;
-    bottom: 20px !important;
+    bottom: 25px !important;
     right: 130px !important;
     font-size: 1.3rem !important;
   }
@@ -3287,7 +3312,7 @@ html, body {
     font-size: 1.0rem !important;
   }
   
-  /* 頂部輔助按鈕也縮小 */
+  /* 頂部輔助按鈕縮小，並合理分流避免與任務面板重疊 */
   .btn-heal {
     width: 36px !important;
     height: 36px !important;
@@ -3306,14 +3331,15 @@ html, body {
     width: 36px !important;
     height: 36px !important;
     top: 12px !important;
-    right: 60px !important;
+    right: 15px !important;
     font-size: 0.95rem !important;
   }
   .mobile-pause-btn {
     width: 36px !important;
     height: 36px !important;
     top: 12px !important;
-    right: 15px !important;
+    left: 195px !important;
+    right: auto !important;
     font-size: 0.9rem !important;
   }
 }
