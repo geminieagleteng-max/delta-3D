@@ -2080,6 +2080,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
   const currentTarget = useRef(new THREE.Vector3());
   const coverTimer = useRef(0);
   const aiState = useRef('movingToCover'); // 'movingToCover', 'shootingFromCover', 'rushing'
+  const stuckTime = useRef(0);
   
   // 突擊兵側移 strafe 用
   const strafeOffset = useRef(0);
@@ -2163,6 +2164,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
 
     const enemyPos = meshRef.current.position;
     const playerPos = state.camera.position;
+    const posBefore = enemyPos.clone();
 
     // 隨時面朝玩家
     const angle = Math.atan2(playerPos.x - enemyPos.x, playerPos.z - enemyPos.z);
@@ -2643,6 +2645,41 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
             enemyPos.z = minZ;
           } else {
             enemyPos.z = maxZ;
+          }
+        }
+      }
+    }
+
+    // ========== 地面部隊防卡牆與路徑重劃 (Stuck Detection & Path Recalculation) ==========
+    if (data.enemyType !== ENEMY_TYPES.SNIPER) {
+      const posAfter = enemyPos.clone();
+      const actualMoveDist = posAfter.distanceTo(posBefore);
+      const expectedSpeed = aiState.current === 'rushing' ? (stats.rushSpeed || 4.0) : (stats.speed || 2.0);
+      
+      if (aiState.current === 'movingToCover' || aiState.current === 'rushing') {
+        // 如果移動速度低於預期速度的 15%，判定為被掩體/牆壁卡住
+        if (actualMoveDist < expectedSpeed * delta * 0.15) {
+          stuckTime.current += delta;
+        } else {
+          stuckTime.current = Math.max(0, stuckTime.current - delta * 0.5);
+        }
+
+        // 卡住超過 1.2 秒，強制變更目標或狀態以繞過障礙物
+        if (stuckTime.current > 1.2) {
+          stuckTime.current = 0;
+          if (aiState.current === 'movingToCover') {
+            if (Math.random() < 0.5) {
+              aiState.current = 'rushing';
+            } else {
+              // 重新隨機尋找一個新的掩體
+              const randCover = COVERS[Math.floor(Math.random() * COVERS.length)];
+              currentTarget.current.copy(randCover);
+            }
+          } else if (aiState.current === 'rushing') {
+            // 衝鋒時卡牆，先退回尋找最近的隨機掩體以繞開牆面
+            const randCover = COVERS[Math.floor(Math.random() * COVERS.length)];
+            currentTarget.current.copy(randCover);
+            aiState.current = 'movingToCover';
           }
         }
       }
