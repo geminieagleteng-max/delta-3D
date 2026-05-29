@@ -6562,7 +6562,16 @@ export default function App() {
       setCurrentUser(updatedUser);
     } else {
       try {
-        const updated = equipItem(currentUser.username, slot, itemId);
+        let finalItemId = itemId;
+        if ((slot === 'primaryWeapon' || slot === 'secondaryWeapon') && itemId) {
+          const matchedItem = currentUser.gridStashItems?.find(
+            i => i.type === itemId || i.uid === itemId
+          );
+          if (matchedItem) {
+            finalItemId = matchedItem.uid;
+          }
+        }
+        const updated = equipItem(currentUser.username, slot, finalItemId);
         setCurrentUser(updated);
       } catch (err) {
         alert(err.message);
@@ -8958,58 +8967,80 @@ export default function App() {
                             <h5 style={{ color: '#ffcc00', margin: '0 0 5px 0', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
                               個人倉庫 STASH
                             </h5>
-                            <div className="stash-items-grid" style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px', textAlign: 'left' }}>
-                              {Object.keys(currentUser.stash || {}).map((key) => {
-                                const count = currentUser.stash[key] || 0;
+                            <div className="stash-items-grid" style={{ display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px', textAlign: 'left' }}>
+                              {[
+                                { title: '🔫 槍械武器 WEAPONS', keys: ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'] },
+                                { title: '🛡 戰術裝具與配件 GEAR & ATTACHMENTS', keys: ['bodyArmor', 'opsHelmet', 'laserSight', 'suppressor'] },
+                                { title: '💊 戰術消耗品 CONSUMABLES', keys: ['grenade', 'medkit', 'flashbang', 'smoke'] },
+                                { title: '🪙 撤離戰利品 LOOT VALUABLES', keys: ['goldBar', 'hardDrive', 'dogTag', 'keycard'] }
+                              ].map((group) => {
+                                const activeKeys = group.keys.filter(k => (currentUser.stash && currentUser.stash[k]) > 0);
+                                if (activeKeys.length === 0) return null;
+                                
                                 return (
-                                  <div key={key} className="stash-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 204, 0, 0.03)', border: '1px solid rgba(255,204,0,0.1)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '50%' }}>
-                                      <span style={{ color: '#fff' }}>{ITEM_NAMES[key] || key}</span>
-                                      <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>x{count}</span>
+                                  <div key={group.title} className="stash-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ fontSize: '0.72rem', color: '#ffcc00', borderBottom: '1px solid rgba(255, 204, 0, 0.15)', paddingBottom: '3px', marginBottom: '4px', letterSpacing: '1px', fontWeight: 'bold' }}>
+                                      {group.title}
                                     </div>
-                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                      {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(key) && count > 0 && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', key)}>
-                                          主手
-                                        </button>
-                                      )}
-                                      {['m9', 'deagle'].includes(key) && count > 0 && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', key)}>
-                                          副手
-                                        </button>
-                                      )}
-                                      {key === 'bodyArmor' && count > 0 && !currentUser.equipped?.bodyArmor && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('bodyArmor', 'bodyArmor')}>
-                                          裝備
-                                        </button>
-                                      )}
-                                      {key === 'opsHelmet' && count > 0 && !currentUser.equipped?.opsHelmet && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('opsHelmet', 'opsHelmet')}>
-                                          裝備
-                                        </button>
-                                      )}
-                                      {key === 'laserSight' && count > 0 && !currentUser.equipped?.laserSight && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('laserSight', 'laserSight')}>
-                                          裝備
-                                        </button>
-                                      )}
-                                      {key === 'suppressor' && count > 0 && !currentUser.equipped?.suppressor && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('suppressor', 'suppressor')}>
-                                          裝備
-                                        </button>
-                                      )}
-                                      {(key === 'grenade' || key === 'medkit') && count > 0 && (
-                                        <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip(key === 'grenade' ? 'grenades' : 'medkits')}>
-                                          帶入
-                                        </button>
-                                      )}
-                                      {(key === 'goldBar' || key === 'hardDrive' || key === 'dogTag') && (
-                                        <span style={{ color: '#88a888', fontSize: '0.7rem' }}>僅供出售</span>
-                                      )}
-                                    </div>
+                                    {activeKeys.map((key) => {
+                                      const count = currentUser.stash[key] || 0;
+                                      return (
+                                        <div key={key} className="stash-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 204, 0, 0.03)', border: '1px solid rgba(255,204,0,0.1)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', width: '50%' }}>
+                                            <span style={{ color: '#fff' }}>{ITEM_NAMES[key] || key}</span>
+                                            <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>x{count}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '5px' }}>
+                                            {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(key) && count > 0 && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', key)}>
+                                                主手
+                                              </button>
+                                            )}
+                                            {['m9', 'deagle'].includes(key) && count > 0 && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', key)}>
+                                                副手
+                                              </button>
+                                            )}
+                                            {key === 'bodyArmor' && count > 0 && !currentUser.equipped?.bodyArmor && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('bodyArmor', 'bodyArmor')}>
+                                                裝備
+                                              </button>
+                                            )}
+                                            {key === 'opsHelmet' && count > 0 && !currentUser.equipped?.opsHelmet && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('opsHelmet', 'opsHelmet')}>
+                                                裝備
+                                              </button>
+                                            )}
+                                            {key === 'laserSight' && count > 0 && !currentUser.equipped?.laserSight && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('laserSight', 'laserSight')}>
+                                                裝備
+                                              </button>
+                                            )}
+                                            {key === 'suppressor' && count > 0 && !currentUser.equipped?.suppressor && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('suppressor', 'suppressor')}>
+                                                裝備
+                                              </button>
+                                            )}
+                                            {(key === 'grenade' || key === 'medkit') && count > 0 && (
+                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip(key === 'grenade' ? 'grenades' : 'medkits')}>
+                                                帶入
+                                              </button>
+                                            )}
+                                            {(key === 'goldBar' || key === 'hardDrive' || key === 'dogTag') && (
+                                              <span style={{ color: '#88a888', fontSize: '0.7rem' }}>僅供出售</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 );
                               })}
+                              {Object.keys(currentUser.stash || {}).filter(k => (currentUser.stash[k] || 0) > 0).length === 0 && (
+                                <div style={{ color: '#88a888', fontSize: '0.8rem', padding: '30px 10px', textAlign: 'center' }}>
+                                  ⚠️ 倉庫目前空無一物
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
