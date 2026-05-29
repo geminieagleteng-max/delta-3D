@@ -5,7 +5,7 @@ export const cloudConfig = {
 
   // 1. KVdb.io Configuration (Zero-config, ready to test)
   kvdb: {
-    bucketId: import.meta.env.VITE_KVDB_BUCKET_ID || 'df3d_lboard_e917a26f',
+    bucketId: import.meta.env.VITE_KVDB_BUCKET_ID || 'SvRpRiRe4ribTx6mcNDyBx',
     key: 'global_leaderboard'
   },
 

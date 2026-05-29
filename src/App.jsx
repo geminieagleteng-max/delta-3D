@@ -6408,32 +6408,34 @@ export default function App() {
   };
 
   // 執行登入
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setAuthError('');
+    setAuthError('正在驗證帳號...');
     try {
-      const user = loginAccount(authForm.username, authForm.password);
+      const user = await loginAccount(authForm.username, authForm.password);
       setCurrentUser(user);
       setNewNickname(user.nickname);
       setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+      setAuthError('');
     } catch (err) {
       setAuthError(err.message);
     }
   };
 
   // 執行註冊
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    setAuthError('');
+    setAuthError('正在建立帳號並同步...');
     if (authForm.password !== authForm.confirmPassword) {
       setAuthError('兩次密碼輸入不一致！');
       return;
     }
     try {
-      const user = registerAccount(authForm.username, authForm.nickname, authForm.password);
+      const user = await registerAccount(authForm.username, authForm.nickname, authForm.password);
       setCurrentUser(user);
       setNewNickname(user.nickname);
       setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+      setAuthError('');
     } catch (err) {
       setAuthError(err.message);
     }

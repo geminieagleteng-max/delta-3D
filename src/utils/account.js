@@ -1,7 +1,116 @@
 // DELTA FORCE 3D - Account System Utility with Persistent Grid Stash & Loadout
 import { ATTACHMENTS } from '../config/attachmentsConfig';
+import { cloudConfig } from '../config/cloudConfig';
 
 const STORAGE_KEY = 'delta_3d_accounts';
+
+// 雲端帳號同步輔助函數
+async function fetchCloudAccount(username) {
+  const { provider } = cloudConfig;
+  if (provider === 'local') return null;
+
+  try {
+    if (provider === 'kvdb') {
+      const bucketId = cloudConfig.kvdb.bucketId;
+      const url = `https://kvdb.io/${bucketId}/accounts_${encodeURIComponent(username.toLowerCase())}`;
+      const res = await fetch(url);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`KVdb 錯誤碼: ${res.status}`);
+      return await res.json();
+    }
+
+    if (provider === 'firebase') {
+      if (!cloudConfig.firebase.databaseURL) return null;
+      const dbUrl = cloudConfig.firebase.databaseURL.replace(/\/$/, '');
+      const url = `${dbUrl}/accounts/${encodeURIComponent(username.toLowerCase())}.json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Firebase 錯誤碼: ${res.status}`);
+      return await res.json();
+    }
+
+    if (provider === 'supabase') {
+      if (!cloudConfig.supabase.url || !cloudConfig.supabase.anonKey) return null;
+      const clientUrl = cloudConfig.supabase.url.replace(/\/$/, '');
+      const tableName = cloudConfig.supabase.accountsTableName || 'accounts';
+      const url = `${clientUrl}/rest/v1/${tableName}?username=eq.${encodeURIComponent(username.toLowerCase())}&select=*`;
+      const res = await fetch(url, {
+        headers: {
+          'apikey': cloudConfig.supabase.anonKey,
+          'Authorization': `Bearer ${cloudConfig.supabase.anonKey}`
+        }
+      });
+      if (!res.ok) throw new Error(`Supabase 錯誤碼: ${res.status}`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const accountData = data[0];
+        if (accountData.data) {
+          if (typeof accountData.data === 'string') {
+            return JSON.parse(accountData.data);
+          }
+          return accountData.data;
+        }
+        return accountData;
+      }
+      return null;
+    }
+  } catch (err) {
+    console.error(`無法從雲端下載 ${username} 的帳號資料:`, err);
+  }
+  return null;
+}
+
+async function saveCloudAccount(user) {
+  const { provider } = cloudConfig;
+  if (provider === 'local') return;
+
+  try {
+    if (provider === 'kvdb') {
+      const bucketId = cloudConfig.kvdb.bucketId;
+      const url = `https://kvdb.io/${bucketId}/accounts_${encodeURIComponent(user.username.toLowerCase())}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+      if (!res.ok) throw new Error(`KVdb 錯誤碼: ${res.status}`);
+    }
+
+    if (provider === 'firebase') {
+      if (!cloudConfig.firebase.databaseURL) return;
+      const dbUrl = cloudConfig.firebase.databaseURL.replace(/\/$/, '');
+      const url = `${dbUrl}/accounts/${encodeURIComponent(user.username.toLowerCase())}.json`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+      if (!res.ok) throw new Error(`Firebase 錯誤碼: ${res.status}`);
+    }
+
+    if (provider === 'supabase') {
+      if (!cloudConfig.supabase.url || !cloudConfig.supabase.anonKey) return;
+      const clientUrl = cloudConfig.supabase.url.replace(/\/$/, '');
+      const tableName = cloudConfig.supabase.accountsTableName || 'accounts';
+      const url = `${clientUrl}/rest/v1/${tableName}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'apikey': cloudConfig.supabase.anonKey,
+          'Authorization': `Bearer ${cloudConfig.supabase.anonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify({
+          username: user.username.toLowerCase(),
+          data: user
+        })
+      });
+      if (!res.ok) throw new Error(`Supabase 錯誤碼: ${res.status}`);
+    }
+  } catch (err) {
+    console.error(`無法將 ${user.username} 的帳號資料同步至雲端:`, err);
+  }
+}
 
 // 取得不同物品佔用的網格尺寸 [寬, 高]
 export function getItemSize(itemId) {
@@ -172,13 +281,26 @@ export function saveAccounts(accounts) {
 }
 
 // 註冊新帳號
-export function registerAccount(username, nickname, password) {
+export async function registerAccount(username, nickname, password) {
   if (!username || !nickname || !password) {
     throw new Error('所有欄位皆為必填！');
   }
+
+  // 1. 檢查本機快取是否存在
   const accounts = getAccounts();
   const exists = accounts.some(a => a.username.toLowerCase() === username.toLowerCase());
   if (exists) {
+    throw new Error('此帳號已存在！');
+  }
+
+  // 2. 檢查雲端是否已存在此帳號
+  let cloudUser = null;
+  try {
+    cloudUser = await fetchCloudAccount(username);
+  } catch (err) {
+    console.error('註冊時從雲端檢查帳號失敗:', err);
+  }
+  if (cloudUser) {
     throw new Error('此帳號已存在！');
   }
 
@@ -238,20 +360,64 @@ export function registerAccount(username, nickname, password) {
   initializeGridStash(newAccount);
   accounts.push(newAccount);
   saveAccounts(accounts);
+
+  // 3. 同步新帳號至雲端
+  try {
+    await saveCloudAccount(newAccount);
+  } catch (err) {
+    console.error('無法儲存新帳號至雲端:', err);
+  }
+
   return newAccount;
 }
 
 // 登入帳號
-export function loginAccount(username, password) {
+export async function loginAccount(username, password) {
   if (!username || !password) {
     throw new Error('帳號與密碼皆為必填！');
   }
+
+  // 1. 優先嘗試從雲端獲取帳號資料（支援跨裝置）
+  let cloudUser = null;
+  try {
+    cloudUser = await fetchCloudAccount(username);
+  } catch (err) {
+    console.error('登入時從雲端獲取帳號失敗:', err);
+  }
+
+  if (cloudUser) {
+    if (cloudUser.password !== password) {
+      throw new Error('帳號或密碼錯誤！');
+    }
+    initializeGridStash(cloudUser);
+    
+    // 更新或寫入本機快取
+    const accounts = getAccounts();
+    const idx = accounts.findIndex(a => a.username.toLowerCase() === username.toLowerCase());
+    if (idx > -1) {
+      accounts[idx] = cloudUser;
+    } else {
+      accounts.push(cloudUser);
+    }
+    saveAccounts(accounts);
+    return cloudUser;
+  }
+
+  // 2. 雲端找不到或失敗，退回本機快取驗證（保證離線相容性）
   const accounts = getAccounts();
   const user = accounts.find(a => a.username.toLowerCase() === username.toLowerCase());
   if (!user || user.password !== password) {
     throw new Error('帳號或密碼錯誤！');
   }
   initializeGridStash(user);
+
+  // 如果本機存在該帳號，但剛才在雲端沒有找到，自動同步上傳至雲端（以便日後進行跨裝置登入）
+  if (!cloudUser) {
+    saveCloudAccount(user).catch(err => {
+      console.error('自動上傳本機帳號至雲端失敗:', err);
+    });
+  }
+
   return user;
 }
 
@@ -262,11 +428,15 @@ export function updateNickname(username, newNickname) {
   }
   const accounts = getAccounts();
   const idx = accounts.findIndex(a => a.username === username);
-  if (idx === -1) {
-    throw new Error('找不到該帳號！');
-  }
+  if (idx === -1) throw new Error('找不到該帳號！');
   accounts[idx].nickname = newNickname.trim();
   saveAccounts(accounts);
+  
+  // 背景同步至雲端
+  saveCloudAccount(accounts[idx]).catch(err => {
+    console.error('修改暱稱時雲端同步失敗:', err);
+  });
+  
   return accounts[idx];
 }
 
@@ -297,6 +467,11 @@ export function updateStats(username, runStats) {
   if (user.stats.shotsFired >= 500) user.achievements.heavyGunner = true;
 
   saveAccounts(accounts);
+  
+  // 背景同步至雲端
+  saveCloudAccount(user).catch(err => {
+    console.error('更新戰績時雲端同步失敗:', err);
+  });
 
   return {
     user: user,
@@ -343,6 +518,11 @@ function finalizeUserSave(userData) {
   const { currentUser, isRegistered, accounts } = userData;
   if (isRegistered) {
     saveAccounts(accounts);
+    
+    // 背景同步至雲端
+    saveCloudAccount(currentUser).catch(err => {
+      console.error('修改使用者資料時背景同步失敗:', err);
+    });
   }
   return { ...currentUser };
 }
@@ -847,6 +1027,12 @@ export function purchaseItem(username, itemId) {
   if (user.coins < item.cost) throw new Error('Delta 金幣不足！');
   user.coins -= item.cost;
   saveAccounts(accounts);
+  
+  // 背景同步至雲端
+  saveCloudAccount(user).catch(err => {
+    console.error('商店購買物品時雲端同步失敗:', err);
+  });
+  
   return user;
 }
 
