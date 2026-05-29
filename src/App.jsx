@@ -9395,8 +9395,9 @@ export default function App() {
               className="mobile-btn btn-fire"
               onTouchStart={() => setMobileFiring(true)}
               onTouchEnd={() => setMobileFiring(false)}
+              style={{ fontSize: '1.8rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             >
-              FIRE
+              💥
             </div>
             
             {/* 跳躍 */}
@@ -9404,16 +9405,18 @@ export default function App() {
               className="mobile-btn btn-jump"
               onTouchStart={() => { mobileKeysRef.current.jump = true }}
               onTouchEnd={() => { mobileKeysRef.current.jump = false }}
+              style={{ fontSize: '1.4rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             >
-              JUMP
+              ⏫
             </div>
             
             {/* 開鏡瞄準 ADS */}
             <div 
               className={`mobile-btn btn-ads ${isAds ? 'active' : ''}`}
               onClick={() => setIsAds((prev) => !prev)}
+              style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             >
-              ADS
+              🎯
             </div>
 
             {/* 蹲下 */}
@@ -9426,28 +9429,29 @@ export default function App() {
                   return next;
                 });
               }}
+              style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             >
-              CCH
+              🧎
             </div>
 
             {/* 換彈 */}
-            <div className="mobile-btn btn-reload" onClick={triggerReload}>
-              RLD
+            <div className="mobile-btn btn-reload" onClick={triggerReload} style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              🔄
             </div>
 
             {/* 切槍 */}
-            <div className="mobile-btn btn-switch" onClick={triggerWeaponSwitch}>
-              SWT
+            <div className="mobile-btn btn-switch" onClick={triggerWeaponSwitch} style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              🔫
             </div>
 
             {/* 手榴彈 */}
-            <div className="mobile-btn btn-grenade" onClick={() => setMobileGrenadeTrigger((prev) => prev + 1)}>
-              GND
+            <div className="mobile-btn btn-grenade" onClick={() => setMobileGrenadeTrigger((prev) => prev + 1)} style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              💣
             </div>
 
             {/* 補血 */}
-            <div className="mobile-btn btn-heal" onClick={triggerHeal}>
-              HEAL
+            <div className="mobile-btn btn-heal" onClick={triggerHeal} style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              💊
             </div>
 
             {/* 搜刮按鈕 (僅在靠近物資箱時顯現) */}
@@ -9457,8 +9461,9 @@ export default function App() {
                 onTouchStart={() => startLooting()}
                 onTouchEnd={() => stopLooting()}
                 onTouchCancel={() => stopLooting()}
+                style={{ fontSize: '1.3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
               >
-                SEARCH
+                📦
               </div>
             )}
           </div>
@@ -9467,8 +9472,9 @@ export default function App() {
           <button 
             className="mobile-pause-btn"
             onClick={() => setIsLocked(false)}
+            style={{ fontSize: '1.2rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
           >
-            PAUSE
+            ⏸
           </button>
         </div>
       )}

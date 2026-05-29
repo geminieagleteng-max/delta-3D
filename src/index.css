@@ -3117,6 +3117,91 @@ html, body {
   }
 }
 
+/* 行動端與小螢幕大廳初始 UI 縮小響應式適配 */
+@media (max-width: 1024px) or (max-height: 550px) {
+  .hud-panel {
+    padding: 12px 20px !important;
+    font-size: 0.8rem !important;
+  }
+  .hud-title {
+    font-size: 1.4rem !important;
+    margin-bottom: 5px !important;
+  }
+  .hud-subtitle {
+    font-size: 0.65rem !important;
+    margin-bottom: 10px !important;
+  }
+  .profile-header {
+    padding-bottom: 8px !important;
+    gap: 12px !important;
+  }
+  .profile-avatar-circle {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 0.8rem !important;
+  }
+  .lobby-tabs {
+    margin: 8px 0 5px 0 !important;
+    padding-bottom: 6px !important;
+    gap: 5px !important;
+  }
+  .lobby-tab-btn {
+    padding: 4px 8px !important;
+    font-size: 0.7rem !important;
+  }
+  /* 雙欄的 gap 縮小 */
+  .hud-panel > div {
+    gap: 15px !important;
+  }
+  .deploy-button {
+    font-size: 0.8rem !important;
+    padding: 8px 16px !important;
+  }
+  /* 排行榜與其他區塊間距縮小 */
+  .stats-grid {
+    gap: 6px !important;
+  }
+  .stat-item {
+    padding: 4px !important;
+  }
+  .stat-item-label {
+    font-size: 0.55rem !important;
+  }
+  .stat-item-val {
+    font-size: 0.9rem !important;
+  }
+  .contracts-section {
+    padding: 8px !important;
+    margin-top: 10px !important;
+  }
+  .contracts-list {
+    gap: 6px !important;
+  }
+  .contract-card {
+    padding: 6px !important;
+  }
+  .badges-grid {
+    gap: 5px !important;
+  }
+  .badge-card {
+    padding: 6px !important;
+  }
+  .badge-icon {
+    font-size: 1.2rem !important;
+  }
+  .badge-name {
+    font-size: 0.6rem !important;
+  }
+  .leaderboard-section {
+    margin-top: 12px !important;
+  }
+  .leaderboard-table th, .leaderboard-table td {
+    padding: 4px !important;
+    font-size: 0.65rem !important;
+  }
+}
+
+
 
 
 
