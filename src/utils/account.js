@@ -264,6 +264,15 @@ export function getAccounts() {
         a.coins = 2000;
         changed = true;
       }
+
+      // 一次性升級現有 "distant star" 帳號為本機管理員並賦予無限金幣
+      if (a.username && a.username.toLowerCase() === 'distant star') {
+        if (!a.isAdmin || a.coins !== 99999999) {
+          a.isAdmin = true;
+          a.coins = 99999999;
+          changed = true;
+        }
+      }
     });
     if (changed) {
       saveAccounts(list);
@@ -356,12 +365,6 @@ export async function registerAccount(username, nickname, password) {
       heavyGunner: false
     }
   };
-
-  // 特殊處理管理員帳號 "distant star"
-  if (newAccount.username.toLowerCase() === 'distant star') {
-    newAccount.isAdmin = true;
-    newAccount.coins = 99999999;
-  }
 
   initializeGridStash(newAccount);
   accounts.push(newAccount);
@@ -515,15 +518,6 @@ function resolveUser(userParam) {
   }
   
   initializeGridStash(currentUser);
-
-  // 特殊處理管理員帳號 "distant star"
-  if (currentUser && (
-    (currentUser.username && currentUser.username.toLowerCase() === 'distant star') ||
-    (currentUser.nickname && currentUser.nickname.toLowerCase() === 'distant star')
-  )) {
-    currentUser.isAdmin = true;
-    currentUser.coins = 99999999;
-  }
   
   return { currentUser, isRegistered, accounts, idx };
 }
