@@ -4,7 +4,7 @@ import { PointerLockControls, Sky, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
 import {
-  getRank, getLeaderboard, loginAccount, registerAccount, updateNickname, updateStats,
+  getRank, getLeaderboard, loginAccount, loginAccountByGameKey, registerAccount, updateNickname, updateStats,
   equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot,
   initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace,
   getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
@@ -5621,18 +5621,43 @@ export default function App() {
   // 帳號系統狀態 (Account System States)
   // ==========================================
   const [currentUser, setCurrentUser] = useState(null);
-  const [authTab, setAuthTab] = useState('login'); // 'login' or 'register'
+  const [authTab, setAuthTab] = useState('login'); // 'login' or 'register' or 'gamekey'
   const [authForm, setAuthForm] = useState({
     username: '',
     nickname: '',
     password: '',
     confirmPassword: '',
+    gameKey: '',
+    otpToken: '',
   });
   const [authError, setAuthError] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [newNickname, setNewNickname] = useState('');
   const [endgameStats, setEndgameStats] = useState(null);
   const [lobbyTab, setLobbyTab] = useState('stats'); // 'stats' or 'shop' or 'merchant'
+
+  // 雙重驗證 OTP 動態金鑰相關狀態與邏輯
+  const [currentOtp, setCurrentOtp] = useState('');
+  const [otpCountdown, setOtpCountdown] = useState(30);
+
+  const getOtp = (timeMs) => {
+    const t = Math.floor(timeMs / 30000);
+    const secretMultiplier = 98317;
+    return String((t * secretMultiplier) % 1000000).padStart(6, '0');
+  };
+
+  useEffect(() => {
+    setCurrentOtp(getOtp(Date.now()));
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const secondsLeft = 30 - Math.floor((now % 30000) / 1000);
+      setOtpCountdown(secondsLeft);
+      if (secondsLeft === 30 || secondsLeft === 0) {
+        setCurrentOtp(getOtp(now));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // 遊戲心理學機制狀態
   const [damagePopups, setDamagePopups] = useState([]);
@@ -6544,7 +6569,7 @@ export default function App() {
       const user = await loginAccount(authForm.username, authForm.password);
       setCurrentUser(user);
       setNewNickname(user.nickname);
-      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '', gameKey: '', otpToken: '' });
       setAuthError('');
     } catch (err) {
       setAuthError(err.message);
@@ -6563,7 +6588,35 @@ export default function App() {
       const user = await registerAccount(authForm.username, authForm.nickname, authForm.password);
       setCurrentUser(user);
       setNewNickname(user.nickname);
-      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '' });
+      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '', gameKey: '', otpToken: '' });
+      setAuthError('');
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  // 執行金鑰雙重驗證登入
+  const handleGameKeyLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('正在進行金鑰雙重驗證...');
+    const key = (authForm.gameKey || '').trim().toUpperCase();
+    if (key !== 'DELTA-ADMIN-9999-STAR') {
+      setAuthError('無效的遊戲金鑰！');
+      return;
+    }
+    const otp = (authForm.otpToken || '').trim();
+    const codeCurrent = getOtp(Date.now());
+    const codePrev = getOtp(Date.now() - 30000);
+    const codeNext = getOtp(Date.now() + 30000);
+    if (otp !== codeCurrent && otp !== codePrev && otp !== codeNext) {
+      setAuthError('動態驗證碼錯誤或已過期！');
+      return;
+    }
+    try {
+      const user = await loginAccountByGameKey(authForm.password);
+      setCurrentUser(user);
+      setNewNickname(user.nickname);
+      setAuthForm({ username: '', nickname: '', password: '', confirmPassword: '', gameKey: '', otpToken: '' });
       setAuthError('');
     } catch (err) {
       setAuthError(err.message);
@@ -8315,11 +8368,12 @@ export default function App() {
                   <p className="hud-subtitle">3D TACTICAL TRAINING OUTPOST</p>
                   
                   <div className="auth-container">
-                    <div className="auth-tabs">
+                    <div className="auth-tabs" style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                       <button 
                         type="button"
                         className={`auth-tab ${authTab === 'login' ? 'active' : ''}`}
                         onClick={() => { setAuthTab('login'); setAuthError(''); }}
+                        style={{ flex: 1 }}
                       >
                         登入 LOGIN
                       </button>
@@ -8327,14 +8381,23 @@ export default function App() {
                         type="button"
                         className={`auth-tab ${authTab === 'register' ? 'active' : ''}`}
                         onClick={() => { setAuthTab('register'); setAuthError(''); }}
+                        style={{ flex: 1 }}
                       >
                         註冊 REGISTER
+                      </button>
+                      <button 
+                        type="button"
+                        className={`auth-tab ${authTab === 'gamekey' ? 'active' : ''}`}
+                        onClick={() => { setAuthTab('gamekey'); setAuthError(''); }}
+                        style={{ flex: 1 }}
+                      >
+                        金鑰登入 KEY
                       </button>
                     </div>
 
                     {authError && <div className="auth-error">{authError}</div>}
 
-                    {authTab === 'login' ? (
+                    {authTab === 'login' && (
                       <form className="auth-form" onSubmit={handleLogin}>
                         <div className="form-group">
                           <label>使用者帳號 USERNAME</label>
@@ -8362,7 +8425,9 @@ export default function App() {
                         </div>
                         <button type="submit" className="auth-submit-btn">驗證登入 AUTHENTICATE</button>
                       </form>
-                    ) : (
+                    )}
+
+                    {authTab === 'register' && (
                       <form className="auth-form" onSubmit={handleRegister}>
                         <div className="form-group">
                           <label>使用者帳號 USERNAME</label>
@@ -8413,6 +8478,58 @@ export default function App() {
                           />
                         </div>
                         <button type="submit" className="auth-submit-btn">建立檔案 CREATE PROFILE</button>
+                      </form>
+                    )}
+
+                    {authTab === 'gamekey' && (
+                      <form className="auth-form" onSubmit={handleGameKeyLogin}>
+                        <div className="form-group">
+                          <label>遊戲金鑰 GAME KEY</label>
+                          <input 
+                            type="text" 
+                            name="gameKey" 
+                            className="auth-input"
+                            required
+                            placeholder="請輸入遊戲金鑰"
+                            value={authForm.gameKey || ''}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>密碼 PASSWORD</label>
+                          <input 
+                            type="password" 
+                            name="password" 
+                            className="auth-input"
+                            required
+                            placeholder="請輸入帳號密碼"
+                            value={authForm.password}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>動態驗證碼 2FA TOKEN</label>
+                          <input 
+                            type="text" 
+                            name="otpToken" 
+                            className="auth-input"
+                            required
+                            placeholder="輸入下方安全器生成的 6 位密碼"
+                            value={authForm.otpToken || ''}
+                            onChange={handleAuthInputChange}
+                          />
+                        </div>
+                        <button type="submit" className="auth-submit-btn">雙重安全驗證 VERIFY & LOGIN</button>
+                        
+                        {/* 電子密碼安全器 Widget */}
+                        <div className="authenticator-widget">
+                          <div className="authenticator-title">🛡️ 電子密碼安全器 (SECURE TOKEN)</div>
+                          <div className="authenticator-code">{currentOtp}</div>
+                          <div className="authenticator-countdown">
+                            <div className="countdown-bar" style={{ width: `${(otpCountdown / 30) * 100}%` }}></div>
+                          </div>
+                          <div className="authenticator-tip">請在下方倒數結束前輸入此 6 位驗證碼</div>
+                        </div>
                       </form>
                     )}
                     <button 

@@ -391,6 +391,10 @@ export async function loginAccount(username, password) {
     throw new Error('帳號與密碼皆為必填！');
   }
 
+  if (username.toLowerCase() === 'distant star') {
+    throw new Error('該管理員帳號已啟用雙重驗證，請切換至【金鑰登入】進行驗證！');
+  }
+
   // 1. 優先嘗試從雲端獲取帳號資料（支援跨裝置）
   let cloudUser = null;
   try {
@@ -431,6 +435,51 @@ export async function loginAccount(username, password) {
       console.error('自動上傳本機帳號至雲端失敗:', err);
     });
   }
+
+  return user;
+}
+
+// 金鑰雙重驗證登入（專供管理員帳號使用）
+export async function loginAccountByGameKey(password) {
+  if (!password) {
+    throw new Error('密碼為必填項！');
+  }
+
+  const username = 'distant star';
+
+  // 1. 優先嘗試從雲端獲取帳號資料
+  let cloudUser = null;
+  try {
+    cloudUser = await fetchCloudAccount(username);
+  } catch (err) {
+    console.error('金鑰登入時從雲端獲取帳號失敗:', err);
+  }
+
+  if (cloudUser) {
+    if (cloudUser.password !== password) {
+      throw new Error('密碼錯誤！');
+    }
+    initializeGridStash(cloudUser);
+    
+    // 更新或寫入本機快取
+    const accounts = getAccounts();
+    const idx = accounts.findIndex(a => a.username.toLowerCase() === username.toLowerCase());
+    if (idx > -1) {
+      accounts[idx] = cloudUser;
+    } else {
+      accounts.push(cloudUser);
+    }
+    saveAccounts(accounts);
+    return cloudUser;
+  }
+
+  // 2. 雲端找不到或失敗，退回本機快取驗證
+  const accounts = getAccounts();
+  const user = accounts.find(a => a.username.toLowerCase() === username.toLowerCase());
+  if (!user || user.password !== password) {
+    throw new Error('密碼錯誤！');
+  }
+  initializeGridStash(user);
 
   return user;
 }

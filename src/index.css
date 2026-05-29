@@ -3344,6 +3344,59 @@ html, body {
   }
 }
 
+/* 電子密碼安全器 (SECURE TOKEN) 樣式 */
+.authenticator-widget {
+  margin-top: 18px;
+  background: rgba(0, 255, 102, 0.04);
+  border: 1px dashed rgba(0, 255, 102, 0.25);
+  padding: 14px;
+  border-radius: 4px;
+  text-align: center;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.02);
+  position: relative;
+}
+
+.authenticator-title {
+  font-size: 0.72rem;
+  color: #88a888;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.authenticator-code {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--hud-primary);
+  text-shadow: 0 0 8px var(--hud-glow);
+  font-family: 'Courier New', Courier, monospace;
+  margin: 4px 0;
+  user-select: text;
+}
+
+.authenticator-countdown {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 255, 102, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.countdown-bar {
+  height: 100%;
+  background: var(--hud-primary);
+  box-shadow: 0 0 4px var(--hud-primary);
+  transition: width 1s linear;
+}
+
+.authenticator-tip {
+  font-size: 0.65rem;
+  color: #88a888;
+  letter-spacing: 1px;
+}
+
 
 
 
