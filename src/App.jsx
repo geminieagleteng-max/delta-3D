@@ -3058,7 +3058,7 @@ function ExitSign({ position }) {
       {/* 指示牌本體 */}
       <mesh castShadow>
         <boxGeometry args={[3.2, 0.7, 0.15]} />
-        <meshStandardMaterial color="#ffd200" roughness={0.2} metalness={0.1} />
+        <meshStandardMaterial color="#ffd200" emissive="#ffe100" emissiveIntensity={0.25} roughness={0.2} metalness={0.1} />
       </mesh>
       {/* 吊桿 */}
       <mesh position={[-1.0, 0.5, 0]} castShadow>
@@ -3069,36 +3069,41 @@ function ExitSign({ position }) {
         <cylinderGeometry args={[0.03, 0.03, 1.0, 6]} />
         <meshStandardMaterial color="#2f3640" />
       </mesh>
-      {/* 使用 Html 渲染看板文字 */}
-      <Html position={[0, 0, 0.08]} transform center distanceFactor={7}>
-        <div style={{
-          background: '#ffd200',
-          color: '#000000',
-          fontFamily: '"Helvetica Neue", Arial, sans-serif',
-          fontWeight: 'bold',
-          fontSize: '22px',
-          width: '300px',
-          textAlign: 'center',
-          padding: '4px 8px',
-          border: '2px solid #000',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '12px',
-          userSelect: 'none'
-        }}>
-          <span style={{ fontSize: '30px' }}>↑</span>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <div style={{ fontSize: '18px', lineHeight: '20px' }}>出口 <span style={{ fontSize: '26px' }}>8</span></div>
-            <div style={{ fontSize: '11px', lineHeight: '11px', letterSpacing: '0.5px' }}>Exit 8</div>
-          </div>
-        </div>
-      </Html>
+      
+      {/* 用 Low-poly mesh 拼出指示牌上的箭頭 ↑ */}
+      <group position={[-0.8, 0, 0.08]}>
+        <mesh>
+          <boxGeometry args={[0.08, 0.35, 0.02]} />
+          <meshBasicMaterial color="#000000" />
+        </mesh>
+        <mesh position={[0, 0.12, 0]} rotation={[0, 0, Math.PI / 4]}>
+          <boxGeometry args={[0.08, 0.18, 0.02]} />
+          <meshBasicMaterial color="#000000" />
+        </mesh>
+        <mesh position={[0, 0.12, 0]} rotation={[0, 0, -Math.PI / 4]}>
+          <boxGeometry args={[0.08, 0.18, 0.02]} />
+          <meshBasicMaterial color="#000000" />
+        </mesh>
+      </group>
+
+      {/* 用 Low-poly mesh 拼出「8」字 */}
+      <group position={[0.8, 0, 0.08]}>
+        {/* 上圓圈 */}
+        <mesh position={[0, 0.08, 0]}>
+          <torusGeometry args={[0.11, 0.03, 4, 8]} />
+          <meshBasicMaterial color="#000000" />
+        </mesh>
+        {/* 下圓圈 */}
+        <mesh position={[0, -0.08, 0]}>
+          <torusGeometry args={[0.13, 0.03, 4, 8]} />
+          <meshBasicMaterial color="#000000" />
+        </mesh>
+      </group>
     </group>
   );
 }
 
-function WallPoster({ position, rotation, title, subtitle, bgColor = "#3498db" }) {
+function WallPoster({ position, rotation, bgColor = "#3498db" }) {
   return (
     <group position={position} rotation={rotation}>
       {/* 海報外框 */}
@@ -3111,32 +3116,28 @@ function WallPoster({ position, rotation, title, subtitle, bgColor = "#3498db" }
         <planeGeometry args={[1.2, 1.6]} />
         <meshStandardMaterial color={bgColor} roughness={0.8} />
       </mesh>
-      <Html position={[0, 0, 0.015]} transform center distanceFactor={5}>
-        <div style={{
-          width: '100px',
-          height: '130px',
-          background: bgColor,
-          color: '#ffffff',
-          fontFamily: 'monospace',
-          padding: '8px',
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          userSelect: 'none',
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <div style={{ fontWeight: 'bold', fontSize: '9px', borderBottom: '1px solid white', paddingBottom: '1px', textTransform: 'uppercase' }}>
-            {title}
-          </div>
-          <div style={{ fontSize: '7px', opacity: 0.8, wordBreak: 'break-all' }}>
-            {subtitle}
-          </div>
-          <div style={{ fontSize: '8px', fontWeight: 'bold', textAlign: 'right', color: '#f1c40f' }}>
-            DELTA-3D
-          </div>
-        </div>
-      </Html>
+      {/* 用簡約幾何拼貼裝飾海報 (模擬標題和內容條紋) */}
+      <mesh position={[0, 0.5, 0.012]}>
+        <boxGeometry args={[0.8, 0.12, 0.005]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      <mesh position={[0, 0.2, 0.012]}>
+        <boxGeometry args={[0.7, 0.04, 0.005]} />
+        <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
+      </mesh>
+      <mesh position={[0, 0.05, 0.012]}>
+        <boxGeometry args={[0.7, 0.04, 0.005]} />
+        <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
+      </mesh>
+      <mesh position={[0, -0.1, 0.012]}>
+        <boxGeometry args={[0.7, 0.04, 0.005]} />
+        <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
+      </mesh>
+      {/* 底部發光戰術標記 */}
+      <mesh position={[0.3, -0.5, 0.012]}>
+        <boxGeometry args={[0.2, 0.06, 0.005]} />
+        <meshBasicMaterial color="#ffd200" />
+      </mesh>
     </group>
   );
 }
@@ -3860,12 +3861,12 @@ function FacilityAssets({ hideCenter }) {
       <ExitSign position={[0, 4.3, 0]} />
 
       {/* 左右磁磚牆壁上的廣告海報 */}
-      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
-      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} title="JOIN DELTA FORCE" subtitle="ENLIST TODAY TO DEFEND OUTPOST BASE SECURE SECTOR." bgColor="#27ae60" />
-      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} title="WANTED" subtitle="ELITE SHIELD TROOPS DETECTED IN SECTOR 8. EXTREME CAUTION." bgColor="#c0392b" />
-      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} title="TACTICAL GEAR" subtitle="EQUIP PRIMARY SILENCERS & EXTENDED MAGS FOR CLOSE CQB." bgColor="#8e44ad" />
-      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} title="WARNING" subtitle="HIGH VOLTAGE RAILWAY SECTIONS AHEAD. DO NOT CROSS." bgColor="#d35400" />
-      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} title="SECURE EXIT 8" subtitle="LZ EVACUATION ESTABLISHED AT THE CENTER ZONE (0,0)." bgColor="#16a085" />
+      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} bgColor="#2980b9" />
+      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} bgColor="#27ae60" />
+      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} bgColor="#c0392b" />
+      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} bgColor="#8e44ad" />
+      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} bgColor="#d35400" />
+      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} bgColor="#16a085" />
 
       {/* 沿著通道兩側擺放自動販賣機與垃圾桶 (適度填充空間並作為戰術掩體) */}
       <VendingMachine position={[-3.4, 1.0, -60]} rotation={[0, Math.PI / 2, 0]} />
