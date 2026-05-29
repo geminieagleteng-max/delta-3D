@@ -3081,5 +3081,42 @@ html, body {
   background: var(--hud-primary);
 }
 
+/* 行動端直屏提示旋轉橫屏遮罩 */
+.portrait-warning {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle, rgba(16, 28, 18, 0.99) 0%, rgba(5, 8, 5, 1.0) 100%);
+  color: #00ff66;
+  z-index: 99999;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-family: 'Courier New', Courier, monospace;
+  padding: 20px;
+  box-sizing: border-box;
+  text-shadow: 0 0 10px rgba(0, 255, 102, 0.5);
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  .portrait-warning {
+    display: flex;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
 
 
