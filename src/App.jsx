@@ -2926,6 +2926,91 @@ function TrainingDummy({ data, onKilled }) {
 }
 
 // ==========================================
+// 2.9 Canvas 錯誤邊界 CanvasErrorBoundary (用於診斷和顯示出錯堆疊)
+// ==========================================
+class CanvasErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Canvas rendering error caught:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '90%',
+          maxWidth: '750px',
+          background: 'rgba(20, 5, 5, 0.95)',
+          border: '2px solid #ff3333',
+          boxShadow: '0 0 25px rgba(255, 51, 51, 0.5)',
+          borderRadius: '4px',
+          padding: '24px',
+          color: '#ff3333',
+          fontFamily: 'monospace',
+          zIndex: 999999,
+          textAlign: 'left',
+          pointerEvents: 'auto',
+          userSelect: 'text'
+        }}>
+          <h2 style={{ borderBottom: '2px solid #ff3333', paddingBottom: '8px', marginTop: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
+            🚨 SYSTEM CRITICAL ERROR / 系統關鍵性崩潰
+          </h2>
+          <div style={{ fontSize: '0.85rem', marginBottom: '15px', color: '#ff8888' }}>
+            3D Canvas 渲染管道發生致命錯誤。請複製或截圖此錯誤堆疊資訊，以進行除錯：
+          </div>
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.85)',
+            border: '1px dashed #ff3333',
+            padding: '12px',
+            borderRadius: '2px',
+            maxHeight: '300px',
+            overflowY: 'auto',
+            fontSize: '0.75rem',
+            lineHeight: '1.4',
+            whiteSpace: 'pre-wrap',
+            color: '#ffb3b3'
+          }}>
+            <strong>Error:</strong> {this.state.error && this.state.error.toString()}
+            {"\n\n"}
+            <strong>Stack Trace:</strong>{"\n"}
+            {this.state.error && this.state.error.stack}
+          </div>
+          <button 
+            style={{
+              marginTop: '15px',
+              background: 'rgba(255, 51, 51, 0.1)',
+              border: '1px solid #ff3333',
+              color: '#ff3333',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontFamily: 'monospace'
+            }}
+            onClick={() => window.location.reload()}
+          >
+            🔄 重啟特工終端 (REBOOT)
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ==========================================
 // 3. 3D 場景資產組件 (低多邊形 Low-Poly 風格)
 // ==========================================
 function Ground({ mapType }) {
@@ -10606,7 +10691,8 @@ export default function App() {
 
       {/* 3D Canvas 容器 */}
       <div className="canvas-container">
-        <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
+        <CanvasErrorBoundary>
+          <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
           <ambientLight 
             intensity={selectedMap === 'facility' ? 0.85 : 0.5} 
             color={selectedMap === 'facility' ? '#f5f6fa' : '#ffffff'} 
@@ -10811,7 +10897,8 @@ export default function App() {
             />
           )}
         </Canvas>
-      </div>
+      </CanvasErrorBoundary>
+    </div>
     </>
   );
 }
