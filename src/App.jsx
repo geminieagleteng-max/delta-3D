@@ -8542,7 +8542,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <>
+                          <div className="stats-tab-scroll" style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             {/* 生涯數據網格 */}
                             <div className="stats-grid">
                               <div className="stat-item">
@@ -8769,7 +8769,7 @@ export default function App() {
                                 )}
                               </div>
                             </div>
-                          </>
+                          </div>
                         )
                       ) : lobbyTab === 'loadout' ? (
                         <div className="loadout-container" style={{ display: 'flex', gap: '20px', flex: 1, maxHeight: '420px', overflow: 'hidden' }}>

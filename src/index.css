@@ -3066,4 +3066,20 @@ html, body {
   font-weight: bold;
 }
 
+/* 個人數據滾動條美化 */
+.stats-tab-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.stats-tab-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.stats-tab-scroll::-webkit-scrollbar-thumb {
+  background: var(--hud-bg-border);
+  border-radius: 3px;
+}
+.stats-tab-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--hud-primary);
+}
+
+
 
