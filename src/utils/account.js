@@ -265,8 +265,13 @@ export function getAccounts() {
         changed = true;
       }
 
-      // 一次性升級現有 "distant star" 帳號為本機管理員並賦予無限金幣
-      if (a.username && a.username.toLowerCase() === 'distant star') {
+      // 一次性升級現有管理員帳號（比對帳號名 "distant star"、"遙星" 或暱稱 "遙星"）
+      const isTargetAccount = 
+        (a.username && a.username.toLowerCase() === 'distant star') ||
+        (a.username && a.username === '遙星') ||
+        (a.nickname && a.nickname === '遙星');
+        
+      if (isTargetAccount) {
         if (!a.isAdmin || a.coins !== 99999999) {
           a.isAdmin = true;
           a.coins = 99999999;
