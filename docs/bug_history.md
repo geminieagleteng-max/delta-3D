@@ -136,6 +136,16 @@
 
 ---
 
+### 12. 室內地圖全黑與 WebGL Context Lost 崩潰問題 (WebGL Context Lost & Black Screen Bug)
+*   **Bug 症狀**：選中地鐵通道（INDOOR FACILITY）地圖部署進入實戰後，畫面中央是一片死黑，看不到任何 3D 場景、日光燈管或磁磚，但 2D HUD 疊加層（血條、彈藥、控制台）顯示正常。
+*   **原因分析**：在地圖視覺元件「出口 8 指示牌 (`ExitSign`)」與「牆面海報 (`WallPoster`)」中使用了 Drei 庫的 `<Html transform>` 標籤。該 CSS3D 混合機制在特定瀏覽器環境或 Vite 熱更新中會發生底層衝突，直接導致 WebGL Context 丟失 (Context Lost) 或是 JS 渲染管道崩潰，使整個 Canvas 中斷渲染呈全黑。這也會導致日光燈管等點光源無法加載，場景無照明。
+*   **修復方案**：將 `ExitSign` 與 `WallPoster` 重構為 **100% 穩定的「純 3D Low-poly 幾何模型」版本**。利用 `torusGeometry` 和 `boxGeometry` 拼接出立體的指示牌箭頭「↑」與數字「8」，並在指示牌上使用 `emissive` 自發光材質；利用簡單的 3D 幾何色塊拼接在彩色面板表面模擬海報圖案，徹底移除了 Canvas 內部的 HTML 混合渲染。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 進入地鐵通道（INDOOR FACILITY）地圖後，3D 場景是否能正常加載，通道內是否明亮且可見磁磚牆面、發光日光燈管與 Exit 8 指示牌？
+    - [ ] 為了保證 WebGL 的最高效能與穩定性，是否**嚴禁**在 R3F 的 `<Canvas>` 內部的常規靜態 3D 物件中混用帶有 `transform` 的 `<Html>` 元件（浮動文字如傷害飄字等非靜態物件除外）？
+
+---
+
 ## 🔄 未來更新程式確認流程 (Development Workflow Guidelines)
 每次修改 `App.jsx` 或調整場景資產、移動邏輯後，必須執行以下確認程序：
 
