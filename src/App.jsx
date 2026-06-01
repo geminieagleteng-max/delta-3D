@@ -9857,10 +9857,37 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>主武器 PRIMARY WEAPON ⚔️</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {ITEM_NAMES[currentUser.equipped?.primaryWeapon] || '無空缺 (拖曳武器至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {currentUser.equipped?.primaryWeapon && (
+                                  <div style={{
+                                    width: '64px',
+                                    height: '36px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'rgba(0, 229, 255, 0.05)',
+                                    border: '1px solid rgba(0, 229, 255, 0.3)',
+                                    borderRadius: '3px',
+                                    overflow: 'hidden',
+                                    padding: '2px',
+                                  }}>
+                                    <img 
+                                      src={`/weapons/${currentUser.equipped.primaryWeapon}.png`} 
+                                      alt={currentUser.equipped.primaryWeapon}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'contain',
+                                        filter: 'drop-shadow(0 0 3px rgba(0, 229, 255, 0.4))'
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>主武器 PRIMARY WEAPON ⚔️</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                    {ITEM_NAMES[currentUser.equipped?.primaryWeapon] || '無空缺 (拖曳武器至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.primaryWeapon && (
@@ -9890,10 +9917,37 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>副武器 SECONDARY WEAPON 🔫</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {ITEM_NAMES[currentUser.equipped?.secondaryWeapon] || '無空缺 (拖曳手槍至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {currentUser.equipped?.secondaryWeapon && (
+                                  <div style={{
+                                    width: '64px',
+                                    height: '36px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'rgba(0, 229, 255, 0.05)',
+                                    border: '1px solid rgba(0, 229, 255, 0.3)',
+                                    borderRadius: '3px',
+                                    overflow: 'hidden',
+                                    padding: '2px',
+                                  }}>
+                                    <img 
+                                      src={`/weapons/${currentUser.equipped.secondaryWeapon}.png`} 
+                                      alt={currentUser.equipped.secondaryWeapon}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'contain',
+                                        filter: 'drop-shadow(0 0 3px rgba(0, 229, 255, 0.4))'
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>副武器 SECONDARY WEAPON 🔫</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                    {ITEM_NAMES[currentUser.equipped?.secondaryWeapon] || '無空缺 (拖曳手槍至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.secondaryWeapon && (
@@ -10202,6 +10256,7 @@ export default function App() {
                                     {/* Grid Stash Items */}
                                     {(currentUser.gridStashItems || []).map((item) => {
                                       const [w, h] = getItemSize(item.type, item);
+                                      const isWeapon = ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(item.type);
                                       let categoryColor = '#88a888';
                                       let categoryBg = 'rgba(255, 255, 255, 0.03)';
                                       let itemIcon = '📦';
@@ -10266,29 +10321,64 @@ export default function App() {
                                           onDoubleClick={() => handleItemDoubleClick(item)}
                                           onContextMenu={(e) => handleItemContextMenu(e, item, 'stash')}
                                         >
-                                          <div style={{
-                                            display: 'flex',
-                                            flexDirection: isVertical ? 'column' : 'row',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '2px',
-                                            width: '100%',
-                                            height: '100%',
-                                            writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
-                                            textOrientation: 'mixed',
-                                          }}>
-                                            <span style={{ fontSize: '0.9rem' }}>{itemIcon}</span>
-                                            <span style={{
-                                              fontSize: '0.62rem',
-                                              fontWeight: 'bold',
-                                              color: '#fff',
-                                              textAlign: 'center',
-                                              lineHeight: 1.1,
-                                              whiteSpace: 'nowrap',
+                                          {isWeapon ? (
+                                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                                              <img 
+                                                src={`/weapons/${item.type}.png`} 
+                                                alt={item.type}
+                                                style={{
+                                                  width: item.rotated ? `${h * 36 - 6}px` : '95%',
+                                                  height: item.rotated ? `${w * 36 - 6}px` : '95%',
+                                                  objectFit: 'contain',
+                                                  transform: item.rotated ? 'rotate(90deg)' : 'none',
+                                                  filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
+                                                  pointerEvents: 'none',
+                                                }}
+                                              />
+                                              <span style={{
+                                                position: 'absolute',
+                                                bottom: '3px',
+                                                left: '3px',
+                                                fontSize: '0.52rem',
+                                                fontWeight: 'bold',
+                                                color: '#fff',
+                                                background: 'rgba(5, 12, 8, 0.75)',
+                                                padding: '1px 4px',
+                                                borderRadius: '2px',
+                                                border: '1px solid rgba(0, 229, 255, 0.3)',
+                                                pointerEvents: 'none',
+                                                zIndex: 3,
+                                                letterSpacing: '0.5px',
+                                                textShadow: '0 0 2px #000',
+                                              }}>
+                                                {ITEM_NAMES[item.type] ? ITEM_NAMES[item.type].split(' ')[0] : item.type}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div style={{
+                                              display: 'flex',
+                                              flexDirection: isVertical ? 'column' : 'row',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              gap: '2px',
+                                              width: '100%',
+                                              height: '100%',
+                                              writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
+                                              textOrientation: 'mixed',
                                             }}>
-                                              {ITEM_NAMES[item.type] ? ITEM_NAMES[item.type].split(' ')[0] : item.type}
-                                            </span>
-                                          </div>
+                                              <span style={{ fontSize: '0.9rem' }}>{itemIcon}</span>
+                                              <span style={{
+                                                fontSize: '0.62rem',
+                                                fontWeight: 'bold',
+                                                color: '#fff',
+                                                textAlign: 'center',
+                                                lineHeight: 1.1,
+                                                whiteSpace: 'nowrap',
+                                              }}>
+                                                {ITEM_NAMES[item.type] ? ITEM_NAMES[item.type].split(' ')[0] : item.type}
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       );
                                     })}
@@ -10507,9 +10597,36 @@ export default function App() {
                                       textAlign: 'left'
                                     }}
                                   >
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, marginRight: '10px' }}>
-                                      <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
-                                      <span style={{ fontSize: '0.68rem', color: '#a0b0a0' }}>{descriptions[itemId] || ''}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: '10px' }}>
+                                      {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) && (
+                                        <div style={{
+                                          width: '40px',
+                                          height: '24px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          background: 'rgba(255, 204, 0, 0.05)',
+                                          border: '1px solid rgba(255, 204, 0, 0.3)',
+                                          borderRadius: '3px',
+                                          overflow: 'hidden',
+                                          padding: '1px',
+                                        }}>
+                                          <img 
+                                            src={`/weapons/${itemId}.png`} 
+                                            alt={itemId}
+                                            style={{
+                                              width: '100%',
+                                              height: '100%',
+                                              objectFit: 'contain',
+                                              filter: 'drop-shadow(0 0 3px rgba(255, 204, 0, 0.5))'
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
+                                        <span style={{ fontSize: '0.68rem', color: '#a0b0a0' }}>{descriptions[itemId] || ''}</span>
+                                      </div>
                                     </div>
                                     <button 
                                       className="loadout-action-btn"
@@ -10564,9 +10681,36 @@ export default function App() {
                                         textAlign: 'left'
                                       }}
                                     >
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', flex: 1, marginRight: '15px' }}>
-                                        <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
-                                        <span style={{ color: '#00ff66', fontWeight: 'bold' }}>x{count}</span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: '15px' }}>
+                                        {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) && (
+                                          <div style={{
+                                            width: '40px',
+                                            height: '24px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            background: 'rgba(0, 255, 102, 0.05)',
+                                            border: '1px solid rgba(0, 255, 102, 0.3)',
+                                            borderRadius: '3px',
+                                            overflow: 'hidden',
+                                            padding: '1px',
+                                          }}>
+                                            <img 
+                                              src={`/weapons/${itemId}.png`} 
+                                              alt={itemId}
+                                              style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.5))'
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', flex: 1 }}>
+                                          <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
+                                          <span style={{ color: '#00ff66', fontWeight: 'bold' }}>x{count}</span>
+                                        </div>
                                       </div>
                                       <button 
                                         className="loadout-action-btn"
