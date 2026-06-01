@@ -189,6 +189,12 @@ const ItemIcon = ({ type, color = 'currentColor', style = {} }) => {
       <svg viewBox="0 0 64 64" fill="none" stroke="rgba(0, 229, 255, 0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
         <rect x="16" y="24" width="32" height="16" rx="1" strokeDasharray="3 3" />
       </svg>
+    ),
+    coins: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <circle cx="32" cy="32" r="20" />
+        <path d="M32 20v24M26 28h12M26 36h12" />
+      </svg>
     )
   };
   return svgs[type] || (
@@ -197,6 +203,14 @@ const ItemIcon = ({ type, color = 'currentColor', style = {} }) => {
       <path d="M32 24v16M24 32h16" />
     </svg>
   );
+};
+
+const getItemColor = (type) => {
+  if (['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(type)) return '#00e5ff';
+  if (['bodyArmor', 'opsHelmet'].includes(type)) return '#00ff66';
+  if (['grenade', 'medkit', 'flashbang', 'smoke'].includes(type)) return '#ffaa00';
+  if (['goldBar', 'hardDrive', 'dogTag', 'keycard'].includes(type)) return '#ffd700';
+  return '#b0bec5';
 };
 
 
@@ -10730,7 +10744,16 @@ export default function App() {
                                   boxSizing: 'border-box'
                                 }}>
                                   {currentUser.equipped?.bodyArmor ? (
-                                    <ItemIcon type="bodyArmor" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                    <img 
+                                      src="weapons/bodyArmor.png" 
+                                      alt="bodyArmor" 
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        filter: 'drop-shadow(0 0 4px rgba(0, 255, 102, 0.5))'
+                                      }}
+                                    />
                                   ) : (
                                     <ItemIcon type="bodyArmor_placeholder" color="rgba(0, 229, 255, 0.2)" />
                                   )}
@@ -10783,7 +10806,16 @@ export default function App() {
                                   boxSizing: 'border-box'
                                 }}>
                                   {currentUser.equipped?.opsHelmet ? (
-                                    <ItemIcon type="opsHelmet" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                    <img 
+                                      src="weapons/opsHelmet.png" 
+                                      alt="opsHelmet" 
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        filter: 'drop-shadow(0 0 4px rgba(0, 255, 102, 0.5))'
+                                      }}
+                                    />
                                   ) : (
                                     <ItemIcon type="opsHelmet_placeholder" color="rgba(0, 229, 255, 0.2)" />
                                   )}
@@ -11116,6 +11148,7 @@ export default function App() {
                                     {(currentUser.gridStashItems || []).map((item) => {
                                       const [w, h] = getItemSize(item.type, item);
                                       const isWeapon = ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(item.type);
+                                      const isImageItem = ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(item.type);
                                       let categoryColor = '#88a888';
                                       let categoryBg = 'rgba(255, 255, 255, 0.03)';
                                       let itemIcon = '📦';
@@ -11172,7 +11205,7 @@ export default function App() {
                                             transition: 'box-shadow 0.15s, border-color 0.15s',
                                             zIndex: 2,
                                             overflow: (isWeapon && item.rotated) ? 'visible' : 'hidden',
-                                            padding: isWeapon ? '0px' : '2px',
+                                            padding: isImageItem ? '0px' : '2px',
                                           }}
                                           title={`${ITEM_NAMES[item.type] || item.type} (右鍵選單 / 雙擊裝備)`}
                                           draggable
@@ -11180,17 +11213,17 @@ export default function App() {
                                           onDoubleClick={() => handleItemDoubleClick(item)}
                                           onContextMenu={(e) => handleItemContextMenu(e, item, 'stash')}
                                         >
-                                          {isWeapon ? (
+                                          {isImageItem ? (
                                             <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: (isWeapon && item.rotated) ? 'visible' : 'hidden' }}>
                                               <img 
                                                 src={`weapons/${item.type}.png`} 
                                                 alt={item.type}
                                                 style={{
-                                                  width: item.rotated ? `${h * 36 - 4}px` : '100%',
-                                                  height: item.rotated ? `${w * 36 - 4}px` : '100%',
+                                                  width: (isWeapon && item.rotated) ? `${h * 36 - 4}px` : '100%',
+                                                  height: (isWeapon && item.rotated) ? `${w * 36 - 4}px` : '100%',
                                                   objectFit: 'cover',
-                                                  transform: item.rotated ? 'rotate(90deg)' : 'none',
-                                                  filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
+                                                  transform: (isWeapon && item.rotated) ? 'rotate(90deg)' : 'none',
+                                                  filter: `drop-shadow(0 0 5px ${categoryColor}80)`,
                                                   pointerEvents: 'none',
                                                 }}
                                               />
@@ -11204,7 +11237,7 @@ export default function App() {
                                                 background: 'rgba(5, 12, 8, 0.75)',
                                                 padding: '1px 4px',
                                                 borderRadius: '2px',
-                                                border: '1px solid rgba(0, 229, 255, 0.3)',
+                                                border: `1px solid ${categoryColor}40`,
                                                 pointerEvents: 'none',
                                                 zIndex: 3,
                                                 letterSpacing: '0.5px',
@@ -11392,10 +11425,10 @@ export default function App() {
                                       padding: '2px',
                                       boxSizing: 'border-box'
                                     }}>
-                                      {item.id === 'awp' ? (
+                                      {['awp', 'bodyArmor', 'opsHelmet'].includes(item.id) ? (
                                         <img 
-                                          src="weapons/awp.png" 
-                                          alt="awp"
+                                          src={`weapons/${item.id}.png`} 
+                                          alt={item.id}
                                           style={{
                                             width: '100%',
                                             height: '100%',
@@ -11496,7 +11529,7 @@ export default function App() {
                                         overflow: 'hidden',
                                         padding: '1px',
                                       }}>
-                                        {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) ? (
+                                        {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(itemId) ? (
                                           <img 
                                             src={`weapons/${itemId}.png`} 
                                             alt={itemId}
@@ -11582,7 +11615,7 @@ export default function App() {
                                           overflow: 'hidden',
                                           padding: '1px',
                                         }}>
-                                          {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) ? (
+                                          {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(itemId) ? (
                                             <img 
                                               src={`weapons/${itemId}.png`} 
                                               alt={itemId}
@@ -11997,19 +12030,38 @@ export default function App() {
               </div>
             </div>
 
-            <div className="hud-status-card">
-              <div className="hud-label">TACTICAL EQ</div>
-              <div className="hud-status-row">
-                <span className="hud-large-num" style={{ 
-                  color: (activeThrowable === 'grenade' && grenades === 0) || 
-                         (activeThrowable === 'flashbang' && flashbangs === 0) || 
-                         (activeThrowable === 'smoke' && smokes === 0) ? '#ffaa00' : 'inherit' 
+            <div className="hud-status-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div className="hud-label">TACTICAL EQ</div>
+                  <div className="hud-status-row" style={{ display: 'flex', alignItems: 'baseline' }}>
+                    <span className="hud-large-num" style={{ 
+                      color: (activeThrowable === 'grenade' && grenades === 0) || 
+                             (activeThrowable === 'flashbang' && flashbangs === 0) || 
+                             (activeThrowable === 'smoke' && smokes === 0) ? '#ffaa00' : 'inherit' 
+                    }}>
+                      {activeThrowable === 'grenade' ? grenades : activeThrowable === 'flashbang' ? flashbangs : smokes}
+                    </span>
+                    <span className="hud-small-label">/ 2 {device === 'pc' ? '(G)' : ''}</span>
+                  </div>
+                </div>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(255, 170, 0, 0.05)',
+                  border: '1px solid rgba(255, 170, 0, 0.3)',
+                  borderRadius: '3px',
+                  boxShadow: '0 0 8px rgba(255, 170, 0, 0.2)',
+                  padding: '3px',
+                  boxSizing: 'border-box'
                 }}>
-                  {activeThrowable === 'grenade' ? grenades : activeThrowable === 'flashbang' ? flashbangs : smokes}
-                </span>
-                <span className="hud-small-label">/ 2 {device === 'pc' ? '(G)' : ''}</span>
+                  <ItemIcon type={activeThrowable} color="#ffaa00" />
+                </div>
               </div>
-              <div className="hud-sys-status" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div className="hud-sys-status" style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }}>
                 <div>TYPE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>
                   {activeThrowable === 'grenade' ? '💣 HE GREN' : activeThrowable === 'flashbang' ? '✨ FLASH' : '💨 SMOKE'}
                 </span></div>
@@ -12019,15 +12071,34 @@ export default function App() {
               </div>
             </div>
 
-            <div className="hud-status-card">
-              <div className="hud-label">MEDICAL SUPPLY</div>
-              <div className="hud-status-row">
-                <span className="hud-large-num" style={{ color: medkits === 0 ? '#ffaa00' : 'inherit' }}>
-                  {medkits}
-                </span>
-                <span className="hud-small-label">/ {currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2} {device === 'pc' ? '(5)' : ''}</span>
+            <div className="hud-status-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div className="hud-label">MEDICAL SUPPLY</div>
+                  <div className="hud-status-row" style={{ display: 'flex', alignItems: 'baseline' }}>
+                    <span className="hud-large-num" style={{ color: medkits === 0 ? '#ffaa00' : 'inherit' }}>
+                      {medkits}
+                    </span>
+                    <span className="hud-small-label">/ {currentUser?.equipped?.medkits !== undefined ? currentUser.equipped.medkits : 2} {device === 'pc' ? '(5)' : ''}</span>
+                  </div>
+                </div>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(255, 170, 0, 0.05)',
+                  border: '1px solid rgba(255, 170, 0, 0.3)',
+                  borderRadius: '3px',
+                  boxShadow: '0 0 8px rgba(255, 170, 0, 0.2)',
+                  padding: '3px',
+                  boxSizing: 'border-box'
+                }}>
+                  <ItemIcon type="medkit" color="#ffaa00" />
+                </div>
               </div>
-              <div className="hud-sys-status">
+              <div className="hud-sys-status" style={{ marginTop: '5px' }}>
                 MEDKIT: <span className="sys-active" style={{ color: medkits === 0 ? '#ffaa00' : '#00ff66' }}>{medkits === 0 ? 'DEPLETED' : 'READY'}</span>
               </div>
             </div>
@@ -12070,7 +12141,22 @@ export default function App() {
                 <div className="loot-modal-items">
                   {containerLootCoins > 0 && (
                     <div className="loot-modal-item-row coin-row" onClick={handleTakeCoins}>
-                      <span className="loot-item-icon">🪙</span>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'rgba(255, 170, 0, 0.05)',
+                        border: '1px solid rgba(255, 170, 0, 0.3)',
+                        borderRadius: '3px',
+                        marginRight: '12px',
+                        flexShrink: 0,
+                        padding: '1px',
+                        boxSizing: 'border-box'
+                      }}>
+                        <ItemIcon type="coins" color="#ffaa00" />
+                      </div>
                       <div className="loot-item-info">
                         <div className="loot-item-name">Delta 金幣</div>
                         <div className="loot-item-desc">Delta Force 戰區通行貨幣</div>
@@ -12083,16 +12169,31 @@ export default function App() {
                   ) : (
                     containerLootItems.map(item => (
                       <div key={item.uid} className="loot-modal-item-row" onClick={() => handleTakeItem(item)}>
-                        <span className="loot-item-icon">
-                          {item.type === 'keycard' ? '💳' :
-                           item.type === 'goldBar' ? '🪙' :
-                           item.type === 'hardDrive' ? '💾' :
-                           item.type === 'dogTag' ? '🪖' :
-                           item.type === 'medkit' ? '➕' :
-                           item.type === 'grenade' ? '💣' :
-                           item.type === 'flashbang' ? '✨' :
-                           item.type === 'smoke' ? '💨' : '🔫'}
-                        </span>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: `${getItemColor(item.type)}0a`,
+                          border: `1px solid ${getItemColor(item.type)}4d`,
+                          borderRadius: '3px',
+                          marginRight: '12px',
+                          flexShrink: 0,
+                          padding: '1px',
+                          boxSizing: 'border-box',
+                          overflow: 'hidden'
+                        }}>
+                          {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(item.type) ? (
+                            <img 
+                              src={`weapons/${item.type}.png`} 
+                              alt={item.type} 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <ItemIcon type={item.type} color={getItemColor(item.type)} />
+                          )}
+                        </div>
                         <div className="loot-item-info">
                           <div className="loot-item-name">{ITEM_NAMES[item.type] || item.type}</div>
                           <div className="loot-item-desc">
@@ -12122,17 +12223,32 @@ export default function App() {
                       <div className="loot-modal-empty">背包目前是空的</div>
                     ) : (
                       backpackItems.map((item, idx) => (
-                        <div key={idx} className="bp-item-row">
-                          <span>
-                            {item.type === 'keycard' ? '💳' :
-                             item.type === 'goldBar' ? '🪙' :
-                             item.type === 'hardDrive' ? '💾' :
-                             item.type === 'dogTag' ? '🪖' :
-                             item.type === 'medkit' ? '➕' :
-                             item.type === 'grenade' ? '💣' :
-                             item.type === 'flashbang' ? '✨' :
-                             item.type === 'smoke' ? '💨' : '🔫'} {ITEM_NAMES[item.type] || item.type}
-                          </span>
+                        <div key={idx} className="bp-item-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px' }}>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: `${getItemColor(item.type)}0a`,
+                            border: `1px solid ${getItemColor(item.type)}4d`,
+                            borderRadius: '3px',
+                            flexShrink: 0,
+                            padding: '1px',
+                            boxSizing: 'border-box',
+                            overflow: 'hidden'
+                          }}>
+                            {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(item.type) ? (
+                              <img 
+                                src={`weapons/${item.type}.png`} 
+                                alt={item.type} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <ItemIcon type={item.type} color={getItemColor(item.type)} />
+                            )}
+                          </div>
+                          <span style={{ fontSize: '0.78rem', color: '#fff', fontWeight: 'bold' }}>{ITEM_NAMES[item.type] || item.type}</span>
                         </div>
                       ))
                     )}
@@ -12196,23 +12312,113 @@ export default function App() {
 
       {/* 戰術背包 HUD 面板 */}
       {gameState === 'active' && !isTutorial && (
-        <div className="hud-backpack-panel">
-          <h4>TACTICAL BACKPACK</h4>
-          <div className={`backpack-item ${backpack.goldBar > 0 ? 'has-val' : ''}`}>
-            <span>黃金金條 GOLD BAR</span>
-            <span>x{backpack.goldBar}</span>
-          </div>
-          <div className={`backpack-item ${backpack.hardDrive > 0 ? 'has-val' : ''}`}>
-            <span>加密硬碟 HARD DRIVE</span>
-            <span>x{backpack.hardDrive}</span>
-          </div>
-          <div className={`backpack-item ${backpack.dogTag > 0 ? 'has-val' : ''}`}>
-            <span>敵軍軍籍牌 DOG TAG</span>
-            <span>x{backpack.dogTag}</span>
-          </div>
-          <div className={`backpack-item ${backpack.coins > 0 ? 'has-val' : ''}`}>
-            <span>Delta 金幣 COINS</span>
-            <span>🪙 {backpack.coins}</span>
+        <div className="hud-backpack-panel" style={{ width: '220px', padding: '12px 14px', pointerEvents: 'auto' }}>
+          <h4 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🎒 TACTICAL BACKPACK</span>
+          </h4>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Delta Coins */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              background: 'rgba(255, 170, 0, 0.03)',
+              border: '1px solid rgba(255, 170, 0, 0.2)',
+              borderRadius: '4px',
+              padding: '6px 8px',
+            }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255, 170, 0, 0.05)',
+                border: '1px solid rgba(255, 170, 0, 0.3)',
+                borderRadius: '3px',
+                padding: '1px',
+                boxSizing: 'border-box',
+                flexShrink: 0
+              }}>
+                <ItemIcon type="coins" color="#ffaa00" />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'left' }}>
+                <span style={{ fontSize: '0.62rem', color: '#ffcc00', textTransform: 'uppercase', fontWeight: 'bold' }}>Delta COINS</span>
+                <span style={{ fontSize: '0.8rem', color: '#fff', fontWeight: 'bold' }}>{backpackCoins} 🪙</span>
+              </div>
+            </div>
+
+            {/* Backpack Items List */}
+            {backpackItems.length === 0 ? (
+              <div style={{
+                border: '1px dashed rgba(0, 255, 102, 0.15)',
+                borderRadius: '4px',
+                padding: '12px',
+                fontSize: '0.75rem',
+                color: '#88a888',
+                textAlign: 'center',
+                background: 'rgba(255,255,255,0.01)'
+              }}>
+                🎒 背包目前無戰利品 (EMPTY)
+              </div>
+            ) : (
+              (() => {
+                // Group items by type
+                const groups = {};
+                backpackItems.forEach(item => {
+                  groups[item.type] = (groups[item.type] || 0) + 1;
+                });
+                return Object.keys(groups).map(type => {
+                  const count = groups[type];
+                  const color = getItemColor(type);
+                  const name = ITEM_NAMES[type] || type;
+                  const isImage = ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle', 'bodyArmor', 'opsHelmet'].includes(type);
+                  return (
+                    <div key={type} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: `1px solid ${color}33`,
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                    }}>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: `${color}0d`,
+                        border: `1px solid ${color}66`,
+                        borderRadius: '3px',
+                        padding: '1px',
+                        boxSizing: 'border-box',
+                        flexShrink: 0,
+                        overflow: 'hidden'
+                      }}>
+                        {isImage ? (
+                          <img 
+                            src={`weapons/${type}.png`} 
+                            alt={type} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <ItemIcon type={type} color={color} />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'left', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.62rem', color: '#b0bec5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                        <span style={{ fontSize: '0.8rem', color: color, fontWeight: 'bold' }}>x{count}</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            )}
           </div>
         </div>
       )}
