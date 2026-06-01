@@ -10197,7 +10197,7 @@ export default function App() {
                                             alignItems: 'center',
                                             cursor: 'grab',
                                             userSelect: 'none',
-                                            pointerEvents: draggedItem ? 'none' : 'auto',
+                                            pointerEvents: (draggedItem && draggedItem.uid !== item.uid) ? 'none' : 'auto',
                                             transition: 'box-shadow 0.15s, border-color 0.15s',
                                             zIndex: 2,
                                             overflow: 'hidden',
