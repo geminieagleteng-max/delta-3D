@@ -1350,6 +1350,27 @@ const STATIC_COLLIDERS = [
   { x: 64.5, z: 49.1, hx: 2.0, hz: 0.1, minY: 3.6, maxY: 5.0 },  // 2nd Floor Front Right Rail
 ];
 
+export const FACILITY_COLLIDERS = [
+  // 1. Vending Machines (Rotated 90 deg, hx/hz swapped)
+  { x: -3.4, z: -60, hx: 0.45, hz: 0.65 },
+  { x: 3.4, z: -25, hx: 0.45, hz: 0.65 },
+  { x: -3.4, z: 30, hx: 0.45, hz: 0.65 },
+  { x: 3.4, z: 70, hx: 0.45, hz: 0.65 },
+
+  // 2. Trash Cans
+  { x: -3.4, z: -58, hx: 0.35, hz: 0.35 },
+  { x: 3.4, z: -27, hx: 0.35, hz: 0.35 },
+  { x: -3.4, z: 32, hx: 0.35, hz: 0.35 },
+  { x: 3.4, z: 68, hx: 0.35, hz: 0.35 },
+
+  // 3. Cover Crates
+  { x: -1.8, z: -40, hx: 0.75, hz: 0.75 },
+  { x: 1.5, z: -10, hx: 0.75, hz: 0.75 },
+  { x: -1.2, z: 15, hx: 0.75, hz: 0.75 },
+  { x: 1.6, z: 45, hx: 0.75, hz: 0.75 },
+  { x: 0, z: -85, hx: 0.75, hz: 0.75 }
+];
+
 export const LOOT_CONTAINERS = [
   { id: 1, name: '軍用武器箱', position: new THREE.Vector3(-25, 0.4, 15), type: 'weapon' },
   { id: 2, name: '醫療補給箱', position: new THREE.Vector3(30, 0.4, -20), type: 'med' },
@@ -5814,7 +5835,7 @@ function PlayerController({
     const playerRadius = 0.45;
 
     // 建立目前所有的碰撞體清單 (包含靜態掩體與教學靶)
-    const activeColliders = selectedMap === 'facility' ? [] : [...STATIC_COLLIDERS];
+    const activeColliders = selectedMap === 'facility' ? [...FACILITY_COLLIDERS] : [...STATIC_COLLIDERS];
     if (isTutorialRef.current) {
       activeColliders.push({ x: 0, z: 65, hx: 0.5, hz: 0.5 });
       activeColliders.push({ x: -6, z: 60, hx: 0.5, hz: 0.5 });
