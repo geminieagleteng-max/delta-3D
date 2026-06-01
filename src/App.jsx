@@ -10432,7 +10432,7 @@ export default function App() {
                                       style={{
                                         width: '100%',
                                         height: '100%',
-                                        objectFit: 'contain',
+                                        objectFit: 'cover',
                                         filter: 'drop-shadow(0 0 3px rgba(0, 229, 255, 0.4))'
                                       }}
                                     />
@@ -10492,7 +10492,7 @@ export default function App() {
                                       style={{
                                         width: '100%',
                                         height: '100%',
-                                        objectFit: 'contain',
+                                        objectFit: 'cover',
                                         filter: 'drop-shadow(0 0 3px rgba(0, 229, 255, 0.4))'
                                       }}
                                     />
@@ -10884,7 +10884,7 @@ export default function App() {
                                                 style={{
                                                   width: item.rotated ? `${h * 36 - 4}px` : '100%',
                                                   height: item.rotated ? `${w * 36 - 4}px` : '100%',
-                                                  objectFit: 'contain',
+                                                  objectFit: 'cover',
                                                   transform: item.rotated ? 'rotate(90deg)' : 'none',
                                                   filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
                                                   pointerEvents: 'none',
