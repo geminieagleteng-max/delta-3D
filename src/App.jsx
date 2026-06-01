@@ -5975,6 +5975,8 @@ export default function App() {
   // ==========================================
   // 格狀倉庫與拖曳狀態 (Grid Stash & Drag-and-Drop States)
   // ==========================================
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverCell, setDragOverCell] = useState(null); // { r, c }
   const [draggedItemRotated, setDraggedItemRotated] = useState(false);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // { x, y, itemUid, type, from: 'stash'|'loadout', slot }
   const [activeHoverSlot, setActiveHoverSlot] = useState(null); // slot name being hovered
@@ -6377,8 +6379,6 @@ export default function App() {
   // 改裝槍械與拖曳狀態 (Gunsmith & Drag-and-Drop Stash)
   const [gunsmithWeapon, setGunsmithWeapon] = useState(null);
   const [gunsmithActiveSlot, setGunsmithActiveSlot] = useState('sight');
-  const [dragOverCell, setDragOverCell] = useState(null); // { r, c }
-  const [draggedItem, setDraggedItem] = useState(null);
 
   // 戰術裝備與拋殼實體狀態
   const [grenades, setGrenades] = useState(2);
