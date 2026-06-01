@@ -10020,7 +10020,7 @@ export default function App() {
                                     padding: '2px',
                                   }}>
                                     <img 
-                                      src={`/weapons/${currentUser.equipped.primaryWeapon}.png`} 
+                                      src={`weapons/${currentUser.equipped.primaryWeapon}.png`} 
                                       alt={currentUser.equipped.primaryWeapon}
                                       style={{
                                         width: '100%',
@@ -10080,7 +10080,7 @@ export default function App() {
                                     padding: '2px',
                                   }}>
                                     <img 
-                                      src={`/weapons/${currentUser.equipped.secondaryWeapon}.png`} 
+                                      src={`weapons/${currentUser.equipped.secondaryWeapon}.png`} 
                                       alt={currentUser.equipped.secondaryWeapon}
                                       style={{
                                         width: '100%',
@@ -10472,7 +10472,7 @@ export default function App() {
                                           {isWeapon ? (
                                             <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
                                               <img 
-                                                src={`/weapons/${item.type}.png`} 
+                                                src={`weapons/${item.type}.png`} 
                                                 alt={item.type}
                                                 style={{
                                                   width: item.rotated ? `${h * 36 - 6}px` : '95%',
@@ -10760,7 +10760,7 @@ export default function App() {
                                           padding: '1px',
                                         }}>
                                           <img 
-                                            src={`/weapons/${itemId}.png`} 
+                                            src={`weapons/${itemId}.png`} 
                                             alt={itemId}
                                             style={{
                                               width: '100%',
@@ -10844,7 +10844,7 @@ export default function App() {
                                             padding: '1px',
                                           }}>
                                             <img 
-                                              src={`/weapons/${itemId}.png`} 
+                                              src={`weapons/${itemId}.png`} 
                                               alt={itemId}
                                               style={{
                                                 width: '100%',
