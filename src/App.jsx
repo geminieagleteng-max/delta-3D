@@ -8502,6 +8502,12 @@ export default function App() {
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  // 結束拖曳物品時清除狀態
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverCell(null);
+  };
+
   // 雙擊快速裝備物品
   const handleItemDoubleClick = (item) => {
     let slot = null;
@@ -8564,7 +8570,7 @@ export default function App() {
     // 檢查是否能放下
     const fits = checkDragFits(draggedItem, targetR, targetC, newRotated);
     if (!fits) {
-      alert('無法在此處放置物品！空間不足、重疊或超出邊界。');
+      // 這裡不使用阻礙執行緒的 alert，讓物品直接回彈至原本位置，避免拖曳預覽卡死
       setDraggedItem(null);
       setDragOverCell(null);
       return;
@@ -11143,6 +11149,7 @@ export default function App() {
                                   handleDragStart(e, { type: currentUser.equipped.primaryWeapon }, 'loadout', 'primaryWeapon');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.primaryWeapon) {
                                   handleItemContextMenu(e, { type: currentUser.equipped.primaryWeapon }, 'loadout', 'primaryWeapon');
@@ -11203,6 +11210,7 @@ export default function App() {
                                   handleDragStart(e, { type: currentUser.equipped.secondaryWeapon }, 'loadout', 'secondaryWeapon');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.secondaryWeapon) {
                                   handleItemContextMenu(e, { type: currentUser.equipped.secondaryWeapon }, 'loadout', 'secondaryWeapon');
@@ -11263,6 +11271,7 @@ export default function App() {
                                   handleDragStart(e, { type: 'bodyArmor' }, 'loadout', 'bodyArmor');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.bodyArmor) {
                                   handleItemContextMenu(e, { type: 'bodyArmor' }, 'loadout', 'bodyArmor');
@@ -11325,6 +11334,7 @@ export default function App() {
                                   handleDragStart(e, { type: 'opsHelmet' }, 'loadout', 'opsHelmet');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.opsHelmet) {
                                   handleItemContextMenu(e, { type: 'opsHelmet' }, 'loadout', 'opsHelmet');
@@ -11387,6 +11397,7 @@ export default function App() {
                                   handleDragStart(e, { type: 'laserSight' }, 'loadout', 'laserSight');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.laserSight) {
                                   handleItemContextMenu(e, { type: 'laserSight' }, 'loadout', 'laserSight');
@@ -11440,6 +11451,7 @@ export default function App() {
                                   handleDragStart(e, { type: 'suppressor' }, 'loadout', 'suppressor');
                                 }
                               }}
+                              onDragEnd={handleDragEnd}
                               onContextMenu={(e) => {
                                 if (currentUser.equipped?.suppressor) {
                                   handleItemContextMenu(e, { type: 'suppressor' }, 'loadout', 'suppressor');
@@ -11749,6 +11761,7 @@ export default function App() {
                                           title={`${ITEM_NAMES[item.type] || item.type} (右鍵選單 / 雙擊裝備)`}
                                           draggable
                                           onDragStart={(e) => handleDragStart(e, item, 'stash')}
+                                          onDragEnd={handleDragEnd}
                                           onDoubleClick={() => handleItemDoubleClick(item)}
                                           onContextMenu={(e) => handleItemContextMenu(e, item, 'stash')}
                                         >
