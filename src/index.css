@@ -20,21 +20,21 @@ html, body, #root, .canvas-container, .mobile-controls {
 html, body {
   margin: 0;
   padding: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background-color: #050805;
   color: #e0eee0;
 }
 
 #root {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
   border: none;
   max-width: 100%;
-  min-height: 100vh;
+  min-height: 100%;
   position: relative;
   overflow: hidden;
 }
@@ -85,8 +85,8 @@ html, body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   z-index: 10;
   pointer-events: none;
   display: flex;
@@ -502,8 +502,8 @@ html, body {
 
 /* 戰術網格掃描點特效 */
 .canvas-container {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   position: absolute;
   top: 0;
   left: 0;
@@ -2301,8 +2301,8 @@ html, body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: rgba(0, 5, 2, 0.85);
   backdrop-filter: blur(10px);
   z-index: 100;
@@ -2506,8 +2506,8 @@ html, body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background-color: #ffffff;
   pointer-events: none;
   z-index: 95;
@@ -3095,8 +3095,8 @@ html, body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: radial-gradient(circle, rgba(16, 28, 18, 0.99) 0%, rgba(5, 8, 5, 1.0) 100%);
   color: #00ff66;
   z-index: 99999;

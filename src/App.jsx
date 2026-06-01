@@ -10086,13 +10086,17 @@ export default function App() {
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(10, 36px)',
                                     gridTemplateRows: `repeat(${gridRows}, 36px)`,
-                                    width: '360px',
-                                    height: `${gridRows * 36}px`,
+                                    width: '362px',
+                                    height: `${gridRows * 36 + 2}px`,
                                     position: 'relative',
                                     background: 'rgba(0, 0, 0, 0.45)',
                                     border: '1px solid rgba(255, 204, 0, 0.15)',
                                     backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
                                     backgroundSize: '36px 36px',
+                                    padding: 0,
+                                    margin: 0,
+                                    maxHeight: 'none',
+                                    overflow: 'visible',
                                   }}>
                                     {/* Grid Cells (Drop targets) */}
                                     {Array.from({ length: gridRows * 10 }).map((_, idx) => {
