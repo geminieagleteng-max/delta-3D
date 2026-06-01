@@ -10868,7 +10868,7 @@ export default function App() {
                                             transition: 'box-shadow 0.15s, border-color 0.15s',
                                             zIndex: 2,
                                             overflow: (isWeapon && item.rotated) ? 'visible' : 'hidden',
-                                            padding: '2px',
+                                            padding: isWeapon ? '0px' : '2px',
                                           }}
                                           title={`${ITEM_NAMES[item.type] || item.type} (右鍵選單 / 雙擊裝備)`}
                                           draggable
@@ -10882,9 +10882,9 @@ export default function App() {
                                                 src={`weapons/${item.type}.png`} 
                                                 alt={item.type}
                                                 style={{
-                                                  width: item.rotated ? `${h * 36 - 4}px` : '98%',
-                                                  height: item.rotated ? `${w * 36 - 4}px` : '98%',
-                                                  objectFit: 'contain',
+                                                  width: item.rotated ? `${h * 36 - 4}px` : '100%',
+                                                  height: item.rotated ? `${w * 36 - 4}px` : '100%',
+                                                  objectFit: 'cover',
                                                   transform: item.rotated ? 'rotate(90deg)' : 'none',
                                                   filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
                                                   pointerEvents: 'none',
