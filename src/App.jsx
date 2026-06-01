@@ -846,6 +846,88 @@ class ProceduralAudio {
     }
   }
 
+  playSniperGunshot(isSilenced = false) {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    try {
+      // 1. 擊發極重低音 (Sine/Triangle Sub-Bass)
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'triangle';
+      subOsc.frequency.setValueAtTime(isSilenced ? 60 : 160, now);
+      subOsc.frequency.exponentialRampToValueAtTime(isSilenced ? 30 : 45, now + 0.12);
+      subGain.gain.setValueAtTime(isSilenced ? 0.2 : 1.5, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.08 : 0.22));
+      
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.25);
+
+      // 2. 槍口巨響噪聲 (High-caliber White Noise)
+      const bufferSize = this.ctx.sampleRate * (isSilenced ? 0.2 : 0.65);
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(isSilenced ? 400 : 1200, now);
+      filter.frequency.exponentialRampToValueAtTime(isSilenced ? 60 : 90, now + (isSilenced ? 0.18 : 0.55));
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(isSilenced ? 0.15 : 1.2, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.2 : 0.6));
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.65);
+
+      // 3. 戰術空間殘響/回音餘音 (Sniper Muzzle Echo / Metallic Reverb Ring)
+      if (!isSilenced) {
+        // 低頻回音 (220Hz)
+        const echoOsc1 = this.ctx.createOscillator();
+        const echoGain1 = this.ctx.createGain();
+        echoOsc1.type = 'sine';
+        echoOsc1.frequency.setValueAtTime(220, now);
+        echoOsc1.frequency.linearRampToValueAtTime(180, now + 0.8);
+        echoGain1.gain.setValueAtTime(0.08, now);
+        echoGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        
+        echoOsc1.connect(echoGain1);
+        echoGain1.connect(this.ctx.destination);
+        echoOsc1.start(now);
+        echoOsc1.stop(now + 0.85);
+
+        // 高頻金屬迴響 (740Hz -> 320Hz 逐漸消退)
+        const echoOsc2 = this.ctx.createOscillator();
+        const echoGain2 = this.ctx.createGain();
+        echoOsc2.type = 'sine';
+        echoOsc2.frequency.setValueAtTime(740, now);
+        echoOsc2.frequency.linearRampToValueAtTime(320, now + 1.2);
+        echoGain2.gain.setValueAtTime(0.04, now + 0.05);
+        echoGain2.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+        
+        echoOsc2.connect(echoGain2);
+        echoGain2.connect(this.ctx.destination);
+        echoOsc2.start(now + 0.05);
+        echoOsc2.stop(now + 1.25);
+      }
+    } catch (e) {
+      console.warn('Sniper gunshot sound failed:', e);
+    }
+  }
+
   playPistolReload() {
     this.resume();
     if (!this.ctx) return;
@@ -5810,7 +5892,9 @@ function PlayerController({
     }
 
     // 播放合成槍聲
-    if (weaponConfig?.isPrimary) {
+    if (activeWeaponId === 'awp') {
+      soundManager.playSniperGunshot(weaponConfig?.silence);
+    } else if (weaponConfig?.isPrimary) {
       soundManager.playGunshot(weaponConfig?.silence);
     } else {
       soundManager.playPistolGunshot(weaponConfig?.silence);
