@@ -4761,19 +4761,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
             </mesh>
 
-            {/* 11. 3D 紅點瞄準線 */}
-            {isAds && (
-              <group position={[0, 0.58, 0.15]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
 
@@ -4837,19 +4824,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#222222" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
             </mesh>
 
-            {/* 紅點瞄準線 */}
-            {isAds && (
-              <group position={[0, 0.58, 0.15]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
 
@@ -4974,19 +4948,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#151515" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
             </mesh>
 
-            {/* 紅點瞄準線 */}
-            {isAds && (
-              <group position={[0, 0.52, 0.15]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
 
@@ -5033,19 +4994,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#222" roughness={0.4} metalness={0.8} side={THREE.DoubleSide} />
             </mesh>
 
-            {/* 紅點瞄準線 */}
-            {isAds && (
-              <group position={[0, 0.48, 0.15]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
 
@@ -5094,19 +5042,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#181818" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
             </mesh>
             
-            {/* 8. 3D 紅點瞄準線 (開鏡時顯示) */}
-            {isAds && (
-              <group position={[0, 0.45, 0.1]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
 
@@ -5153,19 +5088,6 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
               <meshStandardMaterial color="#1c1c1c" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
             </mesh>
             
-            {/* 7. 3D 紅點瞄準線 (開鏡時顯示) */}
-            {isAds && (
-              <group position={[0, 0.53, 0.1]}>
-                <mesh>
-                  <circleGeometry args={[0.007, 16]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.9} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0, 0, 0.001]}>
-                  <ringGeometry args={[0.024, 0.028, 24]} />
-                  <meshBasicMaterial color="#ff1111" transparent opacity={0.75} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
           </>
         )}
       </group>
