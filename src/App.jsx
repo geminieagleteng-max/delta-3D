@@ -4883,6 +4883,7 @@ function PlayerController({
   lootContainers,
   facilityZone,
   onAdvanceFacilityZone,
+  adminTeleportTrigger,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -4896,6 +4897,12 @@ function PlayerController({
   useEffect(() => {
     transitionInProgressRef.current = false;
   }, [facilityZone, resetTrigger]);
+
+  useEffect(() => {
+    if (adminTeleportTrigger > 0 && selectedMap === 'facility') {
+      camera.position.set(0, 1.6, -108);
+    }
+  }, [adminTeleportTrigger, camera, selectedMap]);
 
   useEffect(() => {
     if (cameraRef) {
@@ -6043,6 +6050,7 @@ const getWaveForZone = (zone) => {
 export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [facilityZone, setFacilityZone] = useState(8);
+  const [adminTeleportTrigger, setAdminTeleportTrigger] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
 
@@ -7189,6 +7197,7 @@ export default function App() {
         // [KeyO] 跳過波次：清空當前波次敵人
         setEnemies([]);
         if (selectedMap === 'facility') {
+          setAdminTeleportTrigger((prev) => prev + 1);
           if (facilityZone > 1) {
             addKillFeedEntry(`管理員使用 [O] 鍵跳過當前區域！第 ${facilityZone} 出口區域敵軍已清除！請前往長廊盡頭以進入下一區。`, 'system');
           } else {
@@ -8000,6 +8009,7 @@ export default function App() {
     const diff = getDifficultyMultiplier();
     if (selectedMap === 'facility') {
       setFacilityZone(8);
+      setAdminTeleportTrigger(0);
       const initialWave = getWaveForZone(8);
       setEnemies(spawnWave(initialWave, diff, isAmbush, 'facility'));
     } else {
@@ -8914,6 +8924,7 @@ export default function App() {
     // 重置波次、搜刮與背包狀態
     setCurrentWave(1);
     setFacilityZone(8);
+    setAdminTeleportTrigger(0);
     setWaveCountdown(0);
     setBackpackItems([]);
     setBackpackCoins(0);
@@ -11883,6 +11894,7 @@ export default function App() {
             lootContainers={getAdjustedLootContainers()}
             facilityZone={facilityZone}
             onAdvanceFacilityZone={handleAdvanceFacilityZone}
+            adminTeleportTrigger={adminTeleportTrigger}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
