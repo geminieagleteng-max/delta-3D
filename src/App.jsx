@@ -7188,15 +7188,23 @@ export default function App() {
       if (e.code === 'KeyO') {
         // [KeyO] 跳過波次：清空當前波次敵人
         setEnemies([]);
-        if (currentWave < 3) {
-          setWaveCountdown(5);
-          addKillFeedEntry('管理員使用 [O] 鍵跳過波次，下一波即將開始...', 'system');
+        if (selectedMap === 'facility') {
+          if (facilityZone > 1) {
+            addKillFeedEntry(`管理員使用 [O] 鍵跳過當前區域！第 ${facilityZone} 出口區域敵軍已清除！請前往長廊盡頭以進入下一區。`, 'system');
+          } else {
+            addKillFeedEntry('管理員使用 [O] 鍵跳過當前區域！第 1 出口區域敵軍已清除！鐵捲門已開啟，請走樓梯撤離！', 'system');
+          }
         } else {
-          setExtractionActive(true);
-          setExtractionState('incoming');
-          setExtractionCountdown(5.0);
-          addKillFeedEntry('管理員使用 [O] 鍵跳過全部防守波次！已呼叫撤離直升機！', 'system');
-          soundManager.startHelicopterSound();
+          if (currentWave < 3) {
+            setWaveCountdown(5);
+            addKillFeedEntry('管理員使用 [O] 鍵跳過波次，下一波即將開始...', 'system');
+          } else {
+            setExtractionActive(true);
+            setExtractionState('incoming');
+            setExtractionCountdown(5.0);
+            addKillFeedEntry('管理員使用 [O] 鍵跳過全部防守波次！已呼叫撤離直升機！', 'system');
+            soundManager.startHelicopterSound();
+          }
         }
       }
       else if (e.code === 'KeyP') {
