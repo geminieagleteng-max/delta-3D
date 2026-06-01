@@ -176,6 +176,28 @@
 
 ---
 
+### 16. 點開網頁黑屏/未定義變數崩潰問題 (Weapon SelectedMap ReferenceError Bug)
+*   **Bug 症狀**：玩家剛點開網站就呈現全黑螢幕，沒有加載大廳與登入面板，React 渲染樹完全崩潰。
+*   **原因分析**：在 `Weapon` 元件中，為了支援電力中斷時的手電筒渲染，使用了 `selectedMap`、`facilityEvent`、`flashlightRef` 與 `targetRef` 變數。然而這些變數/Ref 在 `Weapon` 的 Props 宣告中並不存在，亦未在該元件 scope 內定義，導致 React 在渲染 3D 畫布時拋出 `ReferenceError: selectedMap is not defined` 致命錯誤。
+*   **修復方案**：
+    - 將手電筒相關的 `flashlightRef` 與 `targetRef` 宣告由 `PlayerController` 提升（Hoist）至 `App` 元件層級。
+    - 在 `App` 元件渲染 `Weapon` 與 `PlayerController` 時，將 `selectedMap`、`facilityEvent`、`flashlightRef` 與 `targetRef` 作為 Props 傳入。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 剛點開網站時，確認能正常載入背景音樂、首頁 CRT 掃描線與登入/註冊門檻畫面，而非純黑屏。
+    - [ ] 檢查瀏覽器主控台（Console），確認沒有 `ReferenceError: selectedMap is not defined` 報錯。
+
+---
+
+### 17. 敵軍 AI 位移碰撞未定義 activeColliders 崩潰問題 (Enemy ActiveColliders ReferenceError Bug)
+*   **Bug 症狀**：進入戰術關卡（如 Outpost 或 Subway）後，遊戲畫面瞬間卡死或崩潰，控制台頻繁報錯 `ReferenceError: activeColliders is not defined`。
+*   **原因分析**：敵軍 AI 的 AABB 物理碰撞阻擋檢測代碼被放進了 `Enemy` 的 `useFrame` 中，但元件內部並未宣告或獲取 `activeColliders` 變數，導致 Three.js 逐幀渲染時出錯。
+*   **修復方案**：
+    - 在 `Enemy` 元件的 `useFrame` 回呼函式頂部，加入 `activeColliders` 的動態定義與 Space Warp 扭曲位移投影對齊（邏輯與 `PlayerController` 一致）。
+*   **🛡️ 預防檢修清單 (Checklist)**：
+    - [ ] 進入實戰部署後，敵軍突擊兵、擲彈兵、盾兵是否能正常朝掩體移動或向玩家衝鋒，且無任何 `activeColliders` 未定義之報錯？
+
+---
+
 ## 🔄 未來更新程式確認流程 (Development Workflow Guidelines)
 每次修改 `App.jsx` 或調整場景資產、移動邏輯後，必須執行以下確認程序：
 

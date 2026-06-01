@@ -9,7 +9,7 @@ import {
   initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace, rotateGridItem,
   getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
   equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid, claimContractReward,
-  sortGridStash, autoSortStashItems
+  sortGridStash, autoSortStashItems, getAccounts, saveAccounts
 } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
@@ -2204,6 +2204,19 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
   useFrame((state, delta) => {
     if (!meshRef.current) return;
 
+    let activeColliders = mapType === 'facility' ? [...FACILITY_COLLIDERS] : [...STATIC_COLLIDERS];
+    if (mapType === 'facility' && facilityEventRef.current === 'warp') {
+      activeColliders = activeColliders.map(c => {
+        const x_c = Math.sin(c.z * 0.04) * 6.0;
+        const rotY = Math.atan(0.24 * Math.cos(c.z * 0.04));
+        return {
+          ...c,
+          x: c.x + x_c,
+          rotY
+        };
+      });
+    }
+
     staggerTimer.current = Math.max(0, staggerTimer.current - delta);
     shootLockTimer.current = Math.max(0, shootLockTimer.current - delta);
     staggerTilt.current = THREE.MathUtils.lerp(staggerTilt.current, 0, 8.0 * delta);
@@ -4220,7 +4233,7 @@ function TacticalAssets({ mapType, hideCenter, facilityZone, enemies, facilityEv
 // ==========================================
 // 4. 第一人稱突擊步槍組件 (採用中空反射式紅點瞄準鏡，完全防遮擋)
 // ==========================================
-function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeWeaponId, isHealing, isMeleeing = false, meleeProgress, attachments }) {
+function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeWeaponId, isHealing, isMeleeing = false, meleeProgress, attachments, selectedMap, facilityEvent, flashlightRef, targetRef }) {
   const medkitRef = useRef();
   const medkitLerp = useRef(0);
   const knifeRef = useRef();
@@ -5159,6 +5172,8 @@ function PlayerController({
   onAdvanceFacilityZone,
   adminTeleportTrigger,
   facilityEvent,
+  flashlightRef,
+  targetRef,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -5178,9 +5193,6 @@ function PlayerController({
       camera.position.set(0, 1.6, -108);
     }
   }, [adminTeleportTrigger, camera, selectedMap]);
-
-  const flashlightRef = useRef();
-  const targetRef = useRef();
 
   useEffect(() => {
     if (cameraRef) {
@@ -6385,6 +6397,8 @@ export default function App() {
 
   // 受傷方向指示器與相機參考
   const cameraRef = useRef();
+  const flashlightRef = useRef();
+  const targetRef = useRef();
   const [damageIndicators, setDamageIndicators] = useState([]);
 
   // 定期清理已過期（超過 1.5 秒）的受傷方向指示器
@@ -12219,7 +12233,7 @@ export default function App() {
           ))}
 
           {/* 突擊步槍與手槍模型 */}
-          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} activeWeaponId={activeWeaponId} isHealing={isHealing} isMeleeing={isMeleeing} meleeProgress={meleeProgress} attachments={activeWeapon === 'primary' ? currentUser?.equipped?.primaryAttachments : currentUser?.equipped?.secondaryAttachments} />
+          <Weapon gunRef={gunRef} muzzleFlashRef={muzzleFlashRef} isAds={isAds} isLocked={isLocked} activeWeapon={activeWeapon} activeWeaponId={activeWeaponId} isHealing={isHealing} isMeleeing={isMeleeing} meleeProgress={meleeProgress} attachments={activeWeapon === 'primary' ? currentUser?.equipped?.primaryAttachments : currentUser?.equipped?.secondaryAttachments} selectedMap={selectedMap} facilityEvent={facilityEvent} flashlightRef={flashlightRef} targetRef={targetRef} />
 
           {/* 玩家與開火 Raycaster 控制器 */}
           <PlayerController
@@ -12284,6 +12298,8 @@ export default function App() {
             onAdvanceFacilityZone={handleAdvanceFacilityZone}
             adminTeleportTrigger={adminTeleportTrigger}
             facilityEvent={facilityEvent}
+            flashlightRef={flashlightRef}
+            targetRef={targetRef}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
