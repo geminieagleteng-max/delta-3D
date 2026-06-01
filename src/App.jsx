@@ -10424,7 +10424,7 @@ export default function App() {
                                     border: '1px solid rgba(0, 229, 255, 0.3)',
                                     borderRadius: '3px',
                                     overflow: 'hidden',
-                                    padding: '2px',
+                                    padding: '0px',
                                   }}>
                                     <img 
                                       src={`weapons/${currentUser.equipped.primaryWeapon}.png`} 
@@ -10484,7 +10484,7 @@ export default function App() {
                                     border: '1px solid rgba(0, 229, 255, 0.3)',
                                     borderRadius: '3px',
                                     overflow: 'hidden',
-                                    padding: '2px',
+                                    padding: '0px',
                                   }}>
                                     <img 
                                       src={`weapons/${currentUser.equipped.secondaryWeapon}.png`} 
@@ -10884,7 +10884,7 @@ export default function App() {
                                                 style={{
                                                   width: item.rotated ? `${h * 36 - 4}px` : '100%',
                                                   height: item.rotated ? `${w * 36 - 4}px` : '100%',
-                                                  objectFit: 'cover',
+                                                  objectFit: 'contain',
                                                   transform: item.rotated ? 'rotate(90deg)' : 'none',
                                                   filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
                                                   pointerEvents: 'none',
