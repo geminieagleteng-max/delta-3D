@@ -3397,6 +3397,42 @@ html, body {
   letter-spacing: 1px;
 }
 
+/* 格狀倉庫相關樣式 (Grid Stash Styles) */
+.stash-grid-container {
+  display: grid;
+  grid-template-columns: repeat(10, 36px);
+  position: relative;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 204, 0, 0.15);
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.stash-grid-cell {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+  background-color: rgba(0, 0, 0, 0.15);
+  transition: background-color 0.15s;
+}
+
+.stash-grid-cell:hover {
+  background-color: rgba(255, 204, 0, 0.05);
+}
+
+.context-menu-item:hover {
+  background-color: rgba(255, 204, 0, 0.15) !important;
+  color: #ffcc00 !important;
+}
+
+/* 物品拖曳放置槽位發光預覽 */
+.loadout-slot-card.compatible-hover {
+  border-color: #00ff66 !important;
+  background-color: rgba(0, 255, 102, 0.08) !important;
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.15) !important;
+}
+
 
 
 

@@ -6,7 +6,7 @@ import './App.css';
 import {
   getRank, getLeaderboard, loginAccount, loginAccountByGameKey, registerAccount, updateNickname, updateStats,
   equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot,
-  initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace,
+  initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace, rotateGridItem,
   getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
   equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid, claimContractReward
 } from './utils/account';
@@ -5972,6 +5972,247 @@ export default function App() {
   const [selectedMap, setSelectedMap] = useState('outpost'); // 'outpost' | 'facility'
   const [isAdminConsoleExpanded, setIsAdminConsoleExpanded] = useState(false);
 
+  // ==========================================
+  // 格狀倉庫與拖曳狀態 (Grid Stash & Drag-and-Drop States)
+  // ==========================================
+  const [draggedItemRotated, setDraggedItemRotated] = useState(false);
+  const [activeContextMenu, setActiveContextMenu] = useState(null); // { x, y, itemUid, type, from: 'stash'|'loadout', slot }
+  const [activeHoverSlot, setActiveHoverSlot] = useState(null); // slot name being hovered
+
+  // 鍵盤 'R' 旋轉監聽器
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.code === 'KeyR' || e.key === 'r' || e.key === 'R') && draggedItem) {
+        setDraggedItemRotated(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [draggedItem]);
+
+  // 全域點擊關閉右鍵選單
+  useEffect(() => {
+    const handleCloseMenu = () => setActiveContextMenu(null);
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, []);
+
+  // 遊客模式同步輔助：將 gridStashItems 同步至 stash 數量表以保持相容
+  const syncGuestStashQuantities = (user) => {
+    if (!user.stash) {
+      user.stash = {
+        m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0,
+        bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0,
+        goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0
+      };
+    }
+    Object.keys(user.stash).forEach(k => {
+      user.stash[k] = 0;
+    });
+    if (user.gridStashItems) {
+      user.gridStashItems.forEach(item => {
+        if (user.stash[item.type] !== undefined) {
+          user.stash[item.type] += 1;
+        } else {
+          user.stash[item.type] = 1;
+        }
+      });
+    }
+  };
+
+  // 遊客模式：移動物品
+  const guestMoveGridItem = (user, itemUid, r, c) => {
+    const updated = { ...user };
+    updated.gridStashItems = updated.gridStashItems.map(i => ({ ...i }));
+    const item = updated.gridStashItems.find(i => i.uid === itemUid);
+    if (!item) return updated;
+
+    const [w, h] = getItemSize(item.type, item);
+    if (c < 0 || c + w > 10 || r < 0) {
+      throw new Error('物品位置超出邊界！');
+    }
+
+    for (const other of updated.gridStashItems) {
+      if (other.uid === itemUid) continue;
+      const [ow, oh] = getItemSize(other.type, other);
+      const xOverlap = !(c + w <= other.c || other.c + ow <= c);
+      const yOverlap = !(r + h <= other.r || other.r + oh <= r);
+      if (xOverlap && yOverlap) {
+        throw new Error('位置已被佔用，無法放置！');
+      }
+    }
+
+    item.r = r;
+    item.c = c;
+    return updated;
+  };
+
+  // 遊客模式：旋轉物品
+  const guestRotateGridItem = (user, itemUid) => {
+    const updated = { ...user };
+    updated.gridStashItems = updated.gridStashItems.map(i => ({ ...i }));
+    const item = updated.gridStashItems.find(i => i.uid === itemUid);
+    if (!item) return updated;
+
+    const [baseW, baseH] = getItemSize(item.type);
+    const nextRotated = !item.rotated;
+    const w = nextRotated ? baseH : baseW;
+    const h = nextRotated ? baseW : baseH;
+
+    if (item.c + w > 10 || item.r + h > 40) {
+      throw new Error('旋轉後物品超出邊界！');
+    }
+
+    for (const other of updated.gridStashItems) {
+      if (other.uid === itemUid) continue;
+      const [ow, oh] = getItemSize(other.type, other);
+      const xOverlap = !(item.c + w <= other.c || other.c + ow <= item.c);
+      const yOverlap = !(item.r + h <= other.r || other.r + oh <= item.r);
+      if (xOverlap && yOverlap) {
+        throw new Error('空間已被其他物品佔用，無法旋轉！');
+      }
+    }
+
+    item.rotated = nextRotated;
+    return updated;
+  };
+
+  // 遊客模式：配裝穿戴
+  const guestEquipItem = (user, slot, itemUid) => {
+    const updated = { ...user };
+    updated.gridStashItems = updated.gridStashItems.map(i => ({ ...i }));
+    if (!updated.equipped) {
+      updated.equipped = {
+        primaryWeapon: null,
+        primaryAttachments: { sight: null, muzzle: null, grip: null, magazine: null },
+        secondaryWeapon: null,
+        secondaryAttachments: { sight: null, muzzle: null, grip: null, magazine: null },
+        bodyArmor: false,
+        opsHelmet: false,
+        grenades: 0,
+        medkits: 0
+      };
+    } else {
+      updated.equipped = { ...updated.equipped };
+      if (updated.equipped.primaryAttachments) updated.equipped.primaryAttachments = { ...updated.equipped.primaryAttachments };
+      if (updated.equipped.secondaryAttachments) updated.equipped.secondaryAttachments = { ...updated.equipped.secondaryAttachments };
+    }
+
+    if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
+      const idx = updated.gridStashItems.findIndex(i => i.uid === itemUid);
+      if (idx === -1) throw new Error('倉庫中無此武器！');
+      const item = updated.gridStashItems[idx];
+
+      // 卸下原裝備
+      if (updated.equipped[slot]) {
+        const prevType = updated.equipped[slot];
+        const space = findEmptySpace(updated.gridStashItems, ...getItemSize(prevType));
+        if (!space) throw new Error('倉庫已滿，無法卸下原裝備！');
+
+        const attKey = slot === 'primaryWeapon' ? 'primaryAttachments' : 'secondaryAttachments';
+        updated.gridStashItems.push({
+          uid: generateUid(),
+          type: prevType,
+          r: space.r,
+          c: space.c,
+          attachments: { ...updated.equipped[attKey] }
+        });
+      }
+
+      updated.equipped[slot] = item.type;
+      const attKey = slot === 'primaryWeapon' ? 'primaryAttachments' : 'secondaryAttachments';
+      updated.equipped[attKey] = item.attachments ? { ...item.attachments } : { sight: null, muzzle: null, grip: null, magazine: null };
+      updated.gridStashItems.splice(idx, 1);
+    }
+    else if (slot === 'bodyArmor' || slot === 'opsHelmet' || slot === 'laserSight' || slot === 'suppressor') {
+      const idx = updated.gridStashItems.findIndex(i => i.type === slot);
+      if (idx === -1) throw new Error('倉庫中無此裝備或配件！');
+
+      if (updated.equipped[slot]) {
+        const space = findEmptySpace(updated.gridStashItems, ...getItemSize(slot));
+        if (!space) throw new Error('倉庫已滿，無法卸下原裝備！');
+        updated.gridStashItems.push({
+          uid: generateUid(),
+          type: slot,
+          r: space.r,
+          c: space.c
+        });
+      }
+
+      updated.equipped[slot] = true;
+      updated.gridStashItems.splice(idx, 1);
+    }
+    else if (slot === 'grenades' || slot === 'medkits') {
+      const type = slot === 'grenades' ? 'grenade' : 'medkit';
+      const idx = updated.gridStashItems.findIndex(i => i.type === type);
+      if (idx === -1) throw new Error('倉庫中無此消耗品！');
+      updated.equipped[slot] = (updated.equipped[slot] || 0) + 1;
+      updated.gridStashItems.splice(idx, 1);
+    }
+
+    syncGuestStashQuantities(updated);
+    return updated;
+  };
+
+  // 遊客模式：卸下配裝
+  const guestUnequipItem = (user, slot) => {
+    const updated = { ...user };
+    updated.gridStashItems = updated.gridStashItems.map(i => ({ ...i }));
+    if (!updated.equipped) return updated;
+    updated.equipped = { ...updated.equipped };
+    if (updated.equipped.primaryAttachments) updated.equipped.primaryAttachments = { ...updated.equipped.primaryAttachments };
+    if (updated.equipped.secondaryAttachments) updated.equipped.secondaryAttachments = { ...updated.equipped.secondaryAttachments };
+
+    if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
+      if (updated.equipped[slot]) {
+        const type = updated.equipped[slot];
+        const space = findEmptySpace(updated.gridStashItems, ...getItemSize(type));
+        if (!space) throw new Error('倉庫已滿，請先整理出空間！');
+
+        const attKey = slot === 'primaryWeapon' ? 'primaryAttachments' : 'secondaryAttachments';
+        updated.gridStashItems.push({
+          uid: generateUid(),
+          type: type,
+          r: space.r,
+          c: space.c,
+          attachments: { ...updated.equipped[attKey] }
+        });
+        updated.equipped[slot] = null;
+        updated.equipped[attKey] = { sight: null, muzzle: null, grip: null, magazine: null };
+      }
+    }
+    else if (slot === 'bodyArmor' || slot === 'opsHelmet' || slot === 'laserSight' || slot === 'suppressor') {
+      if (updated.equipped[slot]) {
+        const space = findEmptySpace(updated.gridStashItems, ...getItemSize(slot));
+        if (!space) throw new Error('倉庫已滿，請先整理出空間！');
+        updated.gridStashItems.push({
+          uid: generateUid(),
+          type: slot,
+          r: space.r,
+          c: space.c
+        });
+        updated.equipped[slot] = false;
+      }
+    }
+    else if (slot === 'grenades' || slot === 'medkits') {
+      if (updated.equipped[slot] > 0) {
+        const type = slot === 'grenades' ? 'grenade' : 'medkit';
+        const space = findEmptySpace(updated.gridStashItems, 1, 1);
+        if (!space) throw new Error('倉庫已滿，請先整理出空間！');
+        updated.gridStashItems.push({
+          uid: generateUid(),
+          type: type,
+          r: space.r,
+          c: space.c
+        });
+        updated.equipped[slot] -= 1;
+      }
+    }
+
+    syncGuestStashQuantities(updated);
+    return updated;
+  };
+
   const getAdjustedLootContainers = () => {
     return LOOT_CONTAINERS.map(c => {
       if (selectedMap === 'facility') {
@@ -7011,44 +7252,21 @@ export default function App() {
   const handleEquip = (slot, itemId) => {
     if (!currentUser) return;
     if (currentUser.isGuest) {
-      const updatedUser = { ...currentUser };
-      if (!updatedUser.stash) {
-        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
+      try {
+        let finalItemId = itemId;
+        if ((slot === 'primaryWeapon' || slot === 'secondaryWeapon') && itemId) {
+          const matchedItem = currentUser.gridStashItems?.find(
+            i => i.type === itemId || i.uid === itemId
+          );
+          if (matchedItem) {
+            finalItemId = matchedItem.uid;
+          }
+        }
+        const updated = guestEquipItem(currentUser, slot, finalItemId);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
       }
-      if (!updatedUser.equipped) {
-        updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
-      }
-      
-      if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
-        if (updatedUser.equipped[slot]) {
-          const prev = updatedUser.equipped[slot];
-          updatedUser.stash[prev] += 1;
-        }
-        if (!itemId) {
-          updatedUser.equipped[slot] = null;
-        } else {
-          if (updatedUser.stash[itemId] <= 0) return;
-          updatedUser.stash[itemId] -= 1;
-          updatedUser.equipped[slot] = itemId;
-        }
-      } else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
-        if (updatedUser.equipped[slot]) {
-          updatedUser.stash[slot] += 1;
-        }
-        if (!itemId) {
-          updatedUser.equipped[slot] = false;
-        } else {
-          if (updatedUser.stash[slot] <= 0) return;
-          updatedUser.stash[slot] -= 1;
-          updatedUser.equipped[slot] = true;
-        }
-      } else if (slot === 'grenades' || slot === 'medkits') {
-        const stashKey = slot === 'grenades' ? 'grenade' : 'medkit';
-        if (updatedUser.stash[stashKey] <= 0) return;
-        updatedUser.stash[stashKey] -= 1;
-        updatedUser.equipped[slot] += 1;
-      }
-      setCurrentUser(updatedUser);
     } else {
       try {
         let finalItemId = itemId;
@@ -7071,33 +7289,12 @@ export default function App() {
   const handleUnequip = (slot) => {
     if (!currentUser) return;
     if (currentUser.isGuest) {
-      const updatedUser = { ...currentUser };
-      if (!updatedUser.stash) {
-        updatedUser.stash = { m4a1: 0, ak47: 0, awp: 0, mp5: 0, m870: 0, m9: 0, deagle: 0, bodyArmor: 0, opsHelmet: 0, grenade: 0, medkit: 0, goldBar: 0, hardDrive: 0, dogTag: 0, keycard: 0, flashbang: 0, smoke: 0, knife: 0 };
+      try {
+        const updated = guestUnequipItem(currentUser, slot);
+        setCurrentUser(updated);
+      } catch (err) {
+        alert(err.message);
       }
-      if (!updatedUser.equipped) {
-        updatedUser.equipped = { primaryWeapon: null, secondaryWeapon: null, bodyArmor: false, opsHelmet: false, grenades: 0, medkits: 0 };
-      }
-
-      if (slot === 'primaryWeapon' || slot === 'secondaryWeapon') {
-        if (updatedUser.equipped[slot]) {
-          const prev = updatedUser.equipped[slot];
-          updatedUser.stash[prev] += 1;
-          updatedUser.equipped[slot] = null;
-        }
-      } else if (slot === 'bodyArmor' || slot === 'opsHelmet') {
-        if (updatedUser.equipped[slot]) {
-          updatedUser.stash[slot] += 1;
-          updatedUser.equipped[slot] = false;
-        }
-      } else if (slot === 'grenades' || slot === 'medkits') {
-        if (updatedUser.equipped[slot] > 0) {
-          const stashKey = slot === 'grenades' ? 'grenade' : 'medkit';
-          updatedUser.equipped[slot] -= 1;
-          updatedUser.stash[stashKey] += 1;
-        }
-      }
-      setCurrentUser(updatedUser);
     } else {
       try {
         const updated = unequipItem(currentUser.username, slot);
@@ -7106,6 +7303,175 @@ export default function App() {
         alert(err.message);
       }
     }
+  };
+
+  // ==========================================
+  // 格狀倉庫拖曳與選單處理函式 (Grid Stash Drag/Drop & Context Menu Helpers)
+  // ==========================================
+  
+  // 判斷物品拖曳至指定槽位是否相容
+  const isCompatibleWithSlot = (slot) => {
+    if (!draggedItem) return false;
+    const type = draggedItem.type;
+    if (slot === 'primaryWeapon') return ['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(type);
+    if (slot === 'secondaryWeapon') return ['m9', 'deagle'].includes(type);
+    if (slot === 'bodyArmor') return type === 'bodyArmor';
+    if (slot === 'opsHelmet') return type === 'opsHelmet';
+    if (slot === 'laserSight') return type === 'laserSight';
+    if (slot === 'suppressor') return type === 'suppressor';
+    if (slot === 'grenades') return type === 'grenade';
+    if (slot === 'medkits') return type === 'medkit';
+    return false;
+  };
+
+  // 開始拖曳物品
+  const handleDragStart = (e, item, from = 'stash', slot = null) => {
+    setDraggedItem({ ...item, from, slot });
+    setDraggedItemRotated(!!item.rotated);
+    e.dataTransfer.setData('text/plain', item.uid || item.type);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  // 雙擊快速裝備物品
+  const handleItemDoubleClick = (item) => {
+    let slot = null;
+    if (['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(item.type)) slot = 'primaryWeapon';
+    else if (['m9', 'deagle'].includes(item.type)) slot = 'secondaryWeapon';
+    else if (item.type === 'bodyArmor') slot = 'bodyArmor';
+    else if (item.type === 'opsHelmet') slot = 'opsHelmet';
+    else if (item.type === 'laserSight') slot = 'laserSight';
+    else if (item.type === 'suppressor') slot = 'suppressor';
+    else if (item.type === 'grenade') slot = 'grenades';
+    else if (item.type === 'medkit') slot = 'medkits';
+    
+    if (slot) {
+      handleEquip(slot, item.uid);
+    }
+  };
+
+  // 右鍵物品選單
+  const handleItemContextMenu = (e, item, from = 'stash', slot = null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      itemUid: item.uid,
+      type: item.type,
+      from,
+      slot
+    });
+  };
+
+  // 檢測當前拖曳位置是否可以放置
+  const checkDragFits = (item, r, c, isRotated) => {
+    if (!currentUser) return false;
+    const [baseW, baseH] = getItemSize(item.type);
+    const w = isRotated ? baseH : baseW;
+    const h = isRotated ? baseW : baseH;
+    
+    if (c < 0 || c + w > 10 || r < 0 || r + h > 40) return false;
+    
+    const items = currentUser.gridStashItems || [];
+    for (const other of items) {
+      if (other.uid === item.uid) continue;
+      const [ow, oh] = getItemSize(other.type, other);
+      const xOverlap = !(c + w <= other.c || other.c + ow <= c);
+      const yOverlap = !(r + h <= other.r || other.r + oh <= r);
+      if (xOverlap && yOverlap) return false;
+    }
+    return true;
+  };
+
+  // 放置物品至倉庫網格
+  const handleDropOnGrid = (e, targetR, targetC) => {
+    e.preventDefault();
+    if (!draggedItem) return;
+    
+    const isGuest = currentUser.isGuest;
+    const newRotated = draggedItemRotated;
+    
+    // 檢查是否能放下
+    const fits = checkDragFits(draggedItem, targetR, targetC, newRotated);
+    if (!fits) {
+      alert('無法在此處放置物品！空間不足、重疊或超出邊界。');
+      setDraggedItem(null);
+      setDragOverCell(null);
+      return;
+    }
+    
+    try {
+      if (draggedItem.from === 'loadout') {
+        // 從配裝卸下放置到網格指定位置
+        let updated;
+        if (isGuest) {
+          updated = guestUnequipItem(currentUser, draggedItem.slot);
+          const newItem = [...updated.gridStashItems].reverse().find(i => i.type === draggedItem.type);
+          if (newItem) {
+            newItem.rotated = newRotated;
+            updated = guestMoveGridItem(updated, newItem.uid, targetR, targetC);
+          }
+        } else {
+          updated = unequipItem(currentUser.username, draggedItem.slot);
+          const newItem = [...updated.gridStashItems].reverse().find(i => i.type === draggedItem.type);
+          if (newItem) {
+            newItem.rotated = newRotated;
+            updated = moveGridItem(currentUser.username, newItem.uid, targetR, targetC);
+          }
+        }
+        setCurrentUser(updated);
+      } else {
+        // 倉庫內移動物品位置與旋轉
+        let updated;
+        if (isGuest) {
+          updated = guestMoveGridItem(currentUser, draggedItem.uid, targetR, targetC);
+          const item = updated.gridStashItems.find(i => i.uid === draggedItem.uid);
+          if (item) item.rotated = newRotated;
+        } else {
+          updated = moveGridItem(currentUser.username, draggedItem.uid, targetR, targetC);
+          const item = updated.gridStashItems.find(i => i.uid === draggedItem.uid);
+          if (item) {
+            item.rotated = newRotated;
+            const accounts = getAccounts();
+            const idx = accounts.findIndex(a => a.username === currentUser.username);
+            if (idx > -1) {
+              accounts[idx] = updated;
+              saveAccounts(accounts);
+            }
+          }
+        }
+        setCurrentUser(updated);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDraggedItem(null);
+      setDragOverCell(null);
+    }
+  };
+
+  // 放置物品至裝備槽
+  const handleDropOnSlot = (slot) => {
+    if (!draggedItem) return;
+    const type = draggedItem.type;
+    let allowed = false;
+    
+    if (slot === 'primaryWeapon') allowed = ['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(type);
+    else if (slot === 'secondaryWeapon') allowed = ['m9', 'deagle'].includes(type);
+    else if (slot === 'bodyArmor') allowed = type === 'bodyArmor';
+    else if (slot === 'opsHelmet') allowed = type === 'opsHelmet';
+    else if (slot === 'laserSight') allowed = type === 'laserSight';
+    else if (slot === 'suppressor') allowed = type === 'suppressor';
+    else if (slot === 'grenades') allowed = type === 'grenade';
+    else if (slot === 'medkits') allowed = type === 'medkit';
+    
+    if (allowed) {
+      handleEquip(slot, draggedItem.uid || draggedItem.type);
+    } else {
+      alert(`該物品無法裝備在 ${slot === 'primaryWeapon' ? '主武器' : slot === 'secondaryWeapon' ? '副武器' : '該槽位'} 中！`);
+    }
+    setDraggedItem(null);
+    setDragOverCell(null);
   };
 
   // 領取任務合約獎勵
@@ -9431,19 +9797,37 @@ export default function App() {
                           </div>
                         )
                       ) : lobbyTab === 'loadout' ? (
-                        <div className="loadout-container" style={{ display: 'flex', gap: '20px', flex: 1, maxHeight: '420px', overflow: 'hidden' }}>
+                        <div className="loadout-container" style={{ display: 'flex', gap: '20px', flex: 1, maxHeight: '420px', overflow: 'hidden', position: 'relative' }}>
                           {/* 左側：單兵配置 Equipped Loadout */}
-                          <div className="loadout-column equipped-list" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div className="loadout-column equipped-list" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '5px' }}>
                             <h5 style={{ color: '#00e5ff', margin: '0 0 5px 0', borderBottom: '1px solid rgba(0,229,255,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
-                              單兵配裝 LOADOUT
+                              單兵配裝 LOADOUT (可拖曳裝備/卸下)
                             </h5>
                             
                             {/* Slot 1: Primary Weapon */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'primaryWeapon' ? 'compatible-hover' : ''}`} 
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.primaryWeapon ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('primaryWeapon')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('primaryWeapon')) setActiveHoverSlot('primaryWeapon'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('primaryWeapon'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.primaryWeapon}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.primaryWeapon) {
+                                  handleDragStart(e, { type: currentUser.equipped.primaryWeapon }, 'loadout', 'primaryWeapon');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.primaryWeapon) {
+                                  handleItemContextMenu(e, { type: currentUser.equipped.primaryWeapon }, 'loadout', 'primaryWeapon');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>主武器 PRIMARY WEAPON</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>主武器 PRIMARY WEAPON ⚔️</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {ITEM_NAMES[currentUser.equipped?.primaryWeapon] || '無空缺 (Empty)'}
+                                  {ITEM_NAMES[currentUser.equipped?.primaryWeapon] || '無空缺 (拖曳武器至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.primaryWeapon && (
@@ -9452,13 +9836,31 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
+ 
                             {/* Slot 2: Secondary Weapon */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'secondaryWeapon' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.secondaryWeapon ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('secondaryWeapon')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('secondaryWeapon')) setActiveHoverSlot('secondaryWeapon'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('secondaryWeapon'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.secondaryWeapon}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.secondaryWeapon) {
+                                  handleDragStart(e, { type: currentUser.equipped.secondaryWeapon }, 'loadout', 'secondaryWeapon');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.secondaryWeapon) {
+                                  handleItemContextMenu(e, { type: currentUser.equipped.secondaryWeapon }, 'loadout', 'secondaryWeapon');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>副武器 SECONDARY WEAPON</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>副武器 SECONDARY WEAPON 🔫</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {ITEM_NAMES[currentUser.equipped?.secondaryWeapon] || '無空缺 (Empty)'}
+                                  {ITEM_NAMES[currentUser.equipped?.secondaryWeapon] || '無空缺 (拖曳手槍至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.secondaryWeapon && (
@@ -9467,13 +9869,31 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
+ 
                             {/* Slot 3: Body Armor */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'bodyArmor' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.bodyArmor ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('bodyArmor')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('bodyArmor')) setActiveHoverSlot('bodyArmor'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('bodyArmor'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.bodyArmor}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.bodyArmor) {
+                                  handleDragStart(e, { type: 'bodyArmor' }, 'loadout', 'bodyArmor');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.bodyArmor) {
+                                  handleItemContextMenu(e, { type: 'bodyArmor' }, 'loadout', 'bodyArmor');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>防彈護甲 BODY ARMOR (+50 HP)</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>防彈護甲 BODY ARMOR (+50 HP) 🛡️</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.bodyArmor ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.bodyArmor ? '重型防彈衣 (Equipped)' : '未穿戴 (None)'}
+                                  {currentUser.equipped?.bodyArmor ? '重型防彈衣 (Equipped)' : '未穿戴 (拖曳防彈衣至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.bodyArmor && (
@@ -9482,13 +9902,31 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
+ 
                             {/* Slot 4: Ops Helmet */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'opsHelmet' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.opsHelmet ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('opsHelmet')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('opsHelmet')) setActiveHoverSlot('opsHelmet'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('opsHelmet'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.opsHelmet}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.opsHelmet) {
+                                  handleDragStart(e, { type: 'opsHelmet' }, 'loadout', 'opsHelmet');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.opsHelmet) {
+                                  handleItemContextMenu(e, { type: 'opsHelmet' }, 'loadout', 'opsHelmet');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>特種頭盔 HELMET (減傷 25%)</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>特種頭盔 HELMET (減傷 25%) 🪖</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.opsHelmet ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.opsHelmet ? '特種作戰頭盔 (Equipped)' : '未穿戴 (None)'}
+                                  {currentUser.equipped?.opsHelmet ? '特種作戰頭盔 (Equipped)' : '未穿戴 (拖曳頭盔至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.opsHelmet && (
@@ -9497,13 +9935,31 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
+ 
                             {/* Slot 4b: Laser Sight */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'laserSight' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.laserSight ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('laserSight')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('laserSight')) setActiveHoverSlot('laserSight'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('laserSight'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.laserSight}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.laserSight) {
+                                  handleDragStart(e, { type: 'laserSight' }, 'loadout', 'laserSight');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.laserSight) {
+                                  handleItemContextMenu(e, { type: 'laserSight' }, 'loadout', 'laserSight');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M4A1 雷射瞄準器 (+5 傷害)</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M4A1 雷射瞄準器 (+5 傷害) 🔦</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.laserSight ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.laserSight ? '已安裝 (Equipped)' : '未安裝 (None)'}
+                                  {currentUser.equipped?.laserSight ? '已安裝 (Equipped)' : '未安裝 (拖曳雷射至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.laserSight && (
@@ -9512,13 +9968,31 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
+ 
                             {/* Slot 4c: Suppressor */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'suppressor' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', cursor: currentUser.equipped?.suppressor ? 'grab' : 'default' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('suppressor')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('suppressor')) setActiveHoverSlot('suppressor'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('suppressor'); setActiveHoverSlot(null); }}
+                              draggable={!!currentUser.equipped?.suppressor}
+                              onDragStart={(e) => {
+                                if (currentUser.equipped?.suppressor) {
+                                  handleDragStart(e, { type: 'suppressor' }, 'loadout', 'suppressor');
+                                }
+                              }}
+                              onContextMenu={(e) => {
+                                if (currentUser.equipped?.suppressor) {
+                                  handleItemContextMenu(e, { type: 'suppressor' }, 'loadout', 'suppressor');
+                                }
+                              }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M9 戰術消音器 (+5 傷害)</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M9 戰術消音器 (+5 傷害) 🔇</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.suppressor ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.suppressor ? '已安裝 (Equipped)' : '未安裝 (None)'}
+                                  {currentUser.equipped?.suppressor ? '已安裝 (Equipped)' : '未安裝 (拖曳消音器至此)'}
                                 </div>
                               </div>
                               {currentUser.equipped?.suppressor && (
@@ -9527,12 +10001,18 @@ export default function App() {
                                 </button>
                               )}
                             </div>
-
-
+ 
                             {/* Slot 5: Grenades */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'grenades' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('grenades')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('grenades')) setActiveHoverSlot('grenades'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('grenades'); setActiveHoverSlot(null); }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰術手榴彈 GRENADES</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰術手榴彈 GRENADES 💣</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
                                   {currentUser.equipped?.grenades || 0} 顆
                                 </div>
@@ -9546,11 +10026,18 @@ export default function App() {
                                 </button>
                               </div>
                             </div>
-
+ 
                             {/* Slot 6: Medkits */}
-                            <div className="loadout-slot-card" style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div 
+                              className={`loadout-slot-card ${activeHoverSlot === 'medkits' ? 'compatible-hover' : ''}`}
+                              style={{ background: 'rgba(0, 0, 0, 0.4)', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }}
+                              onDragOver={(e) => { if (isCompatibleWithSlot('medkits')) e.preventDefault(); }}
+                              onDragEnter={() => { if (isCompatibleWithSlot('medkits')) setActiveHoverSlot('medkits'); }}
+                              onDragLeave={() => setActiveHoverSlot(null)}
+                              onDrop={() => { handleDropOnSlot('medkits'); setActiveHoverSlot(null); }}
+                            >
                               <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰地醫療包 MEDKITS</div>
+                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰地醫療包 MEDKITS 🩹</div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
                                   {currentUser.equipped?.medkits || 0} 個
                                 </div>
@@ -9567,85 +10054,313 @@ export default function App() {
                           </div>
                           
                           {/* 右側：個人倉庫 Stash */}
-                          <div className="loadout-column stash-list" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <h5 style={{ color: '#ffcc00', margin: '0 0 5px 0', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
-                              個人倉庫 STASH
-                            </h5>
-                            <div className="stash-items-grid" style={{ display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', maxHeight: '380px', paddingRight: '5px', textAlign: 'left' }}>
-                              {[
-                                { title: '🔫 槍械武器 WEAPONS', keys: ['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'] },
-                                { title: '🛡 戰術裝具與配件 GEAR & ATTACHMENTS', keys: ['bodyArmor', 'opsHelmet', 'laserSight', 'suppressor'] },
-                                { title: '💊 戰術消耗品 CONSUMABLES', keys: ['grenade', 'medkit', 'flashbang', 'smoke'] },
-                                { title: '🪙 撤離戰利品 LOOT VALUABLES', keys: ['goldBar', 'hardDrive', 'dogTag', 'keycard'] }
-                              ].map((group) => {
-                                const activeKeys = group.keys.filter(k => (currentUser.stash && currentUser.stash[k]) > 0);
-                                if (activeKeys.length === 0) return null;
-                                
-                                return (
-                                  <div key={group.title} className="stash-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <div style={{ fontSize: '0.72rem', color: '#ffcc00', borderBottom: '1px solid rgba(255, 204, 0, 0.15)', paddingBottom: '3px', marginBottom: '4px', letterSpacing: '1px', fontWeight: 'bold' }}>
-                                      {group.title}
-                                    </div>
-                                    {activeKeys.map((key) => {
-                                      const count = currentUser.stash[key] || 0;
+                          <div className="loadout-column stash-list" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', marginBottom: '5px' }}>
+                              <h5 style={{ color: '#ffcc00', margin: 0, letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                                個人倉庫 STASH (10 欄戰術網格)
+                              </h5>
+                              <span style={{ fontSize: '0.62rem', color: '#88a888' }}>拖曳移動 | 雙擊裝備 | 右鍵選單 | 按 [R] 旋轉</span>
+                            </div>
+                            
+                            {/* Stash Grid Viewport */}
+                            {(() => {
+                              // 動態計算網格最大行數，以防物品超出時無法顯示
+                              const gridRows = Math.max(12, ...((currentUser.gridStashItems || []).map(item => {
+                                const [, h] = getItemSize(item.type, item);
+                                return item.r + h;
+                              })), 0) + 4;
+                              
+                              const contextMenuItemStyle = {
+                                padding: '8px 14px',
+                                cursor: 'pointer',
+                                color: '#fff',
+                                fontSize: '0.72rem',
+                                textAlign: 'left',
+                                transition: 'all 0.2s',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                              };
+                              
+                              return (
+                                <div className="stash-grid-viewport" style={{ flex: 1, overflowY: 'auto', maxHeight: '380px', paddingRight: '5px', position: 'relative' }}>
+                                  <div className="stash-grid-container" style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(10, 36px)',
+                                    gridTemplateRows: `repeat(${gridRows}, 36px)`,
+                                    width: '360px',
+                                    height: `${gridRows * 36}px`,
+                                    position: 'relative',
+                                    background: 'rgba(0, 0, 0, 0.45)',
+                                    border: '1px solid rgba(255, 204, 0, 0.15)',
+                                    backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
+                                    backgroundSize: '36px 36px',
+                                  }}>
+                                    {/* Grid Cells (Drop targets) */}
+                                    {Array.from({ length: gridRows * 10 }).map((_, idx) => {
+                                      const r = Math.floor(idx / 10);
+                                      const c = idx % 10;
                                       return (
-                                        <div key={key} className="stash-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 204, 0, 0.03)', border: '1px solid rgba(255,204,0,0.1)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', width: '50%' }}>
-                                            <span style={{ color: '#fff' }}>{ITEM_NAMES[key] || key}</span>
-                                            <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>x{count}</span>
-                                          </div>
-                                          <div style={{ display: 'flex', gap: '5px' }}>
-                                            {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(key) && count > 0 && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('primaryWeapon', key)}>
-                                                主手
-                                              </button>
-                                            )}
-                                            {['m9', 'deagle'].includes(key) && count > 0 && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('secondaryWeapon', key)}>
-                                                副手
-                                              </button>
-                                            )}
-                                            {key === 'bodyArmor' && count > 0 && !currentUser.equipped?.bodyArmor && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('bodyArmor', 'bodyArmor')}>
-                                                裝備
-                                              </button>
-                                            )}
-                                            {key === 'opsHelmet' && count > 0 && !currentUser.equipped?.opsHelmet && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('opsHelmet', 'opsHelmet')}>
-                                                裝備
-                                              </button>
-                                            )}
-                                            {key === 'laserSight' && count > 0 && !currentUser.equipped?.laserSight && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('laserSight', 'laserSight')}>
-                                                裝備
-                                              </button>
-                                            )}
-                                            {key === 'suppressor' && count > 0 && !currentUser.equipped?.suppressor && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip('suppressor', 'suppressor')}>
-                                                裝備
-                                              </button>
-                                            )}
-                                            {(key === 'grenade' || key === 'medkit') && count > 0 && (
-                                              <button className="loadout-action-btn" style={{ fontSize: '0.65rem', padding: '2px 6px', border: '1px solid #00ff66', color: '#00ff66', background: 'transparent', cursor: 'pointer', borderRadius: '3px' }} onClick={() => handleEquip(key === 'grenade' ? 'grenades' : 'medkits')}>
-                                                帶入
-                                              </button>
-                                            )}
-                                            {(key === 'goldBar' || key === 'hardDrive' || key === 'dogTag') && (
-                                              <span style={{ color: '#88a888', fontSize: '0.7rem' }}>僅供出售</span>
-                                            )}
+                                        <div
+                                          key={`cell-${r}-${c}`}
+                                          style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            boxSizing: 'border-box',
+                                          }}
+                                          onDragOver={(e) => {
+                                            e.preventDefault();
+                                            if (dragOverCell?.r !== r || dragOverCell?.c !== c) {
+                                              setDragOverCell({ r, c });
+                                            }
+                                          }}
+                                          onDrop={(e) => handleDropOnGrid(e, r, c)}
+                                        />
+                                      );
+                                    })}
+                                    
+                                    {/* Drag & Drop Preview Highlight */}
+                                    {draggedItem && dragOverCell && (
+                                      (() => {
+                                        const fits = checkDragFits(draggedItem, dragOverCell.r, dragOverCell.c, draggedItemRotated);
+                                        const [baseW, baseH] = getItemSize(draggedItem.type);
+                                        const w = draggedItemRotated ? baseH : baseW;
+                                        const h = draggedItemRotated ? baseW : baseH;
+                                        return (
+                                          <div style={{
+                                            position: 'absolute',
+                                            left: `${dragOverCell.c * 36}px`,
+                                            top: `${dragOverCell.r * 36}px`,
+                                            width: `${w * 36}px`,
+                                            height: `${h * 36}px`,
+                                            background: fits ? 'rgba(0, 255, 102, 0.22)' : 'rgba(255, 59, 59, 0.22)',
+                                            border: `1px solid ${fits ? '#00ff66' : '#ff3b3b'}`,
+                                            boxShadow: `inset 0 0 8px ${fits ? 'rgba(0, 255, 102, 0.4)' : 'rgba(255, 59, 59, 0.4)'}`,
+                                            pointerEvents: 'none',
+                                            zIndex: 10,
+                                            borderRadius: '3px',
+                                          }} />
+                                        );
+                                      })()
+                                    )}
+                                    
+                                    {/* Grid Stash Items */}
+                                    {(currentUser.gridStashItems || []).map((item) => {
+                                      const [w, h] = getItemSize(item.type, item);
+                                      let categoryColor = '#88a888';
+                                      let categoryBg = 'rgba(255, 255, 255, 0.03)';
+                                      let itemIcon = '📦';
+                                      
+                                      if (['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(item.type)) {
+                                        categoryColor = '#00e5ff';
+                                        categoryBg = 'rgba(0, 229, 255, 0.08)';
+                                        itemIcon = '🔫';
+                                      } else if (['m9', 'deagle'].includes(item.type)) {
+                                        categoryColor = '#00e5ff';
+                                        categoryBg = 'rgba(0, 229, 255, 0.08)';
+                                        itemIcon = '🔫';
+                                      } else if (['bodyArmor', 'opsHelmet'].includes(item.type)) {
+                                        categoryColor = '#00ff66';
+                                        categoryBg = 'rgba(0, 255, 102, 0.08)';
+                                        itemIcon = '🛡️';
+                                      } else if (['grenade', 'medkit', 'flashbang', 'smoke'].includes(item.type)) {
+                                        categoryColor = '#ffaa00';
+                                        categoryBg = 'rgba(255, 170, 0, 0.08)';
+                                        itemIcon = '💊';
+                                      } else if (['goldBar', 'hardDrive', 'dogTag', 'keycard'].includes(item.type)) {
+                                        categoryColor = '#ffd700';
+                                        categoryBg = 'rgba(255, 215, 0, 0.08)';
+                                        itemIcon = '🪙';
+                                      } else if (item.type.startsWith('sight_') || item.type.startsWith('muzzle_') || item.type.startsWith('grip_') || item.type.startsWith('mag_')) {
+                                        categoryColor = '#b0bec5';
+                                        categoryBg = 'rgba(176, 190, 197, 0.08)';
+                                        itemIcon = '🔧';
+                                      }
+                                      
+                                      const isVertical = h > w;
+                                      
+                                      return (
+                                        <div
+                                          key={item.uid}
+                                          style={{
+                                            position: 'absolute',
+                                            left: `${item.c * 36}px`,
+                                            top: `${item.r * 36}px`,
+                                            width: `${w * 36 - 2}px`,
+                                            height: `${h * 36 - 2}px`,
+                                            margin: '1px',
+                                            boxSizing: 'border-box',
+                                            background: categoryBg,
+                                            border: `1px solid ${categoryColor}`,
+                                            borderRadius: '3px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            cursor: 'grab',
+                                            userSelect: 'none',
+                                            pointerEvents: draggedItem ? 'none' : 'auto',
+                                            transition: 'box-shadow 0.15s, border-color 0.15s',
+                                            zIndex: 2,
+                                            overflow: 'hidden',
+                                            padding: '2px',
+                                          }}
+                                          title={`${ITEM_NAMES[item.type] || item.type} (右鍵選單 / 雙擊裝備)`}
+                                          draggable
+                                          onDragStart={(e) => handleDragStart(e, item, 'stash')}
+                                          onDoubleClick={() => handleItemDoubleClick(item)}
+                                          onContextMenu={(e) => handleItemContextMenu(e, item, 'stash')}
+                                        >
+                                          <div style={{
+                                            display: 'flex',
+                                            flexDirection: isVertical ? 'column' : 'row',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '2px',
+                                            width: '100%',
+                                            height: '100%',
+                                            writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
+                                            textOrientation: 'mixed',
+                                          }}>
+                                            <span style={{ fontSize: '0.9rem' }}>{itemIcon}</span>
+                                            <span style={{
+                                              fontSize: '0.62rem',
+                                              fontWeight: 'bold',
+                                              color: '#fff',
+                                              textAlign: 'center',
+                                              lineHeight: 1.1,
+                                              whiteSpace: 'nowrap',
+                                            }}>
+                                              {ITEM_NAMES[item.type] ? ITEM_NAMES[item.type].split(' ')[0] : item.type}
+                                            </span>
                                           </div>
                                         </div>
                                       );
                                     })}
                                   </div>
-                                );
-                              })}
-                              {Object.keys(currentUser.stash || {}).filter(k => (currentUser.stash[k] || 0) > 0).length === 0 && (
-                                <div style={{ color: '#88a888', fontSize: '0.8rem', padding: '30px 10px', textAlign: 'center' }}>
-                                  ⚠️ 倉庫目前空無一物
+                                  
+                                  {/* Right-click Context Menu */}
+                                  {activeContextMenu && (
+                                    <div
+                                      style={{
+                                        position: 'fixed',
+                                        left: `${activeContextMenu.x}px`,
+                                        top: `${activeContextMenu.y}px`,
+                                        background: 'rgba(10, 20, 15, 0.95)',
+                                        border: '1px solid #ffcc00',
+                                        borderRadius: '3px',
+                                        boxShadow: '0 0 15px rgba(255, 204, 0, 0.35)',
+                                        zIndex: 9999,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        padding: '4px 0',
+                                        minWidth: '110px',
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {activeContextMenu.from === 'stash' ? (
+                                        <>
+                                          {/* Auto equip option */}
+                                          {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(activeContextMenu.type) && (
+                                            <div
+                                              className="context-menu-item"
+                                              style={contextMenuItemStyle}
+                                              onClick={() => { handleEquip('primaryWeapon', activeContextMenu.itemUid); setActiveContextMenu(null); }}
+                                            >
+                                              裝備至主武器
+                                            </div>
+                                          )}
+                                          {['m9', 'deagle'].includes(activeContextMenu.type) && (
+                                            <div
+                                              className="context-menu-item"
+                                              style={contextMenuItemStyle}
+                                              onClick={() => { handleEquip('secondaryWeapon', activeContextMenu.itemUid); setActiveContextMenu(null); }}
+                                            >
+                                              裝備至副武器
+                                            </div>
+                                          )}
+                                          {['bodyArmor', 'opsHelmet', 'laserSight', 'suppressor'].includes(activeContextMenu.type) && (
+                                            <div
+                                              className="context-menu-item"
+                                              style={contextMenuItemStyle}
+                                              onClick={() => { handleEquip(activeContextMenu.type, activeContextMenu.itemUid); setActiveContextMenu(null); }}
+                                            >
+                                              穿戴/裝備
+                                            </div>
+                                          )}
+                                          {['grenade', 'medkit'].includes(activeContextMenu.type) && (
+                                            <div
+                                              className="context-menu-item"
+                                              style={contextMenuItemStyle}
+                                              onClick={() => { handleEquip(activeContextMenu.type === 'grenade' ? 'grenades' : 'medkits', activeContextMenu.itemUid); setActiveContextMenu(null); }}
+                                            >
+                                              放入配裝
+                                            </div>
+                                          )}
+                                          {/* Rotate */}
+                                          <div
+                                            className="context-menu-item"
+                                            style={contextMenuItemStyle}
+                                            onClick={() => {
+                                              try {
+                                                if (currentUser.isGuest) {
+                                                  setCurrentUser(guestRotateGridItem(currentUser, activeContextMenu.itemUid));
+                                                } else {
+                                                  const updated = rotateGridItem(currentUser.username, activeContextMenu.itemUid);
+                                                  setCurrentUser(updated);
+                                                }
+                                              } catch (err) {
+                                                alert(err.message);
+                                              }
+                                              setActiveContextMenu(null);
+                                            }}
+                                          >
+                                            旋轉物品 (R)
+                                          </div>
+                                          {/* Sell */}
+                                          <div
+                                            className="context-menu-item"
+                                            style={{ ...contextMenuItemStyle, color: '#ff3b3b', borderBottom: 'none' }}
+                                            onClick={() => {
+                                              const value = MARKET_PRICES.sell[activeContextMenu.type] || 0;
+                                              if (confirm(`確認出售 ${ITEM_NAMES[activeContextMenu.type]} 獲得 ${value} 🪙 嗎？`)) {
+                                                try {
+                                                  if (currentUser.isGuest) {
+                                                    const updated = { ...currentUser };
+                                                    updated.gridStashItems = updated.gridStashItems.map(i => ({ ...i }));
+                                                    const idx = updated.gridStashItems.findIndex(i => i.uid === activeContextMenu.itemUid);
+                                                    if (idx > -1) {
+                                                      updated.gridStashItems.splice(idx, 1);
+                                                      updated.coins = (updated.coins || 0) + value;
+                                                      syncGuestStashQuantities(updated);
+                                                      setCurrentUser(updated);
+                                                    }
+                                                  } else {
+                                                    const updated = sellMarketItemByUid(currentUser.username, activeContextMenu.itemUid, value);
+                                                    setCurrentUser(updated);
+                                                  }
+                                                } catch (err) {
+                                                  alert(err.message);
+                                                }
+                                              }
+                                              setActiveContextMenu(null);
+                                            }}
+                                          >
+                                            出售物品
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div
+                                          className="context-menu-item"
+                                          style={{ ...contextMenuItemStyle, borderBottom: 'none' }}
+                                          onClick={() => { handleUnequip(activeContextMenu.slot); setActiveContextMenu(null); }}
+                                        >
+                                          卸下裝備
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       ) : lobbyTab === 'merchant' ? (

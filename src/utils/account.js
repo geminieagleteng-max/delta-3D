@@ -113,22 +113,31 @@ async function saveCloudAccount(user) {
 }
 
 // 取得不同物品佔用的網格尺寸 [寬, 高]
-export function getItemSize(itemId) {
-  if (itemId === 'm4a1' || itemId === 'ak47' || itemId === 'm870') return [4, 2];
-  if (itemId === 'awp') return [5, 2];
-  if (itemId === 'mp5') return [3, 2];
-  if (itemId === 'm9') return [2, 1];
-  if (itemId === 'deagle') return [2, 2];
-  if (itemId === 'bodyArmor' || itemId === 'opsHelmet') return [2, 2];
-  if (itemId === 'goldBar') return [1, 2];
+export function getItemSize(itemId, itemObj = null) {
+  let w = 1;
+  let h = 1;
+  if (itemId === 'm4a1' || itemId === 'ak47' || itemId === 'm870') [w, h] = [4, 2];
+  else if (itemId === 'awp') [w, h] = [5, 2];
+  else if (itemId === 'mp5') [w, h] = [3, 2];
+  else if (itemId === 'm9') [w, h] = [2, 1];
+  else if (itemId === 'deagle') [w, h] = [2, 2];
+  else if (itemId === 'bodyArmor' || itemId === 'opsHelmet') [w, h] = [2, 2];
+  else if (itemId === 'goldBar') [w, h] = [1, 2];
   
   // 戰術配件 (在 attachmentsConfig 中定義)
-  if (itemId.startsWith('sight_') || itemId.startsWith('muzzle_') || itemId.startsWith('grip_') || itemId.startsWith('mag_')) {
-    return [1, 1];
+  else if (itemId && (itemId.startsWith('sight_') || itemId.startsWith('muzzle_') || itemId.startsWith('grip_') || itemId.startsWith('mag_'))) {
+    [w, h] = [1, 1];
   }
   
   // 預設 (手榴彈, 醫療包, 加密硬碟, 軍牌) 為 1x1
-  return [1, 1];
+  else {
+    [w, h] = [1, 1];
+  }
+
+  if (itemObj && itemObj.rotated) {
+    return [h, w];
+  }
+  return [w, h];
 }
 
 // 產生隨機唯一 ID
@@ -145,7 +154,7 @@ export function findEmptySpace(items, w, h) {
     for (let c = 0; c <= GRID_COLS - w; c++) {
       let overlap = false;
       for (const item of items) {
-        const [iw, ih] = getItemSize(item.type);
+        const [iw, ih] = getItemSize(item.type, item);
         const ir = item.r;
         const ic = item.c;
         
@@ -598,7 +607,7 @@ export function moveGridItem(userParam, itemUid, r, c) {
   const item = user.gridStashItems.find(i => i.uid === itemUid);
   if (!item) throw new Error('找不到該物品！');
   
-  const [w, h] = getItemSize(item.type);
+  const [w, h] = getItemSize(item.type, item);
   
   // 檢查越界
   if (c < 0 || c + w > 10 || r < 0) {
@@ -608,7 +617,7 @@ export function moveGridItem(userParam, itemUid, r, c) {
   // 檢查是否與其他物品重疊（排除自己）
   for (const other of user.gridStashItems) {
     if (other.uid === itemUid) continue;
-    const [ow, oh] = getItemSize(other.type);
+    const [ow, oh] = getItemSize(other.type, other);
     const xOverlap = !(c + w <= other.c || other.c + ow <= c);
     const yOverlap = !(r + h <= other.r || other.r + oh <= r);
     if (xOverlap && yOverlap) {
@@ -618,6 +627,42 @@ export function moveGridItem(userParam, itemUid, r, c) {
   
   item.r = r;
   item.c = c;
+  
+  return finalizeUserSave(data);
+}
+
+// 旋轉倉庫網格物品
+export function rotateGridItem(userParam, itemUid) {
+  const data = resolveUser(userParam);
+  const user = data.currentUser;
+  
+  const item = user.gridStashItems.find(i => i.uid === itemUid);
+  if (!item) throw new Error('找不到該物品！');
+  
+  const [baseW, baseH] = getItemSize(item.type);
+  const prevRotated = !!item.rotated;
+  const nextRotated = !prevRotated;
+  
+  const w = nextRotated ? baseH : baseW;
+  const h = nextRotated ? baseW : baseH;
+  
+  // 檢查越界
+  if (item.c + w > 10 || item.r + h > 40) {
+    throw new Error('旋轉後物品超出邊界！');
+  }
+  
+  // 檢查是否與其他物品重疊（排除自己）
+  for (const other of user.gridStashItems) {
+    if (other.uid === itemUid) continue;
+    const [ow, oh] = getItemSize(other.type, other);
+    const xOverlap = !(item.c + w <= other.c || other.c + ow <= item.c);
+    const yOverlap = !(item.r + h <= other.r || other.r + oh <= item.r);
+    if (xOverlap && yOverlap) {
+      throw new Error('空間已被其他物品佔用，無法旋轉！');
+    }
+  }
+  
+  item.rotated = nextRotated;
   
   return finalizeUserSave(data);
 }
