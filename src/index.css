@@ -81,7 +81,8 @@ html, body {
 }
 
 /* 狙擊鏡專屬樣式 */
-.sniper-scope-overlay {
+/* ADS 瞄準鏡覆蓋層 */
+.ads-scope-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -95,7 +96,8 @@ html, body {
   overflow: hidden;
 }
 
-.scope-lens {
+/* 1. AWP 狙擊鏡 */
+.sniper-scope-lens {
   position: relative;
   width: min(82vw, 82vh);
   height: min(82vw, 82vh);
@@ -112,14 +114,14 @@ html, body {
   position: absolute;
   width: 100%;
   height: 1.5px;
-  background-color: rgba(0, 0, 0, 0.85);
+  background-color: rgba(0, 0, 0, 0.9);
 }
 
 .scope-line-v {
   position: absolute;
   width: 1.5px;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.85);
+  background-color: rgba(0, 0, 0, 0.9);
 }
 
 .scope-center-dot {
@@ -128,7 +130,243 @@ html, body {
   height: 6px;
   background-color: #ff1111;
   border-radius: 50%;
-  box-shadow: 0 0 4px #ff1111;
+  box-shadow: 0 0 6px #ff1111;
+  z-index: 5;
+}
+
+/* 狙擊鏡刻度線 (Mil Dots / Ticks) */
+.scope-mil-ticks-v::before,
+.scope-mil-ticks-v::after,
+.scope-mil-ticks-h::before,
+.scope-mil-ticks-h::after {
+  content: '';
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.scope-mil-ticks-v::before {
+  width: 12px;
+  height: 2px;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 40px 0 rgba(0, 0, 0, 0.85), 0 80px 0 rgba(0, 0, 0, 0.85);
+}
+
+.scope-mil-ticks-v::after {
+  width: 12px;
+  height: 2px;
+  bottom: 35%;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  box-shadow: 0 -40px 0 rgba(0, 0, 0, 0.85), 0 -80px 0 rgba(0, 0, 0, 0.85);
+}
+
+.scope-mil-ticks-h::before {
+  width: 2px;
+  height: 12px;
+  left: 35%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 40px 0 0 rgba(0, 0, 0, 0.85), 80px 0 0 rgba(0, 0, 0, 0.85);
+}
+
+.scope-mil-ticks-h::after {
+  width: 2px;
+  height: 12px;
+  right: 35%;
+  top: 50%;
+  transform: translate(50%, -50%);
+  box-shadow: -40px 0 0 rgba(0, 0, 0, 0.85), -80px 0 0 rgba(0, 0, 0, 0.85);
+}
+
+/* 2. M4A1 全像瞄準鏡 (Holographic EOTech style) */
+.holographic-scope-reticle {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 120px;
+  height: 120px;
+}
+
+.holo-outer-circle {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border: 1.5px solid rgba(255, 30, 30, 0.85);
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(255, 30, 30, 0.5), inset 0 0 5px rgba(255, 30, 30, 0.5);
+}
+
+.holo-center-dot {
+  position: absolute;
+  width: 3.5px;
+  height: 3.5px;
+  background-color: rgba(255, 30, 30, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 30, 30, 0.8);
+}
+
+.holo-tick-top, .holo-tick-bottom, .holo-tick-left, .holo-tick-right {
+  position: absolute;
+  background-color: rgba(255, 30, 30, 0.85);
+  box-shadow: 0 0 4px rgba(255, 30, 30, 0.5);
+}
+
+.holo-tick-top {
+  width: 2px;
+  height: 8px;
+  top: 20px;
+}
+
+.holo-tick-bottom {
+  width: 2px;
+  height: 8px;
+  bottom: 20px;
+}
+
+.holo-tick-left {
+  width: 8px;
+  height: 2px;
+  left: 20px;
+}
+
+.holo-tick-right {
+  width: 8px;
+  height: 2px;
+  right: 20px;
+}
+
+/* 3. AK47 ACOG 鏡 (Red Chevron T-reticle) */
+.acog-scope-reticle {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100px;
+  height: 100px;
+}
+
+.acog-chevron {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #ff1111;
+  filter: drop-shadow(0 0 4px #ff1111);
+  top: 40px;
+}
+
+.acog-line-v {
+  position: absolute;
+  width: 1.5px;
+  height: 35px;
+  background-color: rgba(255, 17, 17, 0.85);
+  box-shadow: 0 0 4px rgba(255, 17, 17, 0.5);
+  top: 50px;
+}
+
+.acog-line-h {
+  position: absolute;
+  width: 40px;
+  height: 1.5px;
+  background-color: rgba(255, 17, 17, 0.85);
+  box-shadow: 0 0 4px rgba(255, 17, 17, 0.5);
+  top: 56px;
+}
+
+/* 4. MP5 紅點鏡 (RDS) */
+.reddot-scope-reticle {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100px;
+  height: 100px;
+}
+
+.reddot-lens-ring {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border: 1.5px solid rgba(0, 229, 255, 0.3);
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 75%, rgba(0, 229, 255, 0.05) 100%);
+  box-shadow: inset 0 0 12px rgba(0, 229, 255, 0.15), 0 0 8px rgba(0, 229, 255, 0.1);
+}
+
+.reddot-center-dot {
+  position: absolute;
+  width: 4.5px;
+  height: 4.5px;
+  background-color: #ff1111;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff1111, 0 0 2px #fff;
+}
+
+/* 5. M870 散彈環形準星 (Shotgun Spread Ring) */
+.shotgun-scope-reticle {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 150px;
+  height: 150px;
+}
+
+.shotgun-ring {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  border: 2px dashed rgba(0, 255, 102, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 255, 102, 0.3), inset 0 0 6px rgba(0, 255, 102, 0.3);
+  animation: rotate-ring-clockwise 20s linear infinite;
+}
+
+.shotgun-center-dot {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border: 1.5px solid #00ff66;
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(0, 255, 102, 0.6);
+}
+
+@keyframes rotate-ring-clockwise {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 6. 手槍反射鏡 (Pistol Reflex Sight) */
+.pistol-reflex-reticle {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 80px;
+  height: 80px;
+}
+
+.reflex-lens-ring {
+  position: absolute;
+  width: 60px;
+  height: 50px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: radial-gradient(circle, transparent 80%, rgba(0, 255, 102, 0.03) 100%);
+  box-shadow: inset 0 0 6px rgba(0, 255, 102, 0.08);
+}
+
+.reflex-center-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background-color: #00ff66;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #00ff66, 0 0 2px #fff;
 }
 
 /* 戰術 CRT 掃描線效果 */

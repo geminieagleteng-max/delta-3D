@@ -9891,14 +9891,53 @@ export default function App() {
         </div>
       )}
 
-      {/* 狙擊槍開鏡黑邊與瞄準圈 */}
-      {isLocked && gameState === 'active' && isAds && activeWeaponId === 'awp' && (
-        <div className="sniper-scope-overlay">
-          <div className="scope-lens">
-            <div className="scope-line-h" />
-            <div className="scope-line-v" />
-            <div className="scope-center-dot" />
-          </div>
+      {/* 各槍枝開鏡瞄準鏡與準星覆蓋層 (ADS Scopes & Reticles) */}
+      {isLocked && gameState === 'active' && isAds && (
+        <div className={`ads-scope-overlay ${activeWeaponId}-scope`}>
+          {activeWeaponId === 'awp' && (
+            <div className="sniper-scope-lens">
+              <div className="scope-line-h" />
+              <div className="scope-line-v" />
+              <div className="scope-center-dot" />
+              <div className="scope-mil-ticks-v" />
+              <div className="scope-mil-ticks-h" />
+            </div>
+          )}
+          {activeWeaponId === 'm4a1' && (
+            <div className="holographic-scope-reticle">
+              <div className="holo-outer-circle" />
+              <div className="holo-center-dot" />
+              <div className="holo-tick-top" />
+              <div className="holo-tick-bottom" />
+              <div className="holo-tick-left" />
+              <div className="holo-tick-right" />
+            </div>
+          )}
+          {activeWeaponId === 'ak47' && (
+            <div className="acog-scope-reticle">
+              <div className="acog-chevron" />
+              <div className="acog-line-v" />
+              <div className="acog-line-h" />
+            </div>
+          )}
+          {activeWeaponId === 'mp5' && (
+            <div className="reddot-scope-reticle">
+              <div className="reddot-lens-ring" />
+              <div className="reddot-center-dot" />
+            </div>
+          )}
+          {activeWeaponId === 'm870' && (
+            <div className="shotgun-scope-reticle">
+              <div className="shotgun-ring" />
+              <div className="shotgun-center-dot" />
+            </div>
+          )}
+          {(activeWeaponId === 'm9' || activeWeaponId === 'deagle') && (
+            <div className="pistol-reflex-reticle">
+              <div className="reflex-lens-ring" />
+              <div className="reflex-center-dot" />
+            </div>
+          )}
         </div>
       )}
 
