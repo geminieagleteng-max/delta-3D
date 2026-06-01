@@ -240,6 +240,12 @@ class ProceduralAudio {
     this.heliLfo = null;
     this.heliNoise = null;
     this.heliGain = null;
+
+    // 節點對象池與快取
+    this.gainPool = [];
+    this.filterPool = [];
+    this.noiseBuffer = null;
+    this.shaperNode = null;
   }
 
   startHelicopterSound() {
@@ -330,6 +336,78 @@ class ProceduralAudio {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
     this.ctx = new AudioContextClass();
+
+    try {
+      // 1. 預先分配 3 秒的白噪音 AudioBuffer
+      const bufferSize = this.ctx.sampleRate * 3.0;
+      this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      // 2. 建立全域共享的波形飽和器 (WaveShaper)
+      this.shaperNode = this.ctx.createWaveShaper();
+      const n_samples = 44100;
+      const curve = new Float32Array(n_samples);
+      for (let i = 0; i < n_samples; ++i) {
+        const x = (i * 2) / n_samples - 1;
+        curve[i] = Math.tanh(x * 2.2); 
+      }
+      this.shaperNode.curve = curve;
+      this.shaperNode.oversample = '4x';
+      this.shaperNode.connect(this.ctx.destination);
+    } catch (e) {
+      console.warn('ProceduralAudio pool initialization failed:', e);
+    }
+  }
+
+  getGainNode() {
+    if (this.gainPool.length > 0) {
+      const node = this.gainPool.pop();
+      node.gain.cancelScheduledValues(this.ctx.currentTime);
+      node.gain.setValueAtTime(1.0, this.ctx.currentTime);
+      return node;
+    }
+    return this.ctx.createGain();
+  }
+
+  releaseGainNode(node) {
+    if (this.gainPool.length < 50) {
+      try { node.disconnect(); } catch (e) {}
+      this.gainPool.push(node);
+    }
+  }
+
+  getFilterNode() {
+    if (this.filterPool.length > 0) {
+      const node = this.filterPool.pop();
+      node.frequency.cancelScheduledValues(this.ctx.currentTime);
+      node.Q.cancelScheduledValues(this.ctx.currentTime);
+      return node;
+    }
+    return this.ctx.createBiquadFilter();
+  }
+
+  releaseFilterNode(node) {
+    if (this.filterPool.length < 50) {
+      try { node.disconnect(); } catch (e) {}
+      this.filterPool.push(node);
+    }
+  }
+
+  scheduleRelease(nodes, delaySec) {
+    setTimeout(() => {
+      nodes.forEach((node) => {
+        if (node instanceof GainNode) {
+          this.releaseGainNode(node);
+        } else if (node instanceof BiquadFilterNode) {
+          this.releaseFilterNode(node);
+        } else {
+          try { node.disconnect(); } catch (e) {}
+        }
+      });
+    }, delaySec * 1000 + 100);
   }
 
   resume() {
@@ -376,7 +454,6 @@ class ProceduralAudio {
       console.warn('Failed to start ambient hum:', e);
     }
   }
-
   stopAmbient() {
     if (this.ambientOsc) {
       try {
@@ -394,46 +471,152 @@ class ProceduralAudio {
     const now = this.ctx.currentTime;
 
     try {
-      // 1. 擊發重低音 (Sine)
-      const subOsc = this.ctx.createOscillator();
-      const subGain = this.ctx.createGain();
-      subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(isSilenced ? 80 : 140, now);
-      subOsc.frequency.exponentialRampToValueAtTime(isSilenced ? 40 : 55, now + 0.08);
-      subGain.gain.setValueAtTime(isSilenced ? 0.15 : 0.8, now);
-      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.06 : 0.12));
-      
-      subOsc.connect(subGain);
-      subGain.connect(this.ctx.destination);
-      subOsc.start(now);
-      subOsc.stop(now + 0.15);
+      if (isSilenced) {
+        // --- 步槍消音模式：極短且悶的氣聲 ---
+        // 1. 低音 Thud
+        const subOsc = this.ctx.createOscillator();
+        const subGain = this.getGainNode();
+        subOsc.type = 'triangle';
+        subOsc.frequency.setValueAtTime(80, now);
+        subOsc.frequency.exponentialRampToValueAtTime(35, now + 0.08);
+        subGain.gain.setValueAtTime(0.3, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        
+        subOsc.connect(subGain);
+        subGain.connect(this.ctx.destination);
+        subOsc.start(now);
+        subOsc.stop(now + 0.1);
 
-      // 2. 槍口爆破噪音 (Noise)
-      const bufferSize = this.ctx.sampleRate * (isSilenced ? 0.15 : 0.35);
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
+        // 2. 氣流噪聲
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = this.noiseBuffer;
+        const filter = this.getFilterNode();
+        const noiseGain = this.getGainNode();
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(450, now);
+        filter.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+
+        noiseGain.gain.setValueAtTime(0.38, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        noiseNode.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.16);
+
+        this.scheduleRelease([subOsc, subGain, noiseNode, filter, noiseGain], 0.2);
+      } else {
+        // --- 步槍非消音模式：類似 AWP 的厚重力量感槍聲 (有飽和、瞬態爆裂、低通厚 body、長尾音) ---
+        
+        // 1. 瞬態爆裂聲 (Transient Crack) - 突擊步槍較快速
+        const crackOsc = this.ctx.createOscillator();
+        const crackGain = this.getGainNode();
+        crackOsc.type = 'sawtooth';
+        crackOsc.frequency.setValueAtTime(2000, now);
+        crackOsc.frequency.exponentialRampToValueAtTime(90, now + 0.015); // 15ms
+        
+        crackGain.gain.setValueAtTime(2.5, now);
+        crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+
+        crackOsc.connect(crackGain);
+        crackGain.connect(this.shaperNode); // 使用共享的 shaper 進行飽和
+        crackOsc.start(now);
+        crackOsc.stop(now + 0.02);
+
+        // 2. 厚重低中頻主體 (Body Thump)
+        const bodyOsc = this.ctx.createOscillator();
+        const bodyGain = this.getGainNode();
+        const bodyFilter = this.getFilterNode();
+
+        bodyOsc.type = 'sawtooth';
+        bodyOsc.frequency.setValueAtTime(150, now);
+        bodyOsc.frequency.exponentialRampToValueAtTime(45, now + 0.18);
+
+        bodyFilter.type = 'lowpass';
+        bodyFilter.frequency.setValueAtTime(280, now);
+        bodyFilter.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+        bodyFilter.Q.setValueAtTime(2.5, now);
+
+        bodyGain.gain.setValueAtTime(3.2, now); // 重擊感
+        bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        bodyOsc.connect(bodyFilter);
+        bodyFilter.connect(bodyGain);
+        bodyGain.connect(this.shaperNode);
+        bodyOsc.start(now);
+        bodyOsc.stop(now + 0.22);
+
+        // 3. 極低頻震動波 (Sub-Bass)
+        const subOsc = this.ctx.createOscillator();
+        const subGain = this.getGainNode();
+        subOsc.type = 'triangle';
+        subOsc.frequency.setValueAtTime(80, now);
+        subOsc.frequency.exponentialRampToValueAtTime(30, now + 0.22);
+        
+        subGain.gain.setValueAtTime(2.0, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+        subOsc.connect(subGain);
+        subGain.connect(this.ctx.destination); // 直接輸出以保持低音純淨
+        subOsc.start(now);
+        subOsc.stop(now + 0.26);
+
+        // 4. 火藥噴射噪音 (Noise Blast)
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = this.noiseBuffer; // 引用共享 Buffer
+        
+        const noiseFilter = this.getFilterNode();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(1800, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(90, now + 0.35);
+        
+        const noiseGain = this.getGainNode();
+        noiseGain.gain.setValueAtTime(2.2, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        
+        noiseNode.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.shaperNode);
+        
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.42);
+
+        // 5. 環境回音殘響與擴散 (Echo Tail)
+        const echoOsc1 = this.ctx.createOscillator();
+        const echoGain1 = this.getGainNode();
+        echoOsc1.type = 'sine';
+        echoOsc1.frequency.setValueAtTime(220, now);
+        echoOsc1.frequency.linearRampToValueAtTime(80, now + 0.6);
+        echoGain1.gain.setValueAtTime(0.18, now + 0.02);
+        echoGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        
+        echoOsc1.connect(echoGain1);
+        echoGain1.connect(this.ctx.destination);
+        echoOsc1.start(now + 0.02);
+        echoOsc1.stop(now + 0.65);
+
+        const echoOsc2 = this.ctx.createOscillator();
+        const echoGain2 = this.getGainNode();
+        echoOsc2.type = 'sine';
+        echoOsc2.frequency.setValueAtTime(640, now);
+        echoOsc2.frequency.linearRampToValueAtTime(250, now + 0.8);
+        echoGain2.gain.setValueAtTime(0.08, now + 0.04);
+        echoGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        
+        echoOsc2.connect(echoGain2);
+        echoGain2.connect(this.ctx.destination);
+        echoOsc2.start(now + 0.04);
+        echoOsc2.stop(now + 0.85);
+
+        this.scheduleRelease([
+          crackOsc, crackGain, bodyOsc, bodyGain, bodyFilter,
+          subOsc, subGain, noiseNode, noiseFilter, noiseGain,
+          echoOsc1, echoGain1, echoOsc2, echoGain2
+        ], 0.9);
       }
-      
-      const noiseNode = this.ctx.createBufferSource();
-      noiseNode.buffer = buffer;
-      
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(isSilenced ? 500 : 900, now);
-      filter.frequency.exponentialRampToValueAtTime(isSilenced ? 80 : 120, now + (isSilenced ? 0.12 : 0.3));
-      
-      const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(isSilenced ? 0.12 : 0.7, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.14 : 0.32));
-      
-      noiseNode.connect(filter);
-      filter.connect(noiseGain);
-      noiseGain.connect(this.ctx.destination);
-      
-      noiseNode.start(now);
-      noiseNode.stop(now + 0.35);
     } catch (e) {
       console.warn('Gunshot sound failed:', e);
     }
@@ -458,21 +641,14 @@ class ProceduralAudio {
   }
 
   playClick(time, freq, volume, duration) {
-    const bufferSize = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    
     const noiseNode = this.ctx.createBufferSource();
-    noiseNode.buffer = buffer;
+    noiseNode.buffer = this.noiseBuffer; // 使用共享白噪音
     
-    const filter = this.ctx.createBiquadFilter();
+    const filter = this.getFilterNode();
     filter.type = 'highpass';
     filter.frequency.setValueAtTime(freq, time);
     
-    const gainNode = this.ctx.createGain();
+    const gainNode = this.getGainNode();
     gainNode.gain.setValueAtTime(volume, time);
     gainNode.gain.exponentialRampToValueAtTime(0.001, time + duration - 0.01);
     
@@ -482,6 +658,8 @@ class ProceduralAudio {
     
     noiseNode.start(time);
     noiseNode.stop(time + duration);
+
+    this.scheduleRelease([noiseNode, filter, gainNode], duration + (time - this.ctx.currentTime));
   }
 
   playPlayerHurt() {
@@ -772,75 +950,286 @@ class ProceduralAudio {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     try {
-      const bufferSize = this.ctx.sampleRate * 2.0;
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
       const noiseSource = this.ctx.createBufferSource();
-      noiseSource.buffer = buffer;
-      const filter = this.ctx.createBiquadFilter();
+      noiseSource.buffer = this.noiseBuffer; // 引用共享 Buffer
+
+      const filter = this.getFilterNode();
       filter.type = 'bandpass';
       filter.frequency.setValueAtTime(1000, now);
       filter.Q.setValueAtTime(1.0, now);
-      const gainNode = this.ctx.createGain();
+
+      const gainNode = this.getGainNode();
       gainNode.gain.setValueAtTime(0.22, now);
       gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.95);
+
       noiseSource.connect(filter);
       filter.connect(gainNode);
       gainNode.connect(this.ctx.destination);
+
       noiseSource.start(now);
       noiseSource.stop(now + 2.0);
+
+      this.scheduleRelease([noiseSource, filter, gainNode], 2.0);
     } catch (e) {}
   }
 
-  playPistolGunshot(isSilenced = false) {
+  playCasingBounce(volume = 1.0) {
+    this.resume();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const pitchFactor = 0.9 + Math.random() * 0.2;
+      const freqs = [2850, 3900, 4800, 5600];
+      const decays = [0.08, 0.06, 0.04, 0.03];
+      const gains = [0.08, 0.06, 0.04, 0.03];
+      
+      const nodesToRelease = [];
+
+      freqs.forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.getGainNode();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq * pitchFactor, now);
+        
+        const peakGain = gains[idx] * volume;
+        gainNode.gain.setValueAtTime(peakGain, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + decays[idx]);
+        
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        osc.start(now);
+        osc.stop(now + decays[idx] + 0.02);
+        
+        nodesToRelease.push(osc, gainNode);
+      });
+
+      // High-pass noise click for impact texture
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = this.noiseBuffer;
+      
+      const filterNode = this.getFilterNode();
+      filterNode.type = 'highpass';
+      filterNode.frequency.setValueAtTime(4500 * pitchFactor, now);
+      
+      const noiseGainNode = this.getGainNode();
+      noiseGainNode.gain.setValueAtTime(0.12 * volume, now);
+      noiseGainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+      
+      noiseNode.connect(filterNode);
+      filterNode.connect(noiseGainNode);
+      noiseGainNode.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.03);
+      
+      nodesToRelease.push(noiseNode, filterNode, noiseGainNode);
+      
+      this.scheduleRelease(nodesToRelease, 0.15);
+    } catch (e) {
+      console.warn('Casing bounce sound failed:', e);
+    }
+  }
+
+  playPistolGunshot(isSilenced = false, isDeagle = false) {
     this.resume();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
 
     try {
-      // 1. 擊發重低音 (Sine) - 手槍音調偏高
-      const subOsc = this.ctx.createOscillator();
-      const subGain = this.ctx.createGain();
-      subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(isSilenced ? 120 : 240, now);
-      subOsc.frequency.exponentialRampToValueAtTime(isSilenced ? 60 : 90, now + 0.06);
-      subGain.gain.setValueAtTime(isSilenced ? 0.12 : 0.5, now);
-      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.05 : 0.1));
-      
-      subOsc.connect(subGain);
-      subGain.connect(this.ctx.destination);
-      subOsc.start(now);
-      subOsc.stop(now + 0.12);
+      if (isSilenced) {
+        // --- 手槍消音模式：極清脆的微弱氣聲 ---
+        const subOsc = this.ctx.createOscillator();
+        const subGain = this.getGainNode();
+        subOsc.type = 'sine';
+        subOsc.frequency.setValueAtTime(100, now);
+        subOsc.frequency.exponentialRampToValueAtTime(45, now + 0.05);
+        subGain.gain.setValueAtTime(0.2, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        
+        subOsc.connect(subGain);
+        subGain.connect(this.ctx.destination);
+        subOsc.start(now);
+        subOsc.stop(now + 0.06);
 
-      // 2. 槍口爆破噪音 (Noise) - 手槍較短促清脆
-      const bufferSize = this.ctx.sampleRate * (isSilenced ? 0.08 : 0.22);
-      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = this.noiseBuffer;
+        const filter = this.getFilterNode();
+        const noiseGain = this.getGainNode();
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, now);
+        filter.frequency.exponentialRampToValueAtTime(120, now + 0.08);
+
+        noiseGain.gain.setValueAtTime(0.25, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        noiseNode.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.1);
+
+        this.scheduleRelease([subOsc, subGain, noiseNode, filter, noiseGain], 0.15);
+      } else if (isDeagle) {
+        // --- 沙漠之鷹 (Desert Eagle) 手砲模式：接近重狙 AWP 的震撼槍聲 ---
+        // 1. 瞬態爆裂 (Transient Crack)
+        const crackOsc = this.ctx.createOscillator();
+        const crackGain = this.getGainNode();
+        crackOsc.type = 'sawtooth';
+        crackOsc.frequency.setValueAtTime(2200, now);
+        crackOsc.frequency.exponentialRampToValueAtTime(95, now + 0.015);
+        
+        crackGain.gain.setValueAtTime(3.0, now);
+        crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+
+        crackOsc.connect(crackGain);
+        crackGain.connect(this.shaperNode);
+        crackOsc.start(now);
+        crackOsc.stop(now + 0.02);
+
+        // 2. 沙鷹手砲主體 (Body Thump) - 低音下潛深
+        const bodyOsc = this.ctx.createOscillator();
+        const bodyGain = this.getGainNode();
+        const bodyFilter = this.getFilterNode();
+
+        bodyOsc.type = 'sawtooth';
+        bodyOsc.frequency.setValueAtTime(160, now);
+        bodyOsc.frequency.exponentialRampToValueAtTime(40, now + 0.22);
+
+        bodyFilter.type = 'lowpass';
+        bodyFilter.frequency.setValueAtTime(300, now);
+        bodyFilter.frequency.exponentialRampToValueAtTime(75, now + 0.22);
+        bodyFilter.Q.setValueAtTime(3.0, now);
+
+        bodyGain.gain.setValueAtTime(4.0, now); // 極大增益
+        bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+        bodyOsc.connect(bodyFilter);
+        bodyFilter.connect(bodyGain);
+        bodyGain.connect(this.shaperNode);
+        bodyOsc.start(now);
+        bodyOsc.stop(now + 0.26);
+
+        // 3. Sub-Bass
+        const subOsc = this.ctx.createOscillator();
+        const subGain = this.getGainNode();
+        subOsc.type = 'triangle';
+        subOsc.frequency.setValueAtTime(85, now);
+        subOsc.frequency.exponentialRampToValueAtTime(28, now + 0.25);
+        
+        subGain.gain.setValueAtTime(2.5, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+        subOsc.connect(subGain);
+        subGain.connect(this.ctx.destination);
+        subOsc.start(now);
+        subOsc.stop(now + 0.3);
+
+        // 4. 氣流噪聲
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = this.noiseBuffer;
+        const noiseFilter = this.getFilterNode();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(2000, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(90, now + 0.45);
+        
+        const noiseGain = this.getGainNode();
+        noiseGain.gain.setValueAtTime(2.5, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        
+        noiseNode.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.shaperNode);
+        
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.52);
+
+        // 5. 空間回音
+        const echoOsc = this.ctx.createOscillator();
+        const echoGain = this.getGainNode();
+        echoOsc.type = 'sine';
+        echoOsc.frequency.setValueAtTime(240, now);
+        echoOsc.frequency.linearRampToValueAtTime(90, now + 0.7);
+        echoGain.gain.setValueAtTime(0.15, now + 0.03);
+        echoGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+        
+        echoOsc.connect(echoGain);
+        echoGain.connect(this.ctx.destination);
+        echoOsc.start(now + 0.03);
+        echoOsc.stop(now + 0.75);
+
+        this.scheduleRelease([
+          crackOsc, crackGain, bodyOsc, bodyGain, bodyFilter,
+          subOsc, subGain, noiseNode, noiseFilter, noiseGain,
+          echoOsc, echoGain
+        ], 0.8);
+      } else {
+        // --- 普通手槍模式 (M9) ---
+        // 1. 瞬態 Snap
+        const crackOsc = this.ctx.createOscillator();
+        const crackGain = this.getGainNode();
+        crackOsc.type = 'triangle';
+        crackOsc.frequency.setValueAtTime(1600, now);
+        crackOsc.frequency.exponentialRampToValueAtTime(120, now + 0.015);
+        
+        crackGain.gain.setValueAtTime(1.8, now);
+        crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+
+        crackOsc.connect(crackGain);
+        crackGain.connect(this.shaperNode);
+        crackOsc.start(now);
+        crackOsc.stop(now + 0.02);
+
+        // 2. 主體 Thump
+        const bodyOsc = this.ctx.createOscillator();
+        const bodyGain = this.getGainNode();
+        const bodyFilter = this.getFilterNode();
+
+        bodyOsc.type = 'sawtooth';
+        bodyOsc.frequency.setValueAtTime(220, now);
+        bodyOsc.frequency.exponentialRampToValueAtTime(60, now + 0.12);
+
+        bodyFilter.type = 'lowpass';
+        bodyFilter.frequency.setValueAtTime(450, now);
+        bodyFilter.frequency.exponentialRampToValueAtTime(100, now + 0.12);
+        bodyFilter.Q.setValueAtTime(1.8, now);
+
+        bodyGain.gain.setValueAtTime(2.2, now);
+        bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+        bodyOsc.connect(bodyFilter);
+        bodyFilter.connect(bodyGain);
+        bodyGain.connect(this.shaperNode);
+        bodyOsc.start(now);
+        bodyOsc.stop(now + 0.16);
+
+        // 3. 氣流噪聲
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = this.noiseBuffer;
+        const noiseFilter = this.getFilterNode();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(1400, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(150, now + 0.22);
+        
+        const noiseGain = this.getGainNode();
+        noiseGain.gain.setValueAtTime(1.5, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        
+        noiseNode.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.shaperNode);
+        
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.26);
+
+        this.scheduleRelease([
+          crackOsc, crackGain, bodyOsc, bodyGain, bodyFilter,
+          noiseNode, noiseFilter, noiseGain
+        ], 0.3);
       }
-      
-      const noiseNode = this.ctx.createBufferSource();
-      noiseNode.buffer = buffer;
-      
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(isSilenced ? 800 : 1400, now);
-      filter.frequency.exponentialRampToValueAtTime(isSilenced ? 180 : 280, now + (isSilenced ? 0.10 : 0.18));
-      
-      const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(isSilenced ? 0.10 : 0.45, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isSilenced ? 0.12 : 0.2));
-      
-      noiseNode.connect(filter);
-      filter.connect(noiseGain);
-      noiseGain.connect(this.ctx.destination);
-      
-      noiseNode.start(now);
-      noiseNode.stop(now + 0.22);
     } catch (e) {
       console.warn('Pistol gunshot sound failed:', e);
     }
@@ -855,7 +1244,7 @@ class ProceduralAudio {
       if (isSilenced) {
         // 1. 消音模式的極輕低音 (Silenced Sub-bass)
         const subOsc = this.ctx.createOscillator();
-        const subGain = this.ctx.createGain();
+        const subGain = this.getGainNode();
         subOsc.type = 'triangle';
         subOsc.frequency.setValueAtTime(65, now);
         subOsc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
@@ -868,21 +1257,15 @@ class ProceduralAudio {
         subOsc.stop(now + 0.1);
 
         // 2. 消音模式的氣流雜音 (Silenced Gas Noise)
-        const bufferSize = this.ctx.sampleRate * 0.22;
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = Math.random() * 2 - 1;
-        }
         const noiseNode = this.ctx.createBufferSource();
-        noiseNode.buffer = buffer;
+        noiseNode.buffer = this.noiseBuffer;
 
-        const filter = this.ctx.createBiquadFilter();
+        const filter = this.getFilterNode();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(500, now);
         filter.frequency.exponentialRampToValueAtTime(80, now + 0.15);
 
-        const noiseGain = this.ctx.createGain();
+        const noiseGain = this.getGainNode();
         noiseGain.gain.setValueAtTime(0.35, now);
         noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
@@ -892,28 +1275,14 @@ class ProceduralAudio {
 
         noiseNode.start(now);
         noiseNode.stop(now + 0.22);
+
+        this.scheduleRelease([subOsc, subGain, noiseNode, filter, noiseGain], 0.25);
       } else {
         // --- 非消音模式：極具力量感的狙擊大口徑巨響 (蹦一聲) ---
 
-        // 建立飽和失真器 (WaveShaper) 提供溫暖的類比飽和與壓縮感 (使聲音更厚實有力)
-        const shaper = this.ctx.createWaveShaper();
-        const makeDistortionCurve = () => {
-          const n_samples = 44100;
-          const curve = new Float32Array(n_samples);
-          for (let i = 0; i < n_samples; ++i) {
-            const x = (i * 2) / n_samples - 1;
-            // 使用雙曲正切 (tanh) 進行軟限制 (Soft-clipping)
-            curve[i] = Math.tanh(x * 2.2); 
-          }
-          return curve;
-        };
-        shaper.curve = makeDistortionCurve();
-        shaper.oversample = '4x';
-        shaper.connect(this.ctx.destination);
-
         // 1. 瞬態爆裂聲 (Transient Crack) - 模擬子彈出膛與音爆的超強衝擊力
         const crackOsc = this.ctx.createOscillator();
-        const crackGain = this.ctx.createGain();
+        const crackGain = this.getGainNode();
         crackOsc.type = 'sawtooth';
         crackOsc.frequency.setValueAtTime(2500, now);
         crackOsc.frequency.exponentialRampToValueAtTime(100, now + 0.02); // 20ms 極速掃頻
@@ -922,14 +1291,14 @@ class ProceduralAudio {
         crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
 
         crackOsc.connect(crackGain);
-        crackGain.connect(shaper); // 通過飽和器
+        crackGain.connect(this.shaperNode); // 通過全域共享的飽和器
         crackOsc.start(now);
         crackOsc.stop(now + 0.03);
 
         // 2. 厚重的主體轟鳴 (Body Thump / Low-Mid Growl) - 產生胸腔共鳴的 "蹦" 聲
         const bodyOsc = this.ctx.createOscillator();
-        const bodyGain = this.ctx.createGain();
-        const bodyFilter = this.ctx.createBiquadFilter();
+        const bodyGain = this.getGainNode();
+        const bodyFilter = this.getFilterNode();
 
         bodyOsc.type = 'sawtooth';
         bodyOsc.frequency.setValueAtTime(180, now);
@@ -945,13 +1314,13 @@ class ProceduralAudio {
 
         bodyOsc.connect(bodyFilter);
         bodyFilter.connect(bodyGain);
-        bodyGain.connect(shaper); // 通過飽和器
+        bodyGain.connect(this.shaperNode); // 通過飽和器
         bodyOsc.start(now);
         bodyOsc.stop(now + 0.3);
 
         // 3. 極低頻震動波 (Sub-Bass Rumble) - 模擬大地顫抖感
         const subOsc = this.ctx.createOscillator();
-        const subGain = this.ctx.createGain();
+        const subGain = this.getGainNode();
         subOsc.type = 'triangle';
         subOsc.frequency.setValueAtTime(90, now);
         subOsc.frequency.exponentialRampToValueAtTime(25, now + 0.35);
@@ -965,28 +1334,21 @@ class ProceduralAudio {
         subOsc.stop(now + 0.4);
 
         // 4. 燃氣噴射噪聲 (Main White Noise Blast) - 模擬火藥燃燒氣流膨脹
-        const bufferSize = this.ctx.sampleRate * 0.95; // 延長火藥殘留時間
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = Math.random() * 2 - 1;
-        }
-        
         const noiseNode = this.ctx.createBufferSource();
-        noiseNode.buffer = buffer;
+        noiseNode.buffer = this.noiseBuffer; // 引用共享 Buffer
         
-        const noiseFilter = this.ctx.createBiquadFilter();
+        const noiseFilter = this.getFilterNode();
         noiseFilter.type = 'lowpass';
         noiseFilter.frequency.setValueAtTime(2200, now);
         noiseFilter.frequency.exponentialRampToValueAtTime(85, now + 0.7);
         
-        const noiseGain = this.ctx.createGain();
+        const noiseGain = this.getGainNode();
         noiseGain.gain.setValueAtTime(2.8, now); // 火藥聲響加強
         noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
         
         noiseNode.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
-        noiseGain.connect(shaper); // 連接至失真飽和器以融合火藥噪聲
+        noiseGain.connect(this.shaperNode); // 連接至失真飽和器以融合火藥噪聲
         
         noiseNode.start(now);
         noiseNode.stop(now + 0.9);
@@ -994,7 +1356,7 @@ class ProceduralAudio {
         // 5. 環境回音殘響與擴散 (Diffuse Reverb Tail & Far Field Echo)
         // A. 中低頻空間反射 (Low-Mid Echo)
         const echoOsc1 = this.ctx.createOscillator();
-        const echoGain1 = this.ctx.createGain();
+        const echoGain1 = this.getGainNode();
         echoOsc1.type = 'sine';
         echoOsc1.frequency.setValueAtTime(200, now);
         echoOsc1.frequency.linearRampToValueAtTime(65, now + 1.2);
@@ -1008,7 +1370,7 @@ class ProceduralAudio {
 
         // B. 高頻金屬反射與哨音 (High-Freq Metallic Ring)
         const echoOsc2 = this.ctx.createOscillator();
-        const echoGain2 = this.ctx.createGain();
+        const echoGain2 = this.getGainNode();
         echoOsc2.type = 'sine';
         echoOsc2.frequency.setValueAtTime(700, now);
         echoOsc2.frequency.linearRampToValueAtTime(280, now + 1.6);
@@ -1022,9 +1384,9 @@ class ProceduralAudio {
 
         // C. 遠場回音擴散噪聲 (Diffuse Reverb Noise Tail) - 模擬開闊地帶尾音
         const tailNode = this.ctx.createBufferSource();
-        tailNode.buffer = buffer; // 複用白噪音 Buffer
+        tailNode.buffer = this.noiseBuffer; // 引用共享 Buffer
         
-        const tailFilter = this.ctx.createBiquadFilter();
+        const tailFilter = this.getFilterNode();
         tailFilter.type = 'bandpass'; // 帶通濾波器模擬遠處牆壁反射的音色
         tailFilter.frequency.setValueAtTime(380, now);
         tailFilter.Q.setValueAtTime(1.5, now);
@@ -5227,9 +5589,10 @@ function DustParticle({ position, velocity, color }) {
 function ShellCasing({ position, velocity }) {
   const meshRef = useRef();
   const vel = useRef(velocity.clone());
+  const settled = useRef(false);
 
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
+    if (!meshRef.current || settled.current) return;
     const pos = meshRef.current.position;
 
     // 重力
@@ -5245,6 +5608,18 @@ function ShellCasing({ position, velocity }) {
     // 地面反彈與摩擦力
     if (pos.y <= 0.02) {
       pos.y = 0.02;
+
+      if (vel.current.y < 0) {
+        const speed = Math.abs(vel.current.y);
+        if (speed > 0.8) {
+          // 播放彈殼落地聲
+          soundManager.playCasingBounce(Math.min(1.0, speed / 3.0));
+        } else if (speed > 0.1) {
+          // 最後的微弱碰觸聲
+          soundManager.playCasingBounce(0.25);
+        }
+      }
+
       if (vel.current.y < -0.8) {
         vel.current.y = -vel.current.y * 0.35; // 彈跳力
         vel.current.x *= 0.5;
@@ -5253,6 +5628,7 @@ function ShellCasing({ position, velocity }) {
         // 完全靜止
         vel.current.set(0, 0, 0);
         meshRef.current.rotation.set(0, 0.2, 0);
+        settled.current = true;
       }
     }
   });
@@ -5937,7 +6313,7 @@ function PlayerController({
     } else if (weaponConfig?.isPrimary) {
       soundManager.playGunshot(weaponConfig?.silence);
     } else {
-      soundManager.playPistolGunshot(weaponConfig?.silence);
+      soundManager.playPistolGunshot(weaponConfig?.silence, activeWeaponId === 'deagle');
     }
 
     setAmmoRef.current((prev) => {
