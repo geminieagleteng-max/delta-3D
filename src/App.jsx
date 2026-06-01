@@ -1380,7 +1380,7 @@ export const LOOT_CONTAINERS = [
   { id: 6, name: '實驗室密室保險箱', position: new THREE.Vector3(-75, 0.4, 0), type: 'locked_safe', requiresKeycard: 'keycard' }
 ];
 
-export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost') => {
+export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = false, mapType = 'outpost', facilityEvent = 'normal') => {
   const composition = WAVE_COMPOSITIONS[waveNumber] || WAVE_COMPOSITIONS[3];
   const spawned = [];
   let idCounter = 0;
@@ -1417,6 +1417,15 @@ export const spawnWave = (waveNumber, difficultyMultiplier = 1.0, isAmbush = fal
           }
         }
         pos = new THREE.Vector3(x, 0, z);
+      }
+
+      if (mapType === 'facility' && facilityEvent === 'warp') {
+        const warpZ = pos.z;
+        const x_c = Math.sin(warpZ * 0.04) * 6.0;
+        const rotY = Math.atan(0.24 * Math.cos(warpZ * 0.04));
+        const newX = x_c + pos.x * Math.cos(rotY);
+        const newZ = warpZ - pos.x * Math.sin(rotY);
+        pos.set(newX, pos.y, newZ);
       }
 
       // 伏擊事件會使精銳敵人的生命值加倍
@@ -1833,12 +1842,12 @@ export function ExtractionHelicopter({ active, onLanded }) {
   );
 }
 
-// 彈道紅色雷射軌跡線
-function TracerLine({ start, end }) {
+// 彈道雷射軌跡線
+function TracerLine({ start, end, color = "#ff3b3b" }) {
   return (
     <Line
       points={[start, end]}
-      color="#ff3b3b"
+      color={color}
       lineWidth={2.0}
       transparent
       opacity={0.8}
@@ -1847,10 +1856,29 @@ function TracerLine({ start, end }) {
 }
 
 // 敵軍血量條 (面朝相機看板 Billboard) — 依兵種類型顯示不同顏色
-function EnemyHealthBar({ hp, maxHp, barColor }) {
+function EnemyHealthBar({ hp, maxHp, barColor, isAlly }) {
   const percent = Math.max(0, hp / (maxHp || 100));
   return (
     <group position={[0, 2.3, 0]}>
+      {isAlly && (
+        <Html position={[0, 0.25, 0]} center distanceFactor={12}>
+          <div style={{
+            background: 'rgba(0, 85, 170, 0.85)',
+            color: '#00e5ff',
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+            fontSize: '11px',
+            padding: '2px 5px',
+            borderRadius: '3px',
+            border: '1px solid #00e5ff',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            userSelect: 'none'
+          }}>
+            DELTA 友軍
+          </div>
+        </Html>
+      )}
       <mesh>
         <planeGeometry args={[1.0, 0.08]} />
         <meshBasicMaterial color="#333333" doubleSide />
@@ -1858,7 +1886,7 @@ function EnemyHealthBar({ hp, maxHp, barColor }) {
       {percent > 0 && (
         <mesh position={[-(1 - percent) * 0.5, 0, 0.005]}>
           <planeGeometry args={[percent, 0.06]} />
-          <meshBasicMaterial color={barColor || '#00ff66'} doubleSide />
+          <meshBasicMaterial color={isAlly ? '#00e5ff' : (barColor || '#00ff66')} doubleSide />
         </mesh>
       )}
     </group>
@@ -2093,11 +2121,21 @@ function SmokeCloud({ position, radius = 10.0, timeLeft }) {
 
 // 敵軍 AI 組件
 // 敵軍 AI 組件 (支援突擊、盾兵、擲彈、狙擊四兵種 AI 與精緻模型)
-function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [], mapType }) {
+function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = [], mapType, facilityEvent = 'normal', enemies = [], onShootEnemy }) {
   const meshRef = useRef();
   const healthBarRef = useRef();
   const [dyingRotation, setDyingRotation] = useState(0);
   const lastShotTime = useRef(0);
+
+  const enemiesRef = useRef(enemies);
+  useEffect(() => {
+    enemiesRef.current = enemies;
+  }, [enemies]);
+
+  const facilityEventRef = useRef(facilityEvent);
+  useEffect(() => {
+    facilityEventRef.current = facilityEvent;
+  }, [facilityEvent]);
 
   // 戰術閃光彈致盲眩暈本機倒數
   const localStunnedTimer = useRef(0);
@@ -2147,19 +2185,21 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
   useEffect(() => {
     if (data.enemyType !== ENEMY_TYPES.SNIPER && data.enemyType !== ENEMY_TYPES.SHIELD) {
       const enemyPos = data.position;
-      
-      let closest = COVERS[0];
-      let minDist = closest.distanceTo(enemyPos);
-      for (let i = 1; i < COVERS.length; i++) {
-        const d = COVERS[i].distanceTo(enemyPos);
-        if (d < minDist) {
-          minDist = d;
-          closest = COVERS[i];
+      const activeCovers = getActiveCovers(mapType, facilityEvent);
+      if (activeCovers.length > 0) {
+        let closest = activeCovers[0];
+        let minDist = closest.distanceTo(enemyPos);
+        for (let i = 1; i < activeCovers.length; i++) {
+          const d = activeCovers[i].distanceTo(enemyPos);
+          if (d < minDist) {
+            minDist = d;
+            closest = activeCovers[i];
+          }
         }
+        currentTarget.current.copy(closest);
       }
-      currentTarget.current.copy(closest);
     }
-  }, [data.enemyType, data.position]);
+  }, [data.enemyType, data.position, mapType, facilityEvent]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -2201,34 +2241,97 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
     const playerPos = state.camera.position;
     const posBefore = enemyPos.clone();
 
-    // 隨時面朝玩家
-    const angle = Math.atan2(playerPos.x - enemyPos.x, playerPos.z - enemyPos.z);
+    // Target Selection
+    let targetEntity = null;
+    let targetPos = null;
+    let distToTarget = Infinity;
+
+    if (data.isAlly) {
+      let closestHostile = null;
+      let minHDist = Infinity;
+      enemiesRef.current.forEach((e) => {
+        if (!e.isAlly && !e.isDummy && e.state === 'alive' && e.position) {
+          const dist = enemyPos.distanceTo(e.position);
+          if (dist < minHDist) {
+            minHDist = dist;
+            closestHostile = e;
+          }
+        }
+      });
+      if (closestHostile) {
+        targetEntity = closestHostile;
+        targetPos = closestHostile.position;
+        distToTarget = minHDist;
+      }
+    } else {
+      let closestAlly = null;
+      let minADist = enemyPos.distanceTo(playerPos);
+      enemiesRef.current.forEach((e) => {
+        if (e.isAlly && e.state === 'alive' && e.position) {
+          const dist = enemyPos.distanceTo(e.position);
+          if (dist < minADist) {
+            minADist = dist;
+            closestAlly = e;
+          }
+        }
+      });
+      if (closestAlly) {
+        targetEntity = closestAlly;
+        targetPos = closestAlly.position;
+        distToTarget = minADist;
+      } else {
+        targetEntity = 'player';
+        targetPos = playerPos;
+        distToTarget = minADist;
+      }
+    }
+
+    // Face the target (or player if no target)
+    const facePos = targetPos || playerPos;
+    const angle = Math.atan2(facePos.x - enemyPos.x, facePos.z - enemyPos.z);
     meshRef.current.rotation.y = angle;
 
     if (healthBarRef.current) {
-      healthBarRef.current.lookAt(state.camera.position);
+      healthBarRef.current.lookAt(playerPos);
     }
 
-    const distToPlayer = enemyPos.distanceTo(playerPos);
+    // If no target (all hostiles dead for ally), just idle
+    if (!targetEntity) {
+      meshRef.current.position.y = 0;
+      return;
+    }
+
+    // Aim position calculation
+    const aimPos = targetEntity === 'player' 
+      ? playerPos.clone().add(new THREE.Vector3(0, -0.2, 0)) 
+      : targetPos.clone().add(new THREE.Vector3(0, 1.0, 0));
+
+    // Custom helper to fire weapon at current target
+    const fireWeaponAtTarget = (damage) => {
+      if (targetEntity === 'player') {
+        onShootPlayer(damage, enemyPos);
+      } else if (onShootEnemy) {
+        onShootEnemy(data.id, targetEntity.id, damage);
+      }
+    };
 
     // ========== 狙擊手 AI ==========
     if (data.enemyType === ENEMY_TYPES.SNIPER) {
-      if (distToPlayer <= stats.range) {
+      if (distToTarget <= stats.range) {
         const now = state.clock.getElapsedTime();
         const cooldown = stats.cooldown + Math.random() * 1.5;
         if (shootLockTimer.current <= 0 && now - lastShotTime.current > cooldown) {
           lastShotTime.current = now;
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
-          const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
           
-          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          let blocked = isLineBlockedBySmoke(raycastStart, aimPos, smokeClouds);
           if (!blocked) {
-            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-            const distToPlayerLen = direction.length();
+            const direction = new THREE.Vector3().subVectors(aimPos, raycastStart);
+            const distToTargetLen = direction.length();
             direction.normalize();
 
-            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToTargetLen);
             const intersects = raycaster.intersectObjects(state.scene.children, true);
             
             for (let i = 0; i < intersects.length; i++) {
@@ -2251,7 +2354,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
               }
               if (isSelfOrEnemy || isCosmetic) continue;
 
-              if (hit.distance < distToPlayerLen - 0.5) {
+              if (hit.distance < distToTargetLen - 0.5) {
                 blocked = true;
                 break;
               }
@@ -2259,12 +2362,12 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
           }
 
           if (!blocked) {
-            onShootPlayer(stats.damage, enemyPos);
+            fireWeaponAtTarget(stats.damage);
 
             const startPos = new THREE.Vector3(0.25, 1.12, 1.15).applyMatrix4(meshRef.current.matrixWorld);
             setTracerCoords({
               start: [startPos.x, startPos.y, startPos.z],
-              end: [endPos.x, endPos.y, endPos.z],
+              end: [aimPos.x, aimPos.y, aimPos.z],
             });
             setTracerVisible(true);
             setTimeout(() => setTracerVisible(false), 90);
@@ -2274,35 +2377,33 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
     }
     // ========== 盾兵 AI ==========
     else if (data.enemyType === ENEMY_TYPES.SHIELD) {
-      // 盾兵不使用掩體，始終朝玩家緩步推進
-      if (distToPlayer > 4) {
-        const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+      // 盾兵不使用掩體，始終朝目標緩步推進
+      if (distToTarget > 4) {
+        const dir = new THREE.Vector3().subVectors(targetPos, enemyPos);
         dir.y = 0;
         dir.normalize();
         const currentSpeed = (staggerTimer.current > 0 ? stats.speed * 0.35 : stats.speed);
         enemyPos.addScaledVector(dir, currentSpeed * delta);
-        // 沉穩步伐，輕微上下晃動
         meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 4.0)) * 0.04;
       } else {
         meshRef.current.position.y = 0;
       }
 
       // 近距離開火
-      if (distToPlayer <= stats.range) {
+      if (distToTarget <= stats.range) {
         const now = state.clock.getElapsedTime();
         if (shootLockTimer.current <= 0 && now - lastShotTime.current > stats.cooldown) {
           lastShotTime.current = now;
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
-          const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
           
-          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          let blocked = isLineBlockedBySmoke(raycastStart, aimPos, smokeClouds);
           if (!blocked) {
-            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-            const distToPlayerLen = direction.length();
+            const direction = new THREE.Vector3().subVectors(aimPos, raycastStart);
+            const distToTargetLen = direction.length();
             direction.normalize();
 
-            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToTargetLen);
             const intersects = raycaster.intersectObjects(state.scene.children, true);
             
             for (let i = 0; i < intersects.length; i++) {
@@ -2317,17 +2418,17 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
                 parent = parent.parent;
               }
               if (isSelfOrEnemy || isCosmetic) continue;
-              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
+              if (hit.distance < distToTargetLen - 0.5) { blocked = true; break; }
             }
           }
 
           if (!blocked) {
             const isHit = Math.random() < stats.hitRate;
             const startPos = new THREE.Vector3(0.3, 1.1, 0.9).applyMatrix4(meshRef.current.matrixWorld);
-            let targetCoords = endPos.clone();
+            let targetCoords = aimPos.clone();
             
             if (isHit) {
-              onShootPlayer(stats.damage, enemyPos);
+              fireWeaponAtTarget(stats.damage);
             } else {
               targetCoords.add(new THREE.Vector3(
                 (Math.random() - 0.5) * 3.0,
@@ -2346,7 +2447,6 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
 
-      // 盾兵邊界碰撞
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
     }
@@ -2354,8 +2454,8 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
     else if (data.enemyType === ENEMY_TYPES.GRENADIER) {
       const currentSpeed = (staggerTimer.current > 0 ? stats.speed * 0.35 : stats.speed);
       const currentRushSpeed = (staggerTimer.current > 0 ? stats.rushSpeed * 0.35 : stats.rushSpeed);
+      const activeCovers = getActiveCovers(mapType, facilityEventRef.current);
 
-      // 使用掩體系統 (同突擊兵邏輯，但速度較慢)
       if (aiState.current === 'movingToCover') {
         const distToCover = enemyPos.distanceTo(currentTarget.current);
         if (distToCover > 0.5) {
@@ -2377,19 +2477,18 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         meshRef.current.position.y = 0;
         coverTimer.current -= delta;
 
-        // 盲射開火行為
         if (isBlindFiring.current) {
           const now = state.clock.getElapsedTime();
           const cooldown = 0.8 + Math.random() * 0.5;
           if (shootLockTimer.current <= 0 && now - lastShotTime.current > cooldown) {
             lastShotTime.current = now;
             const startPos = new THREE.Vector3(0.25, 1.12, 0.95).applyMatrix4(meshRef.current.matrixWorld);
-            const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
+            const endPos = aimPos.clone();
             
             const isHit = Math.random() < 0.08;
             let targetCoords = endPos.clone();
             if (isHit) {
-              onShootPlayer(10, enemyPos);
+              fireWeaponAtTarget(10);
             } else {
               const offset = new THREE.Vector3(
                 (Math.random() - 0.5) * 12.0,
@@ -2409,17 +2508,16 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
 
         if (coverTimer.current <= 0) {
           isBlindFiring.current = false;
-          if (distToPlayer > 18) {
-            // 尋求離玩家更近的掩體
+          if (distToTarget > 18) {
             let bestCover = currentTarget.current;
-            let bestDist = bestCover.distanceTo(playerPos);
-            for (let i = 0; i < COVERS.length; i++) {
-              const dToPlayer = COVERS[i].distanceTo(playerPos);
-              const dToEnemy = COVERS[i].distanceTo(enemyPos);
-              if (dToPlayer < distToPlayer && dToEnemy < 60) {
-                if (dToPlayer < bestDist) {
-                  bestDist = dToPlayer;
-                  bestCover = COVERS[i];
+            let bestDist = bestCover.distanceTo(targetPos);
+            for (let i = 0; i < activeCovers.length; i++) {
+              const dToTarget = activeCovers[i].distanceTo(targetPos);
+              const dToEnemy = activeCovers[i].distanceTo(enemyPos);
+              if (dToTarget < distToTarget && dToEnemy < 60) {
+                if (dToTarget < bestDist) {
+                  bestDist = dToTarget;
+                  bestCover = activeCovers[i];
                 }
               }
             }
@@ -2430,9 +2528,8 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
           }
         }
       } else {
-        // 衝鋒狀態
-        if (distToPlayer > 8) {
-          const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+        if (distToTarget > 8) {
+          const dir = new THREE.Vector3().subVectors(targetPos, enemyPos);
           dir.y = 0;
           dir.normalize();
           enemyPos.addScaledVector(dir, currentRushSpeed * delta);
@@ -2442,23 +2539,20 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
 
-      // 擲彈兵攻擊：投擲手榴彈 (不使用射線，盲射或硬直時不投擲)
-      if (distToPlayer <= stats.range && distToPlayer > 8 && !isBlindFiring.current && shootLockTimer.current <= 0) {
+      if (distToTarget <= stats.range && distToTarget > 8 && !isBlindFiring.current && shootLockTimer.current <= 0) {
         const now = state.clock.getElapsedTime();
         if (now - lastShotTime.current > stats.cooldown) {
           lastShotTime.current = now;
 
-          // 視線檢查
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
-          const endPos = playerPos.clone();
           
-          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          let blocked = isLineBlockedBySmoke(raycastStart, aimPos, smokeClouds);
           if (!blocked) {
-            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-            const distToPlayerLen = direction.length();
+            const direction = new THREE.Vector3().subVectors(aimPos, raycastStart);
+            const distToTargetLen = direction.length();
             direction.normalize();
 
-            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToTargetLen);
             const intersects = raycaster.intersectObjects(state.scene.children, true);
             
             for (let i = 0; i < intersects.length; i++) {
@@ -2473,37 +2567,36 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
                 parent = parent.parent;
               }
               if (isSelfOrEnemy || isCosmetic) continue;
-              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
+              if (hit.distance < distToTargetLen - 0.5) { blocked = true; break; }
             }
           }
 
           if (!blocked && onThrowGrenade) {
-            // 計算拋擲速度 (45° 拋物線)
             const throwStart = new THREE.Vector3(0, 1.8, 0).add(enemyPos);
-            const toPlayer = new THREE.Vector3().subVectors(playerPos, throwStart);
-            const horizontalDist = Math.sqrt(toPlayer.x * toPlayer.x + toPlayer.z * toPlayer.z);
-            const throwSpeed = Math.sqrt(horizontalDist * 9.8); // v = sqrt(d * g) 基於 45° 角
-            const throwDir = toPlayer.clone();
+            const toTarget = new THREE.Vector3().subVectors(targetPos, throwStart);
+            const horizontalDist = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+            const throwSpeed = Math.sqrt(horizontalDist * 9.8);
+            const throwDir = toTarget.clone();
             throwDir.y = 0;
             throwDir.normalize();
             
             const throwVelocity = new THREE.Vector3(
               throwDir.x * throwSpeed,
-              throwSpeed * 0.7, // 上仰力
+              throwSpeed * 0.7,
               throwDir.z * throwSpeed
             );
             
-            onThrowGrenade(throwStart, throwVelocity, playerPos);
+            onThrowGrenade(throwStart, throwVelocity, targetPos);
           }
         }
       }
 
-      // 邊界限制
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
     }
-    // ========== 突擊兵 AI (改良自原步兵) ==========
+    // ========== 突擊兵 AI (包含 Special Forces 友軍 AI) ==========
     else {
+      const activeCovers = getActiveCovers(mapType, facilityEventRef.current);
       if (aiState.current === 'movingToCover') {
         const distToCover = enemyPos.distanceTo(currentTarget.current);
         if (distToCover > 0.5) {
@@ -2514,10 +2607,9 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
           meshRef.current.position.y = Math.abs(Math.sin(state.clock.getElapsedTime() * 10.0)) * 0.14;
         } else {
           aiState.current = 'shootingFromCover';
-          coverTimer.current = 3.0 + Math.random() * 2.0; // 更短的掩體停留
+          coverTimer.current = 3.0 + Math.random() * 2.0;
         }
       } else if (aiState.current === 'shootingFromCover') {
-        // 在掩體後左右側移來回閃避 (Strafe)
         coverTimer.current -= delta;
         
         strafeOffset.current += delta * 1.5 * strafeDir.current;
@@ -2525,7 +2617,6 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
           strafeDir.current = -strafeDir.current;
         }
         
-        // 側移只在局部水平方向作用 (垂直於玩家朝向)
         const strafeVec = new THREE.Vector3(
           Math.sin(angle + Math.PI / 2) * strafeOffset.current,
           0,
@@ -2535,23 +2626,20 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         
         if (coverTimer.current <= 0) {
           strafeOffset.current = 0;
-          if (distToPlayer > 18) {
-            // 包抄掩體選擇策略：優先選擇偏向玩家兩側的掩體 (夾角 60° 到 120° 之間)
+          if (distToTarget > 18) {
             let bestCover = currentTarget.current;
             let bestScore = -Infinity;
             
-            const toPlayer = new THREE.Vector3().subVectors(playerPos, enemyPos).normalize();
+            const toTarget = new THREE.Vector3().subVectors(targetPos, enemyPos).normalize();
             
-            for (let i = 0; i < COVERS.length; i++) {
-              const coverPos = COVERS[i];
+            for (let i = 0; i < activeCovers.length; i++) {
+              const coverPos = activeCovers[i];
               const dToEnemy = coverPos.distanceTo(enemyPos);
-              const dToPlayer = coverPos.distanceTo(playerPos);
+              const dToTarget = coverPos.distanceTo(targetPos);
               
-              if (dToEnemy < 60 && dToPlayer < distToPlayer) {
+              if (dToEnemy < 60 && dToTarget < distToTarget) {
                 const toCover = new THREE.Vector3().subVectors(coverPos, enemyPos).normalize();
-                // 點積，cos(夾角)
-                const cosVal = Math.abs(toCover.dot(toPlayer)); 
-                // 夾角越接近 90 度 (cos 值接近 0) 分數越高，藉此尋找側面掩體包抄
+                const cosVal = Math.abs(toCover.dot(toTarget)); 
                 const flankScore = (1.0 - cosVal) * 50.0;
                 const distScore = (60.0 - dToEnemy) * 0.5;
                 const totalScore = flankScore + distScore;
@@ -2569,9 +2657,8 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
           }
         }
       } else {
-        // 衝鋒狀態：高速 (4.0m/s) 衝擊玩家
-        if (distToPlayer > 8) {
-          const dir = new THREE.Vector3().subVectors(playerPos, enemyPos);
+        if (distToTarget > 8) {
+          const dir = new THREE.Vector3().subVectors(targetPos, enemyPos);
           dir.y = 0;
           dir.normalize();
           enemyPos.addScaledVector(dir, stats.rushSpeed * delta);
@@ -2581,23 +2668,21 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
 
-      // 突擊兵開火判定
-      if (distToPlayer <= stats.range) {
+      if (distToTarget <= stats.range) {
         const now = state.clock.getElapsedTime();
         const cooldown = stats.cooldown + Math.random() * 0.7;
         if (now - lastShotTime.current > cooldown) {
           lastShotTime.current = now;
 
           const raycastStart = new THREE.Vector3(0, 1.5, 0).add(enemyPos);
-          const endPos = playerPos.clone().add(new THREE.Vector3(0, -0.2, 0));
           
-          let blocked = isLineBlockedBySmoke(raycastStart, playerPos, smokeClouds);
+          let blocked = isLineBlockedBySmoke(raycastStart, aimPos, smokeClouds);
           if (!blocked) {
-            const direction = new THREE.Vector3().subVectors(endPos, raycastStart);
-            const distToPlayerLen = direction.length();
+            const direction = new THREE.Vector3().subVectors(aimPos, raycastStart);
+            const distToTargetLen = direction.length();
             direction.normalize();
 
-            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToPlayerLen);
+            const raycaster = new THREE.Raycaster(raycastStart, direction, 0, distToTargetLen);
             const intersects = raycaster.intersectObjects(state.scene.children, true);
             
             for (let i = 0; i < intersects.length; i++) {
@@ -2612,17 +2697,17 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
                 parent = parent.parent;
               }
               if (isSelfOrEnemy || isCosmetic) continue;
-              if (hit.distance < distToPlayerLen - 0.5) { blocked = true; break; }
+              if (hit.distance < distToTargetLen - 0.5) { blocked = true; break; }
             }
           }
 
           if (!blocked) {
             const isHit = Math.random() < stats.hitRate;
             const startPos = new THREE.Vector3(0.25, 1.12, 0.95).applyMatrix4(meshRef.current.matrixWorld);
-            let targetCoords = endPos.clone();
+            let targetCoords = aimPos.clone();
             
             if (isHit) {
-              onShootPlayer(stats.damage, enemyPos);
+              fireWeaponAtTarget(stats.damage);
             } else {
               const offset = new THREE.Vector3(
                 (Math.random() - 0.5) * 4.0,
@@ -2642,16 +2727,14 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         }
       }
 
-      // 邊界與碰撞 (地面部隊通用)
       enemyPos.x = Math.max(-118, Math.min(118, enemyPos.x));
       enemyPos.z = Math.max(-118, Math.min(118, enemyPos.z));
     }
 
-    // ========== 地面部隊物理碰撞檢測 (避免穿牆) ==========
     if (data.enemyType !== ENEMY_TYPES.SNIPER) {
       const enemyRadius = data.enemyType === ENEMY_TYPES.SHIELD ? 0.45 : 0.35;
-      for (let i = 0; i < STATIC_COLLIDERS.length; i++) {
-        const c = STATIC_COLLIDERS[i];
+      for (let i = 0; i < activeColliders.length; i++) {
+        const c = activeColliders[i];
         const minX = c.x - c.hx - enemyRadius;
         const maxX = c.x + c.hx + enemyRadius;
         const minZ = c.z - c.hz - enemyRadius;
@@ -2685,43 +2768,48 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
       }
     }
 
-    // ========== 地面部隊防卡牆與路徑重劃 (Stuck Detection & Path Recalculation) ==========
     if (data.enemyType !== ENEMY_TYPES.SNIPER) {
       const posAfter = enemyPos.clone();
       const actualMoveDist = posAfter.distanceTo(posBefore);
       const expectedSpeed = aiState.current === 'rushing' ? (stats.rushSpeed || 4.0) : (stats.speed || 2.0);
+      const activeCovers = getActiveCovers(mapType, facilityEventRef.current);
       
       if (aiState.current === 'movingToCover' || aiState.current === 'rushing') {
-        // 如果移動速度低於預期速度的 15%，判定為被掩體/牆壁卡住
         if (actualMoveDist < expectedSpeed * delta * 0.15) {
           stuckTime.current += delta;
         } else {
           stuckTime.current = Math.max(0, stuckTime.current - delta * 0.5);
         }
 
-        // 卡住超過 1.2 秒，強制變更目標或狀態以繞過障礙物
         if (stuckTime.current > 1.2) {
           stuckTime.current = 0;
           if (aiState.current === 'movingToCover') {
             if (Math.random() < 0.5) {
               aiState.current = 'rushing';
             } else {
-              // 重新隨機尋找一個新的掩體
-              const randCover = COVERS[Math.floor(Math.random() * COVERS.length)];
-              currentTarget.current.copy(randCover);
+              if (activeCovers.length > 0) {
+                const randCover = activeCovers[Math.floor(Math.random() * activeCovers.length)];
+                currentTarget.current.copy(randCover);
+              }
             }
           } else if (aiState.current === 'rushing') {
-            // 衝鋒時卡牆，先退回尋找最近的隨機掩體以繞開牆面
-            const randCover = COVERS[Math.floor(Math.random() * COVERS.length)];
-            currentTarget.current.copy(randCover);
-            aiState.current = 'movingToCover';
+            if (activeCovers.length > 0) {
+              const randCover = activeCovers[Math.floor(Math.random() * activeCovers.length)];
+              currentTarget.current.copy(randCover);
+              aiState.current = 'movingToCover';
+            }
           }
         }
       }
     }
 
     if (mapType === 'facility') {
-      enemyPos.x = Math.max(-3.6, Math.min(3.6, enemyPos.x));
+      if (facilityEventRef.current === 'warp') {
+        const x_c = Math.sin(enemyPos.z * 0.04) * 6.0;
+        enemyPos.x = Math.max(x_c - 3.6, Math.min(x_c + 3.6, enemyPos.x));
+      } else {
+        enemyPos.x = Math.max(-3.6, Math.min(3.6, enemyPos.x));
+      }
       enemyPos.z = Math.max(-115, Math.min(115, enemyPos.z));
     }
   });
@@ -2742,7 +2830,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
             data.enemyType === ENEMY_TYPES.SHIELD ? 1.5 : 1.4,
             8
           ]} />
-          <meshStandardMaterial color={stats.bodyColor} roughness={0.7} />
+          <meshStandardMaterial color={data.isAlly ? '#00e5ff' : stats.bodyColor} roughness={0.7} />
         </mesh>
         
         {/* 敵軍頭部 */}
@@ -2754,7 +2842,7 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         {/* 粗壯戰術頭盔 (狙擊手與其他兵種皆戴，顏色不同) */}
         <mesh position={[0, 1.9, 0]} castShadow>
           <sphereGeometry args={[0.28, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color={data.isElite ? '#d4af37' : stats.helmetColor} roughness={data.isElite ? 0.2 : 0.9} metalness={data.isElite ? 0.8 : 0.0} />
+          <meshStandardMaterial color={data.isAlly ? '#0055aa' : (data.isElite ? '#d4af37' : stats.helmetColor)} roughness={data.isElite ? 0.2 : 0.9} metalness={data.isElite ? 0.8 : 0.0} />
         </mesh>
 
         {/* 戰術面罩 (突擊兵專屬) */}
@@ -2855,12 +2943,12 @@ function Enemy({ data, onShootPlayer, onKilled, onThrowGrenade, smokeClouds = []
         )}
 
         <group ref={healthBarRef}>
-          <EnemyHealthBar hp={data.hp} maxHp={stats.hp} barColor={stats.hpBarColor} />
+          <EnemyHealthBar hp={data.hp} maxHp={stats.hp} barColor={stats.hpBarColor} isAlly={data.isAlly} />
         </group>
       </group>
 
       {tracerVisible && (
-        <TracerLine start={tracerCoords.start} end={tracerCoords.end} />
+        <TracerLine start={tracerCoords.start} end={tracerCoords.end} color={data.isAlly ? "#00e5ff" : "#ff3b3b"} />
       )}
     </>
   );
@@ -2950,11 +3038,108 @@ function TrainingDummy({ data, onKilled }) {
 // ==========================================
 // 3. 3D 場景資產組件 (低多邊形 Low-Poly 風格)
 // ==========================================
-function Ground({ mapType }) {
+const getWarpPosAndRot = (origX, origY, origZ, origRotY, facilityEvent) => {
+  if (facilityEvent !== 'warp') {
+    return { position: [origX, origY, origZ], rotation: [0, origRotY, 0] };
+  }
+  const z = origZ;
+  const x_c = Math.sin(z * 0.04) * 6.0;
+  const rotY = Math.atan(0.24 * Math.cos(z * 0.04));
+  const newX = x_c + origX * Math.cos(rotY);
+  const newZ = z - origX * Math.sin(rotY);
+  return {
+    position: [newX, origY, newZ],
+    rotation: [0, origRotY + rotY, 0]
+  };
+};
+
+const FACILITY_COVERS = [
+  new THREE.Vector3(-1.8, 0, -40),
+  new THREE.Vector3(1.5, 0, -10),
+  new THREE.Vector3(-1.2, 0, 15),
+  new THREE.Vector3(1.6, 0, 45),
+  new THREE.Vector3(0, 0, -85)
+];
+
+const getActiveCovers = (mapType, facilityEvent) => {
+  if (mapType === 'facility') {
+    if (facilityEvent === 'warp') {
+      return FACILITY_COVERS.map(c => {
+        const z = c.z;
+        const x_c = Math.sin(z * 0.04) * 6.0;
+        const rotY = Math.atan(0.24 * Math.cos(z * 0.04));
+        const newX = x_c + c.x * Math.cos(rotY);
+        const newZ = z - c.x * Math.sin(rotY);
+        return new THREE.Vector3(newX, 0, newZ);
+      });
+    }
+    return FACILITY_COVERS;
+  }
+  return COVERS;
+};
+
+function Ground({ mapType, facilityEvent = 'normal' }) {
   const isFacility = mapType === 'facility';
   const groundColor = isFacility ? '#e0e4e8' : '#2d3527';
   const gridColor1 = isFacility ? '#cccccc' : '#00ff66';
   const gridColor2 = isFacility ? '#dddddd' : '#142517';
+
+  // Reusable materials to optimize performance
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.75 });
+  const tactileMaterial = new THREE.MeshStandardMaterial({ color: "#f39c12", roughness: 0.8, flatShading: true });
+  const ceilingMaterial = new THREE.MeshStandardMaterial({ color: "#eceff1", roughness: 0.9 });
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: "#fafafa", roughness: 0.35, metalness: 0.05 });
+
+  if (isFacility && facilityEvent === 'warp') {
+    const SEGMENT_LEN = 5;
+    const numSegments = 240 / SEGMENT_LEN;
+    const segments = [];
+    for (let i = 0; i < numSegments; i++) {
+      const z = -120 + (i + 0.5) * SEGMENT_LEN;
+      const x_c = Math.sin(z * 0.04) * 6.0;
+      const rotY = Math.atan(0.24 * Math.cos(z * 0.04));
+      segments.push({ z, x: x_c, rotY });
+    }
+
+    return (
+      <group>
+        {segments.map((seg, idx) => (
+          <group key={idx} position={[seg.x, 0, seg.z]} rotation={[0, seg.rotY, 0]}>
+            {/* Ground Segment */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={groundMaterial}>
+              <planeGeometry args={[8, SEGMENT_LEN]} />
+            </mesh>
+
+            {/* Tactile guide Segment */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow material={tactileMaterial}>
+              <planeGeometry args={[0.4, SEGMENT_LEN]} />
+            </mesh>
+
+            {/* Ground grid helper scaled */}
+            <gridHelper args={[8, 8, '#b2bec3', '#dfe6e9']} position={[0, 0.001, 0]} scale={[1, 1, SEGMENT_LEN / 8]} />
+
+            {/* Ceiling Segment */}
+            <mesh position={[0, 5, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow material={ceilingMaterial}>
+              <planeGeometry args={[8, SEGMENT_LEN]} />
+            </mesh>
+            <gridHelper args={[8, 8, '#b0bec5', '#cfd8dc']} position={[0, 4.98, 0]} scale={[1, 1, SEGMENT_LEN / 8]} />
+
+            {/* Left Wall Segment */}
+            <mesh position={[-4, 2.5, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow castShadow material={wallMaterial}>
+              <planeGeometry args={[SEGMENT_LEN, 5]} />
+            </mesh>
+            <gridHelper args={[5, 5, '#b2bec3', '#dfe6e9']} position={[-3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} scale={[1, 1, SEGMENT_LEN / 5]} />
+
+            {/* Right Wall Segment */}
+            <mesh position={[4, 2.5, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow castShadow material={wallMaterial}>
+              <planeGeometry args={[SEGMENT_LEN, 5]} />
+            </mesh>
+            <gridHelper args={[5, 5, '#b2bec3', '#dfe6e9']} position={[3.995, 2.5, 0]} rotation={[0, 0, Math.PI / 2]} scale={[1, 1, SEGMENT_LEN / 5]} />
+          </group>
+        ))}
+      </group>
+    );
+  }
 
   return (
     <group>
@@ -3006,22 +3191,28 @@ function Ground({ mapType }) {
   );
 }
 
-function ShutterDoor({ open }) {
+function ShutterDoor({ open, position = [0, 2.5, -120], rotation = [0, 0, 0] }) {
   const meshRef = useRef();
+  const animYRef = useRef(position[1]);
+
   useFrame((state, delta) => {
     if (!meshRef.current) return;
     const targetY = open ? 7.5 : 2.5;
-    meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, targetY, 4.0 * Math.min(delta, 0.1));
+    animYRef.current = THREE.MathUtils.lerp(animYRef.current, targetY, 4.0 * Math.min(delta, 0.1));
+    meshRef.current.position.y = animYRef.current;
+    meshRef.current.position.x = position[0];
+    meshRef.current.position.z = position[2];
   });
+
   return (
-    <mesh ref={meshRef} position={[0, 2.5, -120]} castShadow receiveShadow>
+    <mesh ref={meshRef} position={position} rotation={rotation} castShadow receiveShadow>
       <boxGeometry args={[8, 5, 0.4]} />
       <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
     </mesh>
   );
 }
 
-function PerimeterWalls({ mapType, facilityZone = 8, enemies = [] }) {
+function PerimeterWalls({ mapType, facilityZone = 8, enemies = [], facilityEvent = 'normal' }) {
   const isFacility = mapType === 'facility';
   const wallColor = isFacility ? '#2c3e50' : '#1a1f18';
   
@@ -3032,14 +3223,18 @@ function PerimeterWalls({ mapType, facilityZone = 8, enemies = [] }) {
   });
 
   if (isFacility) {
-    const aliveCount = enemies.filter(e => e.state === 'alive').length;
+    const aliveCount = enemies.filter(e => e.state === 'alive' && !e.isAlly).length;
     const isDoorOpen = facilityZone === 1 && aliveCount === 0;
+
+    const shutterWarp = getWarpPosAndRot(0, 2.5, -120, 0, facilityEvent);
+    const rearWallWarp = getWarpPosAndRot(0, 2.5, 120, 0, facilityEvent);
+
     return (
       <group>
         {/* 前端鋼製封口 (平滑滑動鐵捲門) */}
-        <ShutterDoor open={isDoorOpen} />
+        <ShutterDoor open={isDoorOpen} position={shutterWarp.position} rotation={shutterWarp.rotation} />
         {/* 後端鋼製封口 */}
-        <mesh position={[0, 2.5, 120]} castShadow receiveShadow>
+        <mesh position={rearWallWarp.position} rotation={rearWallWarp.rotation} castShadow receiveShadow>
           <boxGeometry args={[8, 5, 0.4]} />
           <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
         </mesh>
@@ -3737,9 +3932,22 @@ function OutpostAssets() {
   );
 }
 
-function SubwayFluorescentLight({ position, castShadow = false }) {
+function SubwayFluorescentLight({ position, rotation = [0, 0, 0], castShadow = false, facilityEvent = 'normal' }) {
+  let lightColor = '#ffffff';
+  let lightIntensity = 2.5;
+  let tubeColor = '#ffffff';
+
+  if (facilityEvent === 'blackout') {
+    lightIntensity = 0.0;
+    tubeColor = '#1e272e';
+  } else if (facilityEvent === 'alert') {
+    lightColor = '#ff3333';
+    lightIntensity = 2.0;
+    tubeColor = '#ff3333';
+  }
+
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       {/* 燈具外殼 */}
       <mesh>
         <boxGeometry args={[1.5, 0.05, 0.25]} />
@@ -3748,25 +3956,27 @@ function SubwayFluorescentLight({ position, castShadow = false }) {
       {/* 燈管部分 */}
       <mesh position={[0, -0.03, 0]}>
         <boxGeometry args={[1.4, 0.02, 0.18]} />
-        <meshBasicMaterial color="#ffffff" />
+        <meshBasicMaterial color={tubeColor} />
       </mesh>
       {/* 點光源：限制日光燈 shadows 以防止 WebGL 崩潰 */}
-      <pointLight 
-        color="#ffffff" 
-        intensity={2.5} 
-        distance={24} 
-        decay={1.4} 
-        castShadow={castShadow} 
-        shadow-mapSize-width={512} 
-        shadow-mapSize-height={512} 
-      />
+      {lightIntensity > 0 && (
+        <pointLight 
+          color={lightColor} 
+          intensity={lightIntensity} 
+          distance={24} 
+          decay={1.4} 
+          castShadow={castShadow} 
+          shadow-mapSize-width={512} 
+          shadow-mapSize-height={512} 
+        />
+      )}
     </group>
   );
 }
 
-function ExitSign({ position, number = 8 }) {
+function ExitSign({ position, rotation = [0, 0, 0], number = 8 }) {
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       {/* 出口指示牌外框 */}
       <mesh castShadow>
         <boxGeometry args={[3.2, 0.7, 0.15]} />
@@ -3879,42 +4089,64 @@ function VendingMachine({ position, rotation }) {
   );
 }
 
-function TrashCan({ position }) {
+function TrashCan({ position, rotation = [0, 0, 0] }) {
   return (
-    <mesh position={position} castShadow receiveShadow>
+    <mesh position={position} rotation={rotation} castShadow receiveShadow>
       <cylinderGeometry args={[0.25, 0.25, 0.8, 10]} />
       <meshStandardMaterial color="#95a5a6" roughness={0.4} metalness={0.8} />
     </mesh>
   );
 }
 
-function FacilityAssets({ hideCenter, facilityZone = 8, enemies = [] }) {
+function FacilityAssets({ hideCenter, facilityZone = 8, enemies = [], facilityEvent = 'normal' }) {
   // 地鐵長廊有 15 個日光燈，僅讓第 4 和 第 11 兩個日光燈投射陰影，其他日光燈關閉陰影投射，防止 WebGL 崩潰
   const lightZPositions = [-105, -90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90, 105];
+
+  const getWarpedProps = (origX, origY, origZ, origRotY = 0) => {
+    const { position, rotation } = getWarpPosAndRot(origX, origY, origZ, origRotY, facilityEvent);
+    return { position, rotation };
+  };
 
   // 建立 15 級 3D 樓梯 (從 z = -120 到 z = -135，高度從 0 到 5.0)
   const steps = [];
   for (let i = 0; i < 15; i++) {
     const stepZ = -i * 1.0 - 0.5;
     const stepY = i * 0.33 + 0.165;
+    const zGlobal = -120 + stepZ;
+    const { position, rotation } = getWarpPosAndRot(0, stepY, zGlobal, 0, facilityEvent);
     steps.push(
-      <mesh key={i} position={[0, stepY, -120 + stepZ]} castShadow receiveShadow>
+      <mesh key={i} position={position} rotation={rotation} castShadow receiveShadow>
         <boxGeometry args={[8, 0.33, 1.0]} />
         <meshStandardMaterial color="#7f8c8d" roughness={0.7} />
       </mesh>
     );
   }
 
+  const leftWallWarp = getWarpedProps(-4, 5.0, -127.5, Math.PI / 2);
+  const rightWallWarp = getWarpedProps(4, 5.0, -127.5, -Math.PI / 2);
+  const ceilingWarp = getWarpedProps(0, 10.0, -127.5, 0);
+  const doorWallWarp = getWarpedProps(0, 7.5, -135, 0);
+  const exitLightWarp = getWarpedProps(0, 8.5, -133, 0);
+
   return (
     <group>
       {/* 日光燈排燈 */}
       {lightZPositions.map((z, idx) => {
         const castShadow = idx === 3 || idx === 11;
-        return <SubwayFluorescentLight key={idx} position={[0, 4.9, z]} castShadow={castShadow} />;
+        const warped = getWarpedProps(0, 4.9, z, 0);
+        return (
+          <SubwayFluorescentLight 
+            key={idx} 
+            position={warped.position} 
+            rotation={warped.rotation}
+            castShadow={castShadow} 
+            facilityEvent={facilityEvent} 
+          />
+        );
       })}
 
       {/* 出口指示牌 (動態顯示號碼) */}
-      <ExitSign position={[0, 4.3, 0]} number={facilityZone} />
+      <ExitSign {...getWarpedProps(0, 4.3, 0, 0)} number={facilityZone} />
 
       {/* 3D 樓梯及通道 enclosure */}
       {steps}
@@ -3922,63 +4154,65 @@ function FacilityAssets({ hideCenter, facilityZone = 8, enemies = [] }) {
       {/* 樓梯通道圍封 (左右牆面、頂部封板與出口門壁) */}
       <group>
         {/* 左側壁 */}
-        <mesh position={[-4, 5.0, -127.5]} rotation={[0, Math.PI / 2, 0]} receiveShadow>
+        <mesh position={leftWallWarp.position} rotation={leftWallWarp.rotation} receiveShadow>
           <planeGeometry args={[15, 10]} />
           <meshStandardMaterial color="#ecf0f1" roughness={0.5} />
         </mesh>
         {/* 右側壁 */}
-        <mesh position={[4, 5.0, -127.5]} rotation={[0, -Math.PI / 2, 0]} receiveShadow>
+        <mesh position={rightWallWarp.position} rotation={rightWallWarp.rotation} receiveShadow>
           <planeGeometry args={[15, 10]} />
           <meshStandardMaterial color="#ecf0f1" roughness={0.5} />
         </mesh>
         {/* 樓梯頂部天花板 */}
-        <mesh position={[0, 10.0, -127.5]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[8, 15]} />
-          <meshStandardMaterial color="#bdc3c7" roughness={0.9} />
-        </mesh>
+        <group position={ceilingWarp.position} rotation={ceilingWarp.rotation}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[8, 15]} />
+            <meshStandardMaterial color="#bdc3c7" roughness={0.9} />
+          </mesh>
+        </group>
         {/* 樓梯頂部出口門壁 (封閉樓梯末端) */}
-        <mesh position={[0, 7.5, -135]} castShadow receiveShadow>
+        <mesh position={doorWallWarp.position} rotation={doorWallWarp.rotation} castShadow receiveShadow>
           <boxGeometry args={[8, 5, 0.4]} />
           <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
         </mesh>
         {/* 出口光源 (亮白光) */}
-        <pointLight position={[0, 8.5, -133]} intensity={4.5} distance={15} color="#ffffff" />
+        <pointLight position={exitLightWarp.position} intensity={4.5} distance={15} color="#ffffff" />
       </group>
 
       {/* 牆上海報 */}
-      <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
-      <WallPoster position={[3.98, 2.5, -40]} rotation={[0, -Math.PI / 2, 0]} title="JOIN DELTA FORCE" subtitle="ENLIST TODAY TO DEFEND OUTPOST BASE SECURE SECTOR." bgColor="#27ae60" />
-      <WallPoster position={[-3.98, 2.5, -10]} rotation={[0, Math.PI / 2, 0]} title="WANTED" subtitle="ELITE SHIELD TROOPS DETECTED IN SECTOR 8. EXTREME CAUTION." bgColor="#c0392b" />
-      <WallPoster position={[3.98, 2.5, 20]} rotation={[0, -Math.PI / 2, 0]} title="TACTICAL GEAR" subtitle="EQUIP PRIMARY SILENCERS & EXTENDED MAGS FOR CLOSE CQB." bgColor="#8e44ad" />
-      <WallPoster position={[-3.98, 2.5, 50]} rotation={[0, Math.PI / 2, 0]} title="WARNING" subtitle="HIGH VOLTAGE RAILWAY SECTIONS AHEAD. DO NOT CROSS." bgColor="#d35400" />
-      <WallPoster position={[3.98, 2.5, 80]} rotation={[0, -Math.PI / 2, 0]} title="SECURE EXIT 8" subtitle="LZ EVACUATION ESTABLISHED AT THE CENTER ZONE (0,0)." bgColor="#16a085" />
+      <WallPoster {...getWarpedProps(-3.98, 2.5, -80, Math.PI / 2)} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
+      <WallPoster {...getWarpedProps(3.98, 2.5, -40, -Math.PI / 2)} title="JOIN DELTA FORCE" subtitle="ENLIST TODAY TO DEFEND OUTPOST BASE SECURE SECTOR." bgColor="#27ae60" />
+      <WallPoster {...getWarpedProps(-3.98, 2.5, -10, Math.PI / 2)} title="WANTED" subtitle="ELITE SHIELD TROOPS DETECTED IN SECTOR 8. EXTREME CAUTION." bgColor="#c0392b" />
+      <WallPoster {...getWarpedProps(3.98, 2.5, 20, -Math.PI / 2)} title="TACTICAL GEAR" subtitle="EQUIP PRIMARY SILENCERS & EXTENDED MAGS FOR CLOSE CQB." bgColor="#8e44ad" />
+      <WallPoster {...getWarpedProps(-3.98, 2.5, 50, Math.PI / 2)} title="WARNING" subtitle="HIGH VOLTAGE RAILWAY SECTIONS AHEAD. DO NOT CROSS." bgColor="#d35400" />
+      <WallPoster {...getWarpedProps(3.98, 2.5, 80, -Math.PI / 2)} title="SECURE EXIT 8" subtitle="LZ EVACUATION ESTABLISHED AT THE CENTER ZONE (0,0)." bgColor="#16a085" />
 
       {/* 自動販賣機與垃圾桶組件 */}
-      <VendingMachine position={[-3.4, 1.0, -60]} rotation={[0, Math.PI / 2, 0]} />
-      <TrashCan position={[-3.4, 0.4, -58]} />
+      <VendingMachine {...getWarpedProps(-3.4, 1.0, -60, Math.PI / 2)} />
+      <TrashCan {...getWarpedProps(-3.4, 0.4, -58, 0)} />
 
-      <VendingMachine position={[3.4, 1.0, -25]} rotation={[0, -Math.PI / 2, 0]} />
-      <TrashCan position={[3.4, 0.4, -27]} />
+      <VendingMachine {...getWarpedProps(3.4, 1.0, -25, -Math.PI / 2)} />
+      <TrashCan {...getWarpedProps(3.4, 0.4, -27, 0)} />
 
-      <VendingMachine position={[-3.4, 1.0, 30]} rotation={[0, Math.PI / 2, 0]} />
-      <TrashCan position={[-3.4, 0.4, 32]} />
+      <VendingMachine {...getWarpedProps(-3.4, 1.0, 30, Math.PI / 2)} />
+      <TrashCan {...getWarpedProps(-3.4, 0.4, 32, 0)} />
 
-      <VendingMachine position={[3.4, 1.0, 70]} rotation={[0, -Math.PI / 2, 0]} />
-      <TrashCan position={[3.4, 0.4, 68]} />
+      <VendingMachine {...getWarpedProps(3.4, 1.0, 70, -Math.PI / 2)} />
+      <TrashCan {...getWarpedProps(3.4, 0.4, 68, 0)} />
 
       {/* 通道掩體箱 */}
-      <MilitaryCrate position={[-1.8, 0.6, -40]} rotation={[0, 0.3, 0]} />
-      <MilitaryCrate position={[1.5, 0.6, -10]} rotation={[0, -0.2, 0]} />
-      <MilitaryCrate position={[-1.2, 0.6, 15]} rotation={[0, 0.5, 0]} />
-      <MilitaryCrate position={[1.6, 0.6, 45]} rotation={[0, -0.4, 0]} scale={[1.1, 1.1, 1.1]} />
-      <MilitaryCrate position={[0, 0.6, -85]} rotation={[0, 0.1, 0]} />
+      <MilitaryCrate {...getWarpedProps(-1.8, 0.6, -40, 0.3)} />
+      <MilitaryCrate {...getWarpedProps(1.5, 0.6, -10, -0.2)} />
+      <MilitaryCrate {...getWarpedProps(-1.2, 0.6, 15, 0.5)} />
+      <MilitaryCrate {...getWarpedProps(1.6, 0.6, 45, -0.4)} scale={[1.1, 1.1, 1.1]} />
+      <MilitaryCrate {...getWarpedProps(0, 0.6, -85, 0.1)} />
     </group>
   );
 }
 
-function TacticalAssets({ mapType, hideCenter, facilityZone, enemies }) {
+function TacticalAssets({ mapType, hideCenter, facilityZone, enemies, facilityEvent }) {
   if (mapType === 'facility') {
-    return <FacilityAssets hideCenter={hideCenter} facilityZone={facilityZone} enemies={enemies} />;
+    return <FacilityAssets hideCenter={hideCenter} facilityZone={facilityZone} enemies={enemies} facilityEvent={facilityEvent} />;
   }
   return <OutpostAssets />;
 }
@@ -4525,6 +4759,25 @@ function Weapon({ gunRef, muzzleFlashRef, isAds, isLocked, activeWeapon, activeW
         )}
       </group>
 
+      {selectedMap === 'facility' && facilityEvent === 'blackout' && (
+        <>
+          <spotLight
+            ref={flashlightRef}
+            angle={0.4}
+            penumbra={0.6}
+            intensity={12.0}
+            distance={50}
+            castShadow
+            color="#ffffff"
+            shadow-mapSize-width={512}
+            shadow-mapSize-height={512}
+          />
+          <mesh ref={targetRef} position={[0, 0, 0]} visible={false}>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+          </mesh>
+        </>
+      )}
+
       {/* 獨立的 3D 醫療包模型，只有在 isHealing 時顯示，並由 useFrame 動態動畫控制 */}
       <group ref={medkitRef} scale={[0.15, 0.15, 0.15]} visible={false}>
         {/* 醫療包本體 (白色外殼) */}
@@ -4905,6 +5158,7 @@ function PlayerController({
   facilityZone,
   onAdvanceFacilityZone,
   adminTeleportTrigger,
+  facilityEvent,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
@@ -4924,6 +5178,9 @@ function PlayerController({
       camera.position.set(0, 1.6, -108);
     }
   }, [adminTeleportTrigger, camera, selectedMap]);
+
+  const flashlightRef = useRef();
+  const targetRef = useRef();
 
   useEffect(() => {
     if (cameraRef) {
@@ -5461,17 +5718,23 @@ function PlayerController({
 
           if (enemyId !== null) {
             const enemyObj = enemiesRef.current.find((e) => e.id === enemyId);
-            let isHeadshot = false;
-            if (enemyObj) {
-              isHeadshot = hit.point.y >= enemyObj.position.y + 1.55;
-            }
-            if (runStatsRef && runStatsRef.current) {
-              runStatsRef.current.shotsHit += 1;
-              if (isHeadshot) {
-                runStatsRef.current.headshots += 1;
+            if (enemyObj && enemyObj.isAlly) {
+              if (activeWeaponId !== 'm870' || p < 2) {
+                addImpactEffectRef.current(hit.point, hit.face.normal);
               }
+            } else {
+              let isHeadshot = false;
+              if (enemyObj) {
+                isHeadshot = hit.point.y >= enemyObj.position.y + 1.55;
+              }
+              if (runStatsRef && runStatsRef.current) {
+                runStatsRef.current.shotsHit += 1;
+                if (isHeadshot) {
+                  runStatsRef.current.headshots += 1;
+                }
+              }
+              onHitEnemyRef.current(enemyId, hit.point, isHeadshot, parent);
             }
-            onHitEnemyRef.current(enemyId, hit.point, isHeadshot, parent);
           } else {
             // M870 散彈槍只生成部分彈孔，防止大量物理微粒導致畫面卡頓
             if (activeWeaponId !== 'm870' || p < 2) {
@@ -5701,7 +5964,7 @@ function PlayerController({
     // 6.X 8號出口通關進度/樓梯撤離判定
     // ------------------------------------------
     if (gameStateRef.current === 'active' && selectedMap === 'facility') {
-      const aliveCount = enemies.filter(e => e.state === 'alive').length;
+      const aliveCount = enemies.filter(e => e.state === 'alive' && !e.isAlly).length;
       if (aliveCount === 0) {
         if (facilityZoneRef.current > 1) {
           if (camera.position.z <= -110 && !transitionInProgressRef.current) {
@@ -5835,7 +6098,17 @@ function PlayerController({
     const playerRadius = 0.45;
 
     // 建立目前所有的碰撞體清單 (包含靜態掩體與教學靶)
-    const activeColliders = selectedMap === 'facility' ? [...FACILITY_COLLIDERS] : [...STATIC_COLLIDERS];
+    let activeColliders = selectedMap === 'facility' ? [...FACILITY_COLLIDERS] : [...STATIC_COLLIDERS];
+    if (selectedMap === 'facility' && facilityEvent === 'warp') {
+      activeColliders = activeColliders.map(c => {
+        const z = c.z;
+        const x_c = Math.sin(z * 0.04) * 6.0;
+        const rotY = Math.atan(0.24 * Math.cos(z * 0.04));
+        const newX = x_c + c.x * Math.cos(rotY);
+        const newZ = z - c.x * Math.sin(rotY);
+        return { ...c, x: newX, z: newZ };
+      });
+    }
     if (isTutorialRef.current) {
       activeColliders.push({ x: 0, z: 65, hx: 0.5, hz: 0.5 });
       activeColliders.push({ x: -6, z: 60, hx: 0.5, hz: 0.5 });
@@ -5876,7 +6149,12 @@ function PlayerController({
     }
     
     if (selectedMap === 'facility') {
-      camera.position.x = Math.max(-3.6, Math.min(3.6, camera.position.x));
+      if (facilityEvent === 'warp') {
+        const xOffset = Math.sin(camera.position.z * 0.04) * 6.0;
+        camera.position.x = Math.max(xOffset - 3.6, Math.min(xOffset + 3.6, camera.position.x));
+      } else {
+        camera.position.x = Math.max(-3.6, Math.min(3.6, camera.position.x));
+      }
     } else {
       camera.position.x = Math.max(-mapLimit, Math.min(mapLimit, camera.position.x));
     }
@@ -5914,7 +6192,7 @@ function PlayerController({
     }
     
     if (selectedMap === 'facility') {
-      const aliveCount = enemies.filter(e => e.state === 'alive').length;
+      const aliveCount = enemies.filter(e => e.state === 'alive' && !e.isAlly).length;
       const isExitOpen = facilityZoneRef.current === 1 && aliveCount === 0;
       const minZ = isExitOpen ? -135 : -115;
       camera.position.z = Math.max(minZ, Math.min(115, camera.position.z));
@@ -6002,6 +6280,19 @@ function PlayerController({
     }
 
     // ------------------------------------------
+    // 6.X 戰術手電筒動態追蹤 (電力中斷事件下)
+    // ------------------------------------------
+    if (selectedMap === 'facility' && facilityEvent === 'blackout') {
+      if (flashlightRef.current && targetRef.current) {
+        flashlightRef.current.position.copy(camera.position);
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        targetRef.current.position.copy(camera.position).addScaledVector(dir, 15);
+        flashlightRef.current.target = targetRef.current;
+      }
+    }
+
+    // ------------------------------------------
     // 6.3 槍枝動態擺動與後座力衰減
     // ------------------------------------------
     if (weaponRef.current) {
@@ -6066,12 +6357,29 @@ const getWaveForZone = (zone) => {
   return 3;
 };
 
+const triggerFacilityEvent = (event, zoneNum, addFeedCallback) => {
+  if (event === 'blackout') {
+    addFeedCallback(`⚠️ 區域電力中斷！請利用槍上的戰術手電筒照明。`, 'system');
+  } else if (event === 'fog') {
+    addFeedCallback(`⚠️ 化學濃霧襲來！能見度極低，注意近戰突擊！`, 'headshot');
+  } else if (event === 'alert') {
+    addFeedCallback(`⚠️ 紅色警報已響起！敵戰鬥力增強，小心防禦！`, 'headshot');
+  } else if (event === 'warp') {
+    addFeedCallback(`⚠️ 空間扭曲！通道結構已發生非線性異常。`, 'system');
+  } else if (event === 'combat') {
+    addFeedCallback(`⚠️ 遭遇交戰區域！我方特種部隊正在與敵軍交火，支援他們！`, 'system');
+  } else {
+    addFeedCallback(`已進入第 ${zoneNum} 出口區域，目前狀況安全無異常。`, 'system');
+  }
+};
+
 // 7. 遊戲主架構 App Component
 // ==========================================
 export default function App() {
   const [gameState, setGameState] = useState('deploying');
   const [facilityZone, setFacilityZone] = useState(8);
   const [adminTeleportTrigger, setAdminTeleportTrigger] = useState(0);
+  const [facilityEvent, setFacilityEvent] = useState('normal'); // 'normal' | 'blackout' | 'fog' | 'alert'
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
 
@@ -8031,8 +8339,19 @@ export default function App() {
     if (selectedMap === 'facility') {
       setFacilityZone(8);
       setAdminTeleportTrigger(0);
+      const initialEvent = Math.random() < 0.25 ? ['blackout', 'fog', 'alert', 'warp', 'combat'][Math.floor(Math.random() * 5)] : 'normal';
+      setFacilityEvent(initialEvent);
+      triggerFacilityEvent(initialEvent, 8, addKillFeedEntry);
       const initialWave = getWaveForZone(8);
-      setEnemies(spawnWave(initialWave, diff, isAmbush, 'facility'));
+      let spawned = spawnWave(initialWave, diff, isAmbush, 'facility', initialEvent);
+      if (initialEvent === 'combat') {
+        spawned = [
+          ...spawned,
+          { id: 901, enemyType: ENEMY_TYPES.ASSAULT, hp: 150, maxHp: 150, position: new THREE.Vector3(-1.5, 0, 90), state: 'alive', isAlly: true },
+          { id: 902, enemyType: ENEMY_TYPES.ASSAULT, hp: 150, maxHp: 150, position: new THREE.Vector3(1.5, 0, 85), state: 'alive', isAlly: true }
+        ];
+      }
+      setEnemies(spawned);
     } else {
       setEnemies(spawnEnemies(false, diff, isAmbush, selectedMap));
     }
@@ -8493,6 +8812,32 @@ export default function App() {
     });
   };
 
+  const handleShootEnemy = (attackerId, targetId, damage) => {
+    setEnemies((prev) => {
+      return prev.map((enemy) => {
+        if (enemy.id === targetId && enemy.state === 'alive') {
+          const newHp = Math.max(0, enemy.hp - damage);
+          const isDead = newHp <= 0;
+          
+          if (isDead) {
+            soundManager.playEnemyDeath();
+            const attackerObj = prev.find(e => e.id === attackerId);
+            const attackerName = attackerObj?.isAlly ? "DELTA 友軍" : `ENEMY_0${attackerId}`;
+            const enemyTypeName = enemy.enemyType ? enemy.enemyType.toUpperCase() : 'ENEMY';
+            const enemyName = enemy.isAlly ? "DELTA 友軍" : `${enemyTypeName}_0${enemy.id}`;
+            addKillFeedEntry(`${attackerName} ➔ [SHOOT] ${enemyName}`, 'normal');
+          }
+          return {
+            ...enemy,
+            hp: newHp,
+            state: isDead ? 'dying' : 'alive'
+          };
+        }
+        return enemy;
+      });
+    });
+  };
+
   // 擊中敵人時扣血與擊殺判定
   const handleHitEnemy = (enemyId, hitPoint, isHeadshot, enemyMesh = null) => {
     addImpactEffect(hitPoint, new THREE.Vector3(0, 1, 0));
@@ -8929,9 +9274,24 @@ export default function App() {
       if (nextZone >= 1) {
         const diff = getDifficultyMultiplier();
         const nextWave = getWaveForZone(nextZone);
-        setEnemies(spawnWave(nextWave, diff, isAmbushActive, 'facility'));
+        
+        // 隨機選擇本區事件
+        const events = ['normal', 'normal', 'blackout', 'fog', 'alert', 'warp', 'combat'];
+        const randomEvent = events[Math.floor(Math.random() * events.length)];
+        setFacilityEvent(randomEvent);
+        triggerFacilityEvent(randomEvent, nextZone, addKillFeedEntry);
+
+        let spawned = spawnWave(nextWave, diff, isAmbushActive, 'facility', randomEvent);
+        if (randomEvent === 'combat') {
+          spawned = [
+            ...spawned,
+            { id: 901, enemyType: ENEMY_TYPES.ASSAULT, hp: 150, maxHp: 150, position: new THREE.Vector3(-1.5, 0, 90), state: 'alive', isAlly: true },
+            { id: 902, enemyType: ENEMY_TYPES.ASSAULT, hp: 150, maxHp: 150, position: new THREE.Vector3(1.5, 0, 85), state: 'alive', isAlly: true }
+          ];
+        }
+        setEnemies(spawned);
+
         setResetTrigger((prevTrig) => prevTrig + 1);
-        addKillFeedEntry(`已進入第 ${nextZone} 出口區域！肅清本區的所有敵軍以繼續前進。`, 'system');
       }
       return nextZone;
     });
@@ -8946,6 +9306,7 @@ export default function App() {
     setCurrentWave(1);
     setFacilityZone(8);
     setAdminTeleportTrigger(0);
+    setFacilityEvent('normal');
     setWaveCountdown(0);
     setBackpackItems([]);
     setBackpackCoins(0);
@@ -11718,15 +12079,18 @@ export default function App() {
       {/* 3D Canvas 容器 */}
       <div className="canvas-container">
         <Canvas shadows camera={{ fov: 70, near: 0.1, far: 200 }}>
+          {selectedMap === 'facility' && facilityEvent === 'fog' && (
+            <fogExp2 attach="fog" args={['#10171d', 0.055]} />
+          )}
           <ambientLight 
-            intensity={selectedMap === 'facility' ? 0.65 : 0.5} 
-            color={selectedMap === 'facility' ? '#f5f6fa' : '#ffffff'} 
+            intensity={selectedMap === 'facility' ? (facilityEvent === 'blackout' ? 0.02 : 0.65) : 0.5} 
+            color={selectedMap === 'facility' ? (facilityEvent === 'alert' ? '#ff3333' : '#f5f6fa') : '#ffffff'} 
           />
           <directionalLight
-            castShadow
+            castShadow={selectedMap !== 'facility'}
             position={selectedMap === 'facility' ? [30, 15, 30] : [50, 80, 50]}
-            intensity={selectedMap === 'facility' ? 0.1 : 1.5}
-            color={selectedMap === 'facility' ? '#6b829c' : '#ffffff'}
+            intensity={selectedMap === 'facility' ? (facilityEvent === 'blackout' ? 0.0 : (facilityEvent === 'alert' ? 0.2 : 0.1)) : 1.5}
+            color={selectedMap === 'facility' ? (facilityEvent === 'alert' ? '#ff8888' : '#6b829c') : '#ffffff'}
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
             shadow-camera-near={0.5}
@@ -11744,9 +12108,9 @@ export default function App() {
           />
 
           {/* 地面與環境防禦工事 */}
-          <Ground mapType={selectedMap} />
-          <PerimeterWalls mapType={selectedMap} facilityZone={facilityZone} enemies={enemies} />
-          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} facilityZone={facilityZone} enemies={enemies} />
+          <Ground mapType={selectedMap} facilityEvent={facilityEvent} />
+          <PerimeterWalls mapType={selectedMap} facilityZone={facilityZone} enemies={enemies} facilityEvent={facilityEvent} />
+          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} facilityZone={facilityZone} enemies={enemies} facilityEvent={facilityEvent} />
 
           {/* 3D 戰術直升機撤離點 */}
           {selectedMap !== 'facility' && <LandingPad active={extractionActive} />}
@@ -11838,6 +12202,9 @@ export default function App() {
                 onThrowGrenade={addEnemyGrenade}
                 smokeClouds={smokeClouds}
                 mapType={selectedMap}
+                facilityEvent={facilityEvent}
+                enemies={enemies}
+                onShootEnemy={handleShootEnemy}
               />
             )
           ))}
@@ -11916,6 +12283,7 @@ export default function App() {
             facilityZone={facilityZone}
             onAdvanceFacilityZone={handleAdvanceFacilityZone}
             adminTeleportTrigger={adminTeleportTrigger}
+            facilityEvent={facilityEvent}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
