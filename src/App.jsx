@@ -10471,7 +10471,7 @@ export default function App() {
                                             pointerEvents: (draggedItem && draggedItem.uid !== item.uid) ? 'none' : 'auto',
                                             transition: 'box-shadow 0.15s, border-color 0.15s',
                                             zIndex: 2,
-                                            overflow: 'hidden',
+                                            overflow: (isWeapon && item.rotated) ? 'visible' : 'hidden',
                                             padding: '2px',
                                           }}
                                           title={`${ITEM_NAMES[item.type] || item.type} (右鍵選單 / 雙擊裝備)`}
@@ -10481,13 +10481,13 @@ export default function App() {
                                           onContextMenu={(e) => handleItemContextMenu(e, item, 'stash')}
                                         >
                                           {isWeapon ? (
-                                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: (isWeapon && item.rotated) ? 'visible' : 'hidden' }}>
                                               <img 
                                                 src={`weapons/${item.type}.png`} 
                                                 alt={item.type}
                                                 style={{
-                                                  width: item.rotated ? `${h * 36 - 6}px` : '95%',
-                                                  height: item.rotated ? `${w * 36 - 6}px` : '95%',
+                                                  width: item.rotated ? `${h * 36 - 4}px` : '98%',
+                                                  height: item.rotated ? `${w * 36 - 4}px` : '98%',
                                                   objectFit: 'contain',
                                                   transform: item.rotated ? 'rotate(90deg)' : 'none',
                                                   filter: 'drop-shadow(0 0 5px rgba(0, 229, 255, 0.45))',
