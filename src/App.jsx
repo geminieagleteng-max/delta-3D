@@ -2985,7 +2985,22 @@ function Ground({ mapType }) {
   );
 }
 
-function PerimeterWalls({ mapType }) {
+function ShutterDoor({ open }) {
+  const meshRef = useRef();
+  useFrame((state, delta) => {
+    if (!meshRef.current) return;
+    const targetY = open ? 7.5 : 2.5;
+    meshRef.current.position.y = THREE.MathUtils.lerp(meshRef.current.position.y, targetY, 4.0 * Math.min(delta, 0.1));
+  });
+  return (
+    <mesh ref={meshRef} position={[0, 2.5, -120]} castShadow receiveShadow>
+      <boxGeometry args={[8, 5, 0.4]} />
+      <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+    </mesh>
+  );
+}
+
+function PerimeterWalls({ mapType, facilityZone = 8, enemies = [] }) {
   const isFacility = mapType === 'facility';
   const wallColor = isFacility ? '#2c3e50' : '#1a1f18';
   
@@ -2996,13 +3011,12 @@ function PerimeterWalls({ mapType }) {
   });
 
   if (isFacility) {
+    const aliveCount = enemies.filter(e => e.state === 'alive').length;
+    const isDoorOpen = facilityZone === 1 && aliveCount === 0;
     return (
       <group>
-        {/* 前端鋼製封口 */}
-        <mesh position={[0, 2.5, -120]} castShadow receiveShadow>
-          <boxGeometry args={[8, 5, 0.4]} />
-          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
-        </mesh>
+        {/* 前端鋼製封口 (平滑滑動鐵捲門) */}
+        <ShutterDoor open={isDoorOpen} />
         {/* 後端鋼製封口 */}
         <mesh position={[0, 2.5, 120]} castShadow receiveShadow>
           <boxGeometry args={[8, 5, 0.4]} />
@@ -3729,7 +3743,7 @@ function SubwayFluorescentLight({ position, castShadow = false }) {
   );
 }
 
-function ExitSign({ position }) {
+function ExitSign({ position, number = 8 }) {
   return (
     <group position={position}>
       {/* 出口指示牌外框 */}
@@ -3766,8 +3780,8 @@ function ExitSign({ position }) {
         }}>
           <span style={{ fontSize: '30px' }}>出口</span>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <div style={{ fontSize: '18px', lineHeight: '20px' }}>出口 <span style={{ fontSize: '26px' }}>8</span></div>
-            <div style={{ fontSize: '11px', lineHeight: '11px', letterSpacing: '0.5px' }}>Exit 8</div>
+            <div style={{ fontSize: '18px', lineHeight: '20px' }}>出口 <span style={{ fontSize: '26px' }}>{number}</span></div>
+            <div style={{ fontSize: '11px', lineHeight: '11px', letterSpacing: '0.5px' }}>Exit {number}</div>
           </div>
         </div>
       </Html>
@@ -3853,9 +3867,23 @@ function TrashCan({ position }) {
   );
 }
 
-function FacilityAssets({ hideCenter }) {
+function FacilityAssets({ hideCenter, facilityZone = 8, enemies = [] }) {
   // 地鐵長廊有 15 個日光燈，僅讓第 4 和 第 11 兩個日光燈投射陰影，其他日光燈關閉陰影投射，防止 WebGL 崩潰
   const lightZPositions = [-105, -90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90, 105];
+
+  // 建立 15 級 3D 樓梯 (從 z = -120 到 z = -135，高度從 0 到 5.0)
+  const steps = [];
+  for (let i = 0; i < 15; i++) {
+    const stepZ = -i * 1.0 - 0.5;
+    const stepY = i * 0.33 + 0.165;
+    steps.push(
+      <mesh key={i} position={[0, stepY, -120 + stepZ]} castShadow receiveShadow>
+        <boxGeometry args={[8, 0.33, 1.0]} />
+        <meshStandardMaterial color="#7f8c8d" roughness={0.7} />
+      </mesh>
+    );
+  }
+
   return (
     <group>
       {/* 日光燈排燈 */}
@@ -3864,8 +3892,37 @@ function FacilityAssets({ hideCenter }) {
         return <SubwayFluorescentLight key={idx} position={[0, 4.9, z]} castShadow={castShadow} />;
       })}
 
-      {/* 出口 8 指示牌 */}
-      <ExitSign position={[0, 4.3, 0]} />
+      {/* 出口指示牌 (動態顯示號碼) */}
+      <ExitSign position={[0, 4.3, 0]} number={facilityZone} />
+
+      {/* 3D 樓梯及通道 enclosure */}
+      {steps}
+      
+      {/* 樓梯通道圍封 (左右牆面、頂部封板與出口門壁) */}
+      <group>
+        {/* 左側壁 */}
+        <mesh position={[-4, 5.0, -127.5]} rotation={[0, Math.PI / 2, 0]} receiveShadow>
+          <planeGeometry args={[15, 10]} />
+          <meshStandardMaterial color="#ecf0f1" roughness={0.5} />
+        </mesh>
+        {/* 右側壁 */}
+        <mesh position={[4, 5.0, -127.5]} rotation={[0, -Math.PI / 2, 0]} receiveShadow>
+          <planeGeometry args={[15, 10]} />
+          <meshStandardMaterial color="#ecf0f1" roughness={0.5} />
+        </mesh>
+        {/* 樓梯頂部天花板 */}
+        <mesh position={[0, 10.0, -127.5]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[8, 15]} />
+          <meshStandardMaterial color="#bdc3c7" roughness={0.9} />
+        </mesh>
+        {/* 樓梯頂部出口門壁 (封閉樓梯末端) */}
+        <mesh position={[0, 7.5, -135]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 0.4]} />
+          <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.8} />
+        </mesh>
+        {/* 出口光源 (亮白光) */}
+        <pointLight position={[0, 8.5, -133]} intensity={4.5} distance={15} color="#ffffff" />
+      </group>
 
       {/* 牆上海報 */}
       <WallPoster position={[-3.98, 2.5, -80]} rotation={[0, Math.PI / 2, 0]} title="CLASSIFIED INTEL" subtitle="LEVEL 4 CLEARANCE REQUIRED. RESTRICTED SUBWAY DIVISION." bgColor="#2980b9" />
@@ -3898,9 +3955,9 @@ function FacilityAssets({ hideCenter }) {
   );
 }
 
-function TacticalAssets({ mapType, hideCenter }) {
+function TacticalAssets({ mapType, hideCenter, facilityZone, enemies }) {
   if (mapType === 'facility') {
-    return <FacilityAssets hideCenter={hideCenter} />;
+    return <FacilityAssets hideCenter={hideCenter} facilityZone={facilityZone} enemies={enemies} />;
   }
   return <OutpostAssets />;
 }
@@ -4824,9 +4881,21 @@ function PlayerController({
   secondaryConfig,
   selectedMap,
   lootContainers,
+  facilityZone,
+  onAdvanceFacilityZone,
 }) {
   const { camera, scene } = useThree();
   const keys = useKeyboard();
+
+  const facilityZoneRef = useRef(facilityZone);
+  useEffect(() => {
+    facilityZoneRef.current = facilityZone;
+  }, [facilityZone]);
+
+  const transitionInProgressRef = useRef(false);
+  useEffect(() => {
+    transitionInProgressRef.current = false;
+  }, [facilityZone, resetTrigger]);
 
   useEffect(() => {
     if (cameraRef) {
@@ -5601,6 +5670,28 @@ function PlayerController({
     }
 
     // ------------------------------------------
+    // 6.X 8號出口通關進度/樓梯撤離判定
+    // ------------------------------------------
+    if (gameStateRef.current === 'active' && selectedMap === 'facility') {
+      const aliveCount = enemies.filter(e => e.state === 'alive').length;
+      if (aliveCount === 0) {
+        if (facilityZoneRef.current > 1) {
+          if (camera.position.z <= -110 && !transitionInProgressRef.current) {
+            transitionInProgressRef.current = true;
+            if (onAdvanceFacilityZone) onAdvanceFacilityZone();
+          }
+        } else {
+          // 出口 1 肅清後走樓梯撤離
+          if (camera.position.z <= -132) {
+            if (onExtractSuccessRef.current) {
+              onExtractSuccessRef.current();
+            }
+          }
+        }
+      }
+    }
+
+    // ------------------------------------------
     // 6.X 直升機撤離 LZ 範圍與倒數計時判定
     // ------------------------------------------
     if (extractionActiveRef.current && extractionStateRef.current === 'landed') {
@@ -5795,7 +5886,10 @@ function PlayerController({
     }
     
     if (selectedMap === 'facility') {
-      camera.position.z = Math.max(-115, Math.min(115, camera.position.z));
+      const aliveCount = enemies.filter(e => e.state === 'alive').length;
+      const isExitOpen = facilityZoneRef.current === 1 && aliveCount === 0;
+      const minZ = isExitOpen ? -135 : -115;
+      camera.position.z = Math.max(minZ, Math.min(115, camera.position.z));
     } else {
       camera.position.z = Math.max(-mapLimit, Math.min(mapLimit, camera.position.z));
     }
@@ -5841,6 +5935,16 @@ function PlayerController({
         }
       }
     }
+    if (selectedMap === 'facility' && camera.position.z <= -120) {
+      // 樓梯斜坡：從 z = -120 (y = 0) 到 z = -135 (y = 5.0)
+      const ratio = (camera.position.z - (-120)) / (-135 - (-120)); // 在 -120 處為 0，在 -135 處為 1
+      const clampedRatio = Math.max(0, Math.min(1, ratio));
+      const stairsY = clampedRatio * 5.0;
+      if (stairsY > highestUnderPlayer) {
+        highestUnderPlayer = stairsY;
+      }
+    }
+
     const baseGroundHeight = highestUnderPlayer;
     const targetHeight = baseGroundHeight + baseHeight;
 
@@ -5928,10 +6032,17 @@ function PlayerController({
 
   return null;
 }
+const getWaveForZone = (zone) => {
+  if (zone >= 7) return 1;
+  if (zone >= 4) return 2;
+  return 3;
+};
+
 // 7. 遊戲主架構 App Component
 // ==========================================
 export default function App() {
   const [gameState, setGameState] = useState('deploying');
+  const [facilityZone, setFacilityZone] = useState(8);
   const [isLocked, setIsLocked] = useState(false);
   const [device, setDevice] = useState(null); // null, 'pc', 'mobile'
 
@@ -7879,7 +7990,13 @@ export default function App() {
     }
 
     const diff = getDifficultyMultiplier();
-    setEnemies(spawnEnemies(false, diff, isAmbush, selectedMap));
+    if (selectedMap === 'facility') {
+      setFacilityZone(8);
+      const initialWave = getWaveForZone(8);
+      setEnemies(spawnWave(initialWave, diff, isAmbush, 'facility'));
+    } else {
+      setEnemies(spawnEnemies(false, diff, isAmbush, selectedMap));
+    }
 
     setGameState('active');
     soundManager.startAmbient();
@@ -8456,16 +8573,24 @@ export default function App() {
     setEnemies((prev) => {
       const remaining = prev.filter((enemy) => enemy.id !== enemyId);
       if (remaining.length === 0) {
-        if (currentWave < 3) {
-          setWaveCountdown(5);
-          addKillFeedEntry(`第 ${currentWave} 波已清除！下一波將在 5 秒後開始...`, 'system');
+        if (selectedMap === 'facility') {
+          if (facilityZone > 1) {
+            addKillFeedEntry(`第 ${facilityZone} 出口區域的武裝分子已肅清！請前往長廊盡頭以進入下一區。`, 'headshot');
+          } else {
+            addKillFeedEntry('第 1 出口區域的武裝分子已肅清！鐵捲門已開啟，請走樓梯撤離出地鐵站！', 'headshot');
+          }
         } else {
-          // Wave 3 cleared! Trigger helicopter evacuation
-          setExtractionActive(true);
-          setExtractionState('incoming');
-          setExtractionCountdown(5.0);
-          addKillFeedEntry('所有防守波次已清除！撤離直升機正在接近，趕往地圖中心 LZ 準備撤離！', 'system');
-          soundManager.startHelicopterSound();
+          if (currentWave < 3) {
+            setWaveCountdown(5);
+            addKillFeedEntry(`第 ${currentWave} 波已清除！下一波將在 5 秒後開始...`, 'system');
+          } else {
+            // Wave 3 cleared! Trigger helicopter evacuation
+            setExtractionActive(true);
+            setExtractionState('incoming');
+            setExtractionCountdown(5.0);
+            addKillFeedEntry('所有防守波次已痕跡！撤離直升機正在接近，趕往地圖中心 LZ 準備撤離！', 'system');
+            soundManager.startHelicopterSound();
+          }
         }
       }
       return remaining;
@@ -8759,6 +8884,20 @@ export default function App() {
     }, 50);
   };
 
+  const handleAdvanceFacilityZone = () => {
+    setFacilityZone((prev) => {
+      const nextZone = prev - 1;
+      if (nextZone >= 1) {
+        const diff = getDifficultyMultiplier();
+        const nextWave = getWaveForZone(nextZone);
+        setEnemies(spawnWave(nextWave, diff, isAmbushActive, 'facility'));
+        setResetTrigger((prevTrig) => prevTrig + 1);
+        addKillFeedEntry(`已進入第 ${nextZone} 出口區域！肅清本區的所有敵軍以繼續前進。`, 'system');
+      }
+      return nextZone;
+    });
+  };
+
   // 返回大廳 (回到初始畫面/大廳，並完整重置遊戲狀態)
   const handleReturnToLobby = () => {
     setEndgameStats(null);
@@ -8766,6 +8905,7 @@ export default function App() {
     
     // 重置波次、搜刮與背包狀態
     setCurrentWave(1);
+    setFacilityZone(8);
     setWaveCountdown(0);
     setBackpackItems([]);
     setBackpackCoins(0);
@@ -11044,9 +11184,11 @@ export default function App() {
             </div>
             <div className="hud-compass">N 024°</div>
             <div className="hud-mission-info">
-              <h3>TRAINING OP</h3>
+              <h3>{selectedMap === 'facility' ? 'EXIT 8 ESCAPE' : 'TRAINING OP'}</h3>
               {isTutorial ? (
                 <div>TARGETS ELIMINATED: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{eliminated}</span></div>
+              ) : selectedMap === 'facility' ? (
+                <div>當前出口: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>出口 {facilityZone}</span> | 剩餘敵軍: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{enemies.filter(e => e.state === 'alive').length}</span></div>
               ) : (
                 <div>WAVE: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{currentWave} / 3</span> | ENEMIES: <span style={{ color: '#00ff66', fontWeight: 'bold' }}>{enemies.filter(e => e.state === 'alive').length}</span></div>
               )}
@@ -11554,12 +11696,12 @@ export default function App() {
 
           {/* 地面與環境防禦工事 */}
           <Ground mapType={selectedMap} />
-          <PerimeterWalls mapType={selectedMap} />
-          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} />
+          <PerimeterWalls mapType={selectedMap} facilityZone={facilityZone} enemies={enemies} />
+          <TacticalAssets mapType={selectedMap} hideCenter={extractionActive} facilityZone={facilityZone} enemies={enemies} />
 
           {/* 3D 戰術直升機撤離點 */}
-          <LandingPad active={extractionActive} />
-          <ExtractionHelicopter active={extractionActive} onLanded={() => setExtractionState('landed')} />
+          {selectedMap !== 'facility' && <LandingPad active={extractionActive} />}
+          {selectedMap !== 'facility' && <ExtractionHelicopter active={extractionActive} onLanded={() => setExtractionState('landed')} />}
 
           {/* 3D 戰術補給站 */}
           {!extractionActive && (
@@ -11722,6 +11864,8 @@ export default function App() {
             secondaryConfig={secondaryConfig}
             selectedMap={selectedMap}
             lootContainers={getAdjustedLootContainers()}
+            facilityZone={facilityZone}
+            onAdvanceFacilityZone={handleAdvanceFacilityZone}
           />
 
           {/* Drei 第一人稱滑鼠鎖定控制器 */}
