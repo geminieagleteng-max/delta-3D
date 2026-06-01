@@ -10904,7 +10904,16 @@ export default function App() {
               <div className="hud-panel">
                 <h1 className="hud-title" style={{ letterSpacing: '4px' }}>TACTICAL PAUSE</h1>
                 <p className="hud-subtitle">TRAINING IN PROGRESS</p>
-                <button className="deploy-button" onClick={handleDeploy}>
+                <button 
+                  className="deploy-button" 
+                  onClick={() => {
+                    if (device === 'mobile') {
+                      setIsLocked(true);
+                    } else if (controlsRef.current) {
+                      controlsRef.current.lock();
+                    }
+                  }}
+                >
                   RESUME DEPLOYMENT
                 </button>
               </div>
