@@ -8,7 +8,8 @@ import {
   equipItem, unequipItem, buyMarketItem, sellMarketItem, saveMatchLoot,
   initializeGridStash, moveGridItem, getItemSize, generateUid, findEmptySpace, rotateGridItem,
   getModifiedWeaponConfig, equipAttachmentToWeapon, unequipAttachmentFromWeapon,
-  equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid, claimContractReward
+  equipAttachmentToEquippedWeapon, unequipAttachmentFromEquippedWeapon, sellMarketItemByUid, claimContractReward,
+  sortGridStash, autoSortStashItems
 } from './utils/account';
 import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboard';
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
@@ -7450,6 +7451,38 @@ export default function App() {
     }
   };
 
+  // 一鍵整理倉庫
+  const handleSortStash = () => {
+    if (!currentUser) return;
+    try {
+      if (currentUser.isGuest) {
+        const sortedItems = autoSortStashItems(currentUser.gridStashItems || []);
+        const updated = {
+          ...currentUser,
+          gridStashItems: sortedItems
+        };
+        if (updated.stash) {
+          Object.keys(updated.stash).forEach(k => {
+            updated.stash[k] = 0;
+          });
+          sortedItems.forEach(item => {
+            if (updated.stash[item.type] !== undefined) {
+              updated.stash[item.type] += 1;
+            } else {
+              updated.stash[item.type] = 1;
+            }
+          });
+        }
+        setCurrentUser(updated);
+      } else {
+        const updated = sortGridStash(currentUser.username);
+        setCurrentUser(updated);
+      }
+    } catch (err) {
+      alert('整理倉庫失敗: ' + err.message);
+    }
+  };
+
   // 放置物品至裝備槽
   const handleDropOnSlot = (slot) => {
     if (!draggedItem) return;
@@ -10056,10 +10089,30 @@ export default function App() {
                           {/* 右側：個人倉庫 Stash */}
                           <div className="loadout-column stash-list" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: '5px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,204,0,0.2)', paddingBottom: '4px', marginBottom: '5px' }}>
-                              <h5 style={{ color: '#ffcc00', margin: 0, letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
-                                個人倉庫 STASH (10 欄戰術網格)
-                              </h5>
-                              <span style={{ fontSize: '0.62rem', color: '#88a888' }}>拖曳移動 | 雙擊裝備 | 右鍵選單 | 按 [R] 旋轉</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h5 style={{ color: '#ffcc00', margin: 0, letterSpacing: '1px', fontSize: '0.85rem', textAlign: 'left' }}>
+                                  個人倉庫 STASH
+                                </h5>
+                                <button 
+                                  onClick={handleSortStash}
+                                  style={{
+                                    fontSize: '0.62rem',
+                                    padding: '2px 6px',
+                                    border: '1px solid #ffcc00',
+                                    color: '#ffcc00',
+                                    background: 'rgba(255, 204, 0, 0.1)',
+                                    cursor: 'pointer',
+                                    borderRadius: '3px',
+                                    fontWeight: 'bold',
+                                    transition: 'all 0.2s',
+                                  }}
+                                  onMouseEnter={(e) => { e.target.style.background = 'rgba(255, 204, 0, 0.25)'; }}
+                                  onMouseLeave={(e) => { e.target.style.background = 'rgba(255, 204, 0, 0.1)'; }}
+                                >
+                                  一鍵整理 SORT ⚡
+                                </button>
+                              </div>
+                              <span style={{ fontSize: '0.62rem', color: '#88a888' }}>拖曳移動 | 按 [R] 旋轉</span>
                             </div>
                             
                             {/* Stash Grid Viewport */}

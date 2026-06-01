@@ -1265,3 +1265,81 @@ export function claimContractReward(userParam, contractId, reward) {
   return finalizeUserSave(data);
 }
 
+// 自動將倉庫物品依照尺寸與優先級進行排序
+export function autoSortStashItems(items) {
+  // 1. 複製物品並重設其 rotated 為 false
+  const itemsToPack = items.map(item => ({
+    uid: item.uid,
+    type: item.type,
+    attachments: item.attachments ? { ...item.attachments } : undefined,
+    rotated: false
+  }));
+
+  // 2. 獲取物品排序優先級分值（大物件或貴重物品優先）
+  const getItemPriority = (type) => {
+    if (type === 'awp') return 100;
+    if (['m4a1', 'ak47', 'm870'].includes(type)) return 90;
+    if (type === 'mp5') return 80;
+    if (['bodyArmor', 'opsHelmet', 'deagle'].includes(type)) return 70;
+    if (type === 'm9') return 60;
+    if (type === 'goldBar') return 50;
+    if (type === 'keycard') return 40;
+    if (type === 'hardDrive') return 30;
+    if (type === 'dogTag') return 20;
+    if (['grenade', 'medkit', 'flashbang', 'smoke', 'knife'].includes(type)) return 10;
+    return 0; // 槍械配件等其餘物品
+  };
+
+  itemsToPack.sort((a, b) => {
+    const prioA = getItemPriority(a.type);
+    const prioB = getItemPriority(b.type);
+    if (prioA !== prioB) return prioB - prioA;
+    // 若優先權相同，以名稱字母進行分組排列
+    return a.type.localeCompare(b.type);
+  });
+
+  // 3. 重新將物品放置入網格（二維裝箱法）
+  const packedItems = [];
+  
+  for (const item of itemsToPack) {
+    let [w, h] = getItemSize(item.type, item);
+    let space = findEmptySpace(packedItems, w, h);
+    
+    if (!space) {
+      // 橫放不進，嘗試旋轉 90 度直放
+      item.rotated = true;
+      [w, h] = getItemSize(item.type, item);
+      space = findEmptySpace(packedItems, w, h);
+      
+      if (!space) {
+        // 如果依然放不下，回復橫放狀態並平鋪置於最底部防丟失
+        item.rotated = false;
+        [w, h] = getItemSize(item.type, item);
+        let maxR = 0;
+        for (const pi of packedItems) {
+          const [, pih] = getItemSize(pi.type, pi);
+          maxR = Math.max(maxR, pi.r + pih);
+        }
+        space = { r: maxR, c: 0 };
+      }
+    }
+    
+    item.r = space.r;
+    item.c = space.c;
+    packedItems.push(item);
+  }
+
+  return packedItems;
+}
+
+// 一鍵整理倉庫（註冊用戶）
+export function sortGridStash(userParam) {
+  const data = resolveUser(userParam);
+  const user = data.currentUser;
+  
+  user.gridStashItems = autoSortStashItems(user.gridStashItems || []);
+  syncStashQuantities(user);
+  
+  return finalizeUserSave(data);
+}
+
