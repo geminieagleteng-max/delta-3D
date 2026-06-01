@@ -15,6 +15,190 @@ import { fetchCloudLeaderboard, syncPlayerToCloud } from './utils/cloudLeaderboa
 import { ITEM_NAMES, MARKET_PRICES } from './config/marketConfig';
 import { ATTACHMENTS, ATTACHMENT_TYPES } from './config/attachmentsConfig';
 
+// ==========================================
+// 00. 戰術圖示組件 (Tactical Item SVG Icons)
+// ==========================================
+const ItemIcon = ({ type, color = 'currentColor', style = {} }) => {
+  const strokeColor = color;
+  const svgs = {
+    bodyArmor: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M16 12v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
+        <path d="M36 12v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
+        <path d="M12 18c0-4 4-6 10-6h20c6 0 10 2 10 6v14c0 4-2 6-6 7l-14 3-14-3c-4-1-6-3-6-7V18z" />
+        <path d="M16 26h32M16 32h32M20 38h24" />
+      </svg>
+    ),
+    opsHelmet: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M12 36c0-12 8-20 20-20s20 8 20 20v2H12v-2z" />
+        <path d="M10 38c2 4 6 6 12 6h20c6 0 10-2 12-6" />
+        <rect x="28" y="12" width="8" height="8" rx="1" fill={strokeColor} />
+        <path d="M32 20v4" />
+        <path d="M16 38l16 12 16-12" />
+      </svg>
+    ),
+    medkit: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="8" y="16" width="48" height="36" rx="4" />
+        <path d="M24 16v-6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6" />
+        <circle cx="32" cy="34" r="10" strokeWidth="2" />
+        <path d="M32 29v10M27 34h10" strokeWidth="3" />
+      </svg>
+    ),
+    grenade: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <ellipse cx="32" cy="36" rx="16" ry="20" />
+        <path d="M26 16h12v4H26z" />
+        <path d="M32 16V10M38 12a4 4 0 1 1-8 0" />
+        <path d="M22 28h20M18 36h28M22 44h20M32 16v40M24 22c4 8 4 20 0 28M40 22c-4 8-4 20 0 28" strokeWidth="1.5" />
+      </svg>
+    ),
+    flashbang: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="22" y="20" width="20" height="34" rx="2" />
+        <path d="M26 20v-6h12v6" />
+        <path d="M32 14V8M38 10a3 3 0 1 1-6 0" />
+        <circle cx="28" cy="28" r="1.5" fill={strokeColor} />
+        <circle cx="36" cy="28" r="1.5" fill={strokeColor} />
+        <circle cx="28" cy="36" r="1.5" fill={strokeColor} />
+        <circle cx="36" cy="36" r="1.5" fill={strokeColor} />
+        <circle cx="28" cy="44" r="1.5" fill={strokeColor} />
+        <circle cx="36" cy="44" r="1.5" fill={strokeColor} />
+      </svg>
+    ),
+    smoke: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="20" y="18" width="24" height="38" rx="1" />
+        <path d="M28 18V12h8v6" />
+        <path d="M32 12V8M38 10a3 3 0 1 1-6 0" />
+        <path d="M20 28h24M20 36h24" strokeDasharray="3 3" />
+      </svg>
+    ),
+    goldBar: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M12 48l6-16h28l6 16H12z" />
+        <path d="M18 32l4-12h20l4 12H18z" />
+        <path d="M14 48h36M20 32h24M24 20h16" strokeWidth="1.5" />
+      </svg>
+    ),
+    hardDrive: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="14" y="10" width="36" height="44" rx="3" />
+        <rect x="22" y="16" width="20" height="22" rx="1" strokeWidth="1.5" />
+        <path d="M22 46h20M22 42h10" />
+        <circle cx="38" cy="42" r="1.5" fill={strokeColor} />
+      </svg>
+    ),
+    dogTag: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="16" y="24" width="20" height="30" rx="3" transform="rotate(-15 16 24)" />
+        <rect x="30" y="20" width="20" height="30" rx="3" transform="rotate(10 30 20)" />
+        <circle cx="25" cy="18" r="1.5" fill={strokeColor} />
+        <path d="M30 10c-3 3-5 5-5 8 0 2 2 4 5 4s5-2 5-4c0-3-2-5-5-8z" strokeWidth="1.5" />
+      </svg>
+    ),
+    keycard: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="10" y="16" width="44" height="32" rx="3" />
+        <rect x="16" y="24" width="10" height="10" rx="1" strokeWidth="1.5" />
+        <path d="M32 24h14M32 30h14M32 36h8" strokeWidth="2" />
+      </svg>
+    ),
+    knife: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M48 16L24 40l-4-4 24-24h4z" />
+        <path d="M20 44l-6 6a2 2 0 1 1-3-3l6-6 3 3z" />
+        <path d="M18 38l4 4" />
+      </svg>
+    ),
+    sight_reddot: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="12" y="36" width="40" height="16" rx="2" />
+        <path d="M20 36C20 22 44 22 44 36" strokeWidth="3" />
+        <circle cx="32" cy="30" r="2" fill="red" stroke="red" />
+      </svg>
+    ),
+    sight_scope4x: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M12 28h40l-6 16H18l-6-16z" />
+        <path d="M22 44l2 8h16l2-8" />
+        <rect x="28" y="20" width="8" height="8" rx="1" />
+        <circle cx="32" cy="36" r="3" />
+      </svg>
+    ),
+    muzzle_suppressor: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="16" y="24" width="32" height="16" rx="1" />
+        <path d="M16 28h32M16 36h32" strokeWidth="1.5" strokeDasharray="2 2" />
+      </svg>
+    ),
+    muzzle_compensator: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M16 22h24l4 5v10l-4 5H16V22z" />
+        <path d="M24 22v20M32 22v20" />
+        <circle cx="40" cy="32" r="1.5" fill={strokeColor} />
+      </svg>
+    ),
+    grip_vertical: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="18" y="16" width="28" height="10" rx="1" />
+        <rect x="26" y="26" width="12" height="26" rx="2" />
+        <path d="M26 32h12M26 38h12M26 44h12" />
+      </svg>
+    ),
+    grip_ergo: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="18" y="16" width="28" height="10" rx="1" />
+        <path d="M40 26L22 44v8h12l12-18v-8H40z" />
+      </svg>
+    ),
+    mag_extended: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M22 16h20l-4 32H22l4-32z" />
+        <path d="M24 24h14M25 32h12M26 40h10" strokeWidth="1.5" />
+      </svg>
+    ),
+    mag_quickdraw: (
+      <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M24 16h16l-3 24H25l-1-24z" />
+        <path d="M29 40c0 5 6 5 6 0" strokeWidth="3" />
+        <path d="M25 24h14M26 32h12" strokeWidth="1.5" />
+      </svg>
+    ),
+    bodyArmor_placeholder: (
+      <svg viewBox="0 0 64 64" fill="none" stroke="rgba(0, 229, 255, 0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M16 12v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" strokeDasharray="2 2" />
+        <path d="M36 12v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" strokeDasharray="2 2" />
+        <path d="M12 18c0-4 4-6 10-6h20c6 0 10 2 10 6v14c0 4-2 6-6 7l-14 3-14-3c-4-1-6-3-6-7V18z" strokeDasharray="3 3" />
+      </svg>
+    ),
+    opsHelmet_placeholder: (
+      <svg viewBox="0 0 64 64" fill="none" stroke="rgba(0, 229, 255, 0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M12 36c0-12 8-20 20-20s20 8 20 20v2H12v-2z" strokeDasharray="3 3" />
+        <path d="M10 38c2 4 6 6 12 6h20c6 0 10-2 12-6" strokeDasharray="3 3" />
+      </svg>
+    ),
+    laserSight_placeholder: (
+      <svg viewBox="0 0 64 64" fill="none" stroke="rgba(0, 229, 255, 0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <path d="M12 32h40M44 24l8 8-8 8" strokeDasharray="2 2" />
+        <circle cx="16" cy="32" r="4" strokeDasharray="2 2" />
+      </svg>
+    ),
+    suppressor_placeholder: (
+      <svg viewBox="0 0 64 64" fill="none" stroke="rgba(0, 229, 255, 0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+        <rect x="16" y="24" width="32" height="16" rx="1" strokeDasharray="3 3" />
+      </svg>
+    )
+  };
+  return svgs[type] || (
+    <svg viewBox="0 0 64 64" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '100%', height: '100%', ...style }}>
+      <rect x="16" y="16" width="32" height="32" rx="4" />
+      <path d="M32 24v16M24 32h16" />
+    </svg>
+  );
+};
+
 
 // ==========================================
 // 00. 槍枝武器規格設定 (Weapon Configurations)
@@ -10532,10 +10716,30 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>防彈護甲 BODY ARMOR (+50 HP) 🛡️</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.bodyArmor ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.bodyArmor ? '重型防彈衣 (Equipped)' : '未穿戴 (拖曳防彈衣至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: currentUser.equipped?.bodyArmor ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: currentUser.equipped?.bodyArmor ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {currentUser.equipped?.bodyArmor ? (
+                                    <ItemIcon type="bodyArmor" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="bodyArmor_placeholder" color="rgba(0, 229, 255, 0.2)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>防彈護甲 BODY ARMOR (+50 HP) 🛡️</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.bodyArmor ? '#00ff66' : '#88a888' }}>
+                                    {currentUser.equipped?.bodyArmor ? '重型防彈衣 (Equipped)' : '未穿戴 (拖曳防彈衣至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.bodyArmor && (
@@ -10565,10 +10769,30 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>特種頭盔 HELMET (減傷 25%) 🪖</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.opsHelmet ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.opsHelmet ? '特種作戰頭盔 (Equipped)' : '未穿戴 (拖曳頭盔至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: currentUser.equipped?.opsHelmet ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: currentUser.equipped?.opsHelmet ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {currentUser.equipped?.opsHelmet ? (
+                                    <ItemIcon type="opsHelmet" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="opsHelmet_placeholder" color="rgba(0, 229, 255, 0.2)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>特種頭盔 HELMET (減傷 25%) 🪖</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.opsHelmet ? '#00ff66' : '#88a888' }}>
+                                    {currentUser.equipped?.opsHelmet ? '特種作戰頭盔 (Equipped)' : '未穿戴 (拖曳頭盔至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.opsHelmet && (
@@ -10598,10 +10822,30 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M4A1 雷射瞄準器 (+5 傷害) 🔦</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.laserSight ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.laserSight ? '已安裝 (Equipped)' : '未安裝 (拖曳雷射至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: currentUser.equipped?.laserSight ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: currentUser.equipped?.laserSight ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {currentUser.equipped?.laserSight ? (
+                                    <ItemIcon type="sight_reddot" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="laserSight_placeholder" color="rgba(0, 229, 255, 0.2)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M4A1 雷射瞄準器 (+5 傷害) 🔦</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.laserSight ? '#00ff66' : '#88a888' }}>
+                                    {currentUser.equipped?.laserSight ? '已安裝 (Equipped)' : '未安裝 (拖曳雷射至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.laserSight && (
@@ -10631,10 +10875,30 @@ export default function App() {
                                 }
                               }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M9 戰術消音器 (+5 傷害) 🔇</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.suppressor ? '#00ff66' : '#88a888' }}>
-                                  {currentUser.equipped?.suppressor ? '已安裝 (Equipped)' : '未安裝 (拖曳消音器至此)'}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: currentUser.equipped?.suppressor ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: currentUser.equipped?.suppressor ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {currentUser.equipped?.suppressor ? (
+                                    <ItemIcon type="muzzle_suppressor" color="#00ff66" style={{ filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="suppressor_placeholder" color="rgba(0, 229, 255, 0.2)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>M9 戰術消音器 (+5 傷害) 🔇</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentUser.equipped?.suppressor ? '#00ff66' : '#88a888' }}>
+                                    {currentUser.equipped?.suppressor ? '已安裝 (Equipped)' : '未安裝 (拖曳消音器至此)'}
+                                  </div>
                                 </div>
                               </div>
                               {currentUser.equipped?.suppressor && (
@@ -10653,10 +10917,30 @@ export default function App() {
                               onDragLeave={() => setActiveHoverSlot(null)}
                               onDrop={() => { handleDropOnSlot('grenades'); setActiveHoverSlot(null); }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰術手榴彈 GRENADES 💣</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {currentUser.equipped?.grenades || 0} 顆
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: (currentUser.equipped?.grenades || 0) > 0 ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: (currentUser.equipped?.grenades || 0) > 0 ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {(currentUser.equipped?.grenades || 0) > 0 ? (
+                                    <ItemIcon type="grenade" color="#ffaa00" style={{ filter: 'drop-shadow(0 0 3px rgba(255, 170, 0, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="grenade" color="rgba(255, 255, 255, 0.15)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰術手榴彈 GRENADES 💣</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                    {currentUser.equipped?.grenades || 0} 顆
+                                  </div>
                                 </div>
                               </div>
                               <div style={{ display: 'flex', gap: '5px' }}>
@@ -10678,10 +10962,30 @@ export default function App() {
                               onDragLeave={() => setActiveHoverSlot(null)}
                               onDrop={() => { handleDropOnSlot('medkits'); setActiveHoverSlot(null); }}
                             >
-                              <div style={{ textAlign: 'left' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰地醫療包 MEDKITS 🩹</div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
-                                  {currentUser.equipped?.medkits || 0} 個
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: (currentUser.equipped?.medkits || 0) > 0 ? 'rgba(0, 229, 255, 0.05)' : 'rgba(255,255,255,0.01)',
+                                  border: (currentUser.equipped?.medkits || 0) > 0 ? '1px solid rgba(0, 229, 255, 0.3)' : '1px dashed rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  padding: '2px',
+                                  boxSizing: 'border-box'
+                                }}>
+                                  {(currentUser.equipped?.medkits || 0) > 0 ? (
+                                    <ItemIcon type="medkit" color="#ffaa00" style={{ filter: 'drop-shadow(0 0 3px rgba(255, 170, 0, 0.4))' }} />
+                                  ) : (
+                                    <ItemIcon type="medkit" color="rgba(255, 255, 255, 0.15)" />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', color: '#88a888' }}>戰地醫療包 MEDKITS 🩹</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>
+                                    {currentUser.equipped?.medkits || 0} 個
+                                  </div>
                                 </div>
                               </div>
                               <div style={{ display: 'flex', gap: '5px' }}>
@@ -10910,25 +11214,23 @@ export default function App() {
                                               </span>
                                             </div>
                                           ) : (
-                                            <div style={{
-                                              display: 'flex',
-                                              flexDirection: isVertical ? 'column' : 'row',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              gap: '2px',
-                                              width: '100%',
-                                              height: '100%',
-                                              writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
-                                              textOrientation: 'mixed',
-                                            }}>
-                                              <span style={{ fontSize: '0.9rem' }}>{itemIcon}</span>
+                                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '3px' }}>
+                                              <ItemIcon type={item.type} color={categoryColor} style={{ filter: `drop-shadow(0 0 4px ${categoryColor}80)` }} />
                                               <span style={{
-                                                fontSize: '0.62rem',
+                                                position: 'absolute',
+                                                bottom: '3px',
+                                                left: '3px',
+                                                fontSize: '0.52rem',
                                                 fontWeight: 'bold',
                                                 color: '#fff',
-                                                textAlign: 'center',
-                                                lineHeight: 1.1,
-                                                whiteSpace: 'nowrap',
+                                                background: 'rgba(5, 12, 8, 0.75)',
+                                                padding: '1px 4px',
+                                                borderRadius: '2px',
+                                                border: `1px solid ${categoryColor}40`,
+                                                pointerEvents: 'none',
+                                                zIndex: 3,
+                                                letterSpacing: '0.5px',
+                                                textShadow: '0 0 2px #000',
                                               }}>
                                                 {ITEM_NAMES[item.type] ? ITEM_NAMES[item.type].split(' ')[0] : item.type}
                                               </span>
@@ -10960,7 +11262,6 @@ export default function App() {
                                     >
                                       {activeContextMenu.from === 'stash' ? (
                                         <>
-                                          {/* Auto equip option */}
                                           {['m4a1', 'ak47', 'awp', 'mp5', 'm870'].includes(activeContextMenu.type) && (
                                             <div
                                               className="context-menu-item"
@@ -10997,7 +11298,6 @@ export default function App() {
                                               放入配裝
                                             </div>
                                           )}
-                                          {/* Rotate */}
                                           <div
                                             className="context-menu-item"
                                             style={contextMenuItemStyle}
@@ -11017,7 +11317,6 @@ export default function App() {
                                           >
                                             旋轉物品 (R)
                                           </div>
-                                          {/* Sell */}
                                           <div
                                             className="context-menu-item"
                                             style={{ ...contextMenuItemStyle, color: '#ff3b3b', borderBottom: 'none' }}
@@ -11079,9 +11378,41 @@ export default function App() {
                             {secretMerchantItems.map((item) => (
                               <div key={item.id} className="market-item-card merchant-card" style={{ flex: 1, background: 'rgba(0, 0, 0, 0.5)', border: '1px solid rgba(224, 64, 251, 0.2)', borderRadius: '4px', padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', transition: 'all 0.2s' }}>
                                 <div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>{item.name}</span>
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(224,64,251,0.2)', color: '#ff80ab', padding: '1px 5px', borderRadius: '3px', fontWeight: 'bold' }}>特惠</span>
+                                  <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+                                    <div style={{
+                                      width: '40px',
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: 'rgba(224, 64, 251, 0.05)',
+                                      border: '1px solid rgba(224, 64, 251, 0.3)',
+                                      borderRadius: '3px',
+                                      flexShrink: 0,
+                                      padding: '2px',
+                                      boxSizing: 'border-box'
+                                    }}>
+                                      {item.id === 'awp' ? (
+                                        <img 
+                                          src="weapons/awp.png" 
+                                          alt="awp"
+                                          style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover',
+                                            filter: 'drop-shadow(0 0 3px rgba(224, 64, 251, 0.5))'
+                                          }}
+                                        />
+                                      ) : (
+                                        <ItemIcon type={item.id === 'laserSight' ? 'sight_reddot' : item.id === 'suppressor' ? 'muzzle_suppressor' : item.id} color="#e040fb" style={{ width: '90%', height: '90%' }} />
+                                      )}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#fff', textAlign: 'left' }}>{item.name}</span>
+                                        <span style={{ fontSize: '0.6rem', background: 'rgba(224,64,251,0.2)', color: '#ff80ab', padding: '1px 5px', borderRadius: '3px', fontWeight: 'bold' }}>特惠</span>
+                                      </div>
+                                    </div>
                                   </div>
                                   <p style={{ fontSize: '0.7rem', color: '#b0bec5', margin: '0 0 12px 0', textAlign: 'left', lineHeight: '1.3' }}>
                                     {item.desc}
@@ -11153,31 +11484,33 @@ export default function App() {
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: '10px' }}>
-                                      {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) && (
-                                        <div style={{
-                                          width: '40px',
-                                          height: '24px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          background: 'rgba(255, 204, 0, 0.05)',
-                                          border: '1px solid rgba(255, 204, 0, 0.3)',
-                                          borderRadius: '3px',
-                                          overflow: 'hidden',
-                                          padding: '1px',
-                                        }}>
+                                      <div style={{
+                                        width: '40px',
+                                        height: '24px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: 'rgba(255, 204, 0, 0.05)',
+                                        border: '1px solid rgba(255, 204, 0, 0.3)',
+                                        borderRadius: '3px',
+                                        overflow: 'hidden',
+                                        padding: '1px',
+                                      }}>
+                                        {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) ? (
                                           <img 
                                             src={`weapons/${itemId}.png`} 
                                             alt={itemId}
                                             style={{
                                               width: '100%',
                                               height: '100%',
-                                              objectFit: 'contain',
+                                              objectFit: 'cover',
                                               filter: 'drop-shadow(0 0 3px rgba(255, 204, 0, 0.5))'
                                             }}
                                           />
-                                        </div>
-                                      )}
+                                        ) : (
+                                          <ItemIcon type={itemId} color="#ffcc00" style={{ width: '80%', height: '80%' }} />
+                                        )}
+                                      </div>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
                                         <span style={{ fontSize: '0.68rem', color: '#a0b0a0' }}>{descriptions[itemId] || ''}</span>
@@ -11237,31 +11570,33 @@ export default function App() {
                                       }}
                                     >
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: '15px' }}>
-                                        {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) && (
-                                          <div style={{
-                                            width: '40px',
-                                            height: '24px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            background: 'rgba(0, 255, 102, 0.05)',
-                                            border: '1px solid rgba(0, 255, 102, 0.3)',
-                                            borderRadius: '3px',
-                                            overflow: 'hidden',
-                                            padding: '1px',
-                                          }}>
+                                        <div style={{
+                                          width: '40px',
+                                          height: '24px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          background: 'rgba(0, 255, 102, 0.05)',
+                                          border: '1px solid rgba(0, 255, 102, 0.3)',
+                                          borderRadius: '3px',
+                                          overflow: 'hidden',
+                                          padding: '1px',
+                                        }}>
+                                          {['m4a1', 'ak47', 'awp', 'mp5', 'm870', 'm9', 'deagle'].includes(itemId) ? (
                                             <img 
                                               src={`weapons/${itemId}.png`} 
                                               alt={itemId}
                                               style={{
                                                 width: '100%',
                                                 height: '100%',
-                                                objectFit: 'contain',
+                                                objectFit: 'cover',
                                                 filter: 'drop-shadow(0 0 3px rgba(0, 255, 102, 0.5))'
                                               }}
                                             />
-                                          </div>
-                                        )}
+                                          ) : (
+                                            <ItemIcon type={itemId} color="#00ff66" style={{ width: '80%', height: '80%' }} />
+                                          )}
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', flex: 1 }}>
                                           <span style={{ fontWeight: 'bold', color: '#fff' }}>{ITEM_NAMES[itemId]}</span>
                                           <span style={{ color: '#00ff66', fontWeight: 'bold' }}>x{count}</span>
