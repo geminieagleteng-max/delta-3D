@@ -16,6 +16,7 @@
 
 ### 🔍 3. [除錯過程 (Debugging Process)](file:///d:/projects/delta%203D/docs/bug_history.md)
 *   **內容包含**：本專案歷史 Bug 的詳細診斷分析、解決方案，以及防範舊 Bug 再次出現（Regression）的預防檢修清單（Checklists）。
+*   **白話解析**：[17 項 Bug 白話邏輯導覽手冊](file:///d:/projects/delta%203D/docs/bug_explanation_guide.md) —— 專門為非技術背景讀者（如大學教授）設計的邏輯與演算法對照說明書。
 
 ### 📅 4. [工作日誌 (Work Log)](file:///d:/projects/delta%203D/docs/work_log.md)
 *   **內容包含**：專案的迭代日誌，詳述了從「倉庫改版與裝備修復」、「多指觸碰防縮放」、「HUD 行動端版面重定位與轉向靈敏度調整」，到「管理員帳號持久化」的所有工作記錄。
